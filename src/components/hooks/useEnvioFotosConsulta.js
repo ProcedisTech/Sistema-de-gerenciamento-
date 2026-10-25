@@ -3,7 +3,10 @@ import { atendimentosApi, pacientesGaleriaApi } from '../../services/api';
 import { convertToWebP } from '../../utils/imageUtils.js';
 import { mapearItensDaSessao, textoDasFotosNaoEnviadas } from '../consulta/consultaServidor.js';
 import { mergeFotosPorId } from '../consulta/mergeFotosPorId.js';
-import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA } from '../../utils/pacienteGaleria.js';
+import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA, normalizePacienteGaleriaResponse } from '../../utils/pacienteGaleria.js';
+import { useAviso } from '../../contexts/useAviso.js';
+import { PREFIXO_AVISO } from '../../services/avisos/tiposAviso.js';
+import { marcacoesApiToOverlayPontos } from '../journey/mapeamento/mapaMarcacoesOverlayUtils.js';
 
 const ESPERAS_MS = [2000, 4000, 8000];
 
@@ -397,6 +400,80 @@ export function useEnvioFotosConsulta({
       cancelado = true;
     };
   }, [consultaId, consultaPacienteId, fotosServidor, itemDoProcedimentoAtivo, chaveAbas]);
+
+  // Sincronização em tempo real via SSE (GALERIA_FOTO_ANOTADA):
+  // Quando uma aba salva anotações no mapa, hidrata o mapaOverlay e pontos nas fotos da avaliação no outro aparelho
+  const sincronizarMapasGaleria = useCallback(async () => {
+    if (!consultaPacienteId) return;
+    try {
+      const resp = await pacientesGaleriaApi.list(consultaPacienteId);
+      const itens = normalizePacienteGaleriaResponse(resp);
+      const mapaPorFotoId = new Map();
+      const fotosGaleriaIds = new Set();
+      for (const item of itens) {
+        const fid = item?.serverId || item?.id;
+        if (fid) {
+          fotosGaleriaIds.add(String(fid));
+          mapaPorFotoId.set(String(fid), item.mapaOverlay || null);
+        }
+      }
+      if (fotosGaleriaIds.size === 0) return;
+      const ap = aparelhoRef.current;
+      ap?.setEvaluationCapturedPhotos?.((prev) => {
+        if (!Array.isArray(prev)) return prev;
+        let mudou = false;
+        const next = prev.map((f) => {
+          const fid = f?.meta?.fotoId || f?.fotoId || f?.id;
+          if (!fid || !fotosGaleriaIds.has(String(fid))) return f;
+          const overlay = mapaPorFotoId.get(String(fid));
+          if (!overlay) {
+            if ((Array.isArray(f.pontos) && f.pontos.length > 0) || f.mapaOverlay || f.isAnnotated) {
+              mudou = true;
+              return {
+                ...f,
+                mapaId: null,
+                mapaOverlay: null,
+                pontos: [],
+                procedimentosMapeados: [],
+                isAnnotated: false,
+              };
+            }
+            return f;
+          }
+          const pontos = marcacoesApiToOverlayPontos(overlay.marcacoes, overlay.procedimentos);
+          const mesmosPontos = JSON.stringify(f.pontos || []) === JSON.stringify(pontos || []);
+          const mesmosProcs =
+            JSON.stringify(f.mapaOverlay?.procedimentos || []) ===
+            JSON.stringify(overlay.procedimentos || []);
+
+          if (
+            f.mapaOverlay?.mapaId === overlay.mapaId &&
+            mesmosPontos &&
+            mesmosProcs
+          ) {
+            return f;
+          }
+          mudou = true;
+          return {
+            ...f,
+            mapaOverlay: overlay,
+            pontos,
+            procedimentosMapeados: overlay.procedimentos || f.procedimentosMapeados || [],
+            isAnnotated: (pontos || []).length > 0,
+          };
+        });
+        return mudou ? next : prev;
+      });
+    } catch (err) {
+      console.warn('[consulta] Falha ao sincronizar mapa overlay via SSE:', err?.message || err);
+    }
+  }, [consultaPacienteId]);
+
+  useAviso(PREFIXO_AVISO.GALERIA, (msg) => {
+    if (msg?.tipo === 'aviso') {
+      sincronizarMapasGaleria();
+    }
+  });
 
   /** B5: chamado pelo botão de remover de hoje, antes de tirar a foto da lista. */
   const fotoRemovida = useCallback((foto) => {

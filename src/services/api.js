@@ -1338,6 +1338,15 @@ export const mapasApi = {
     request(`/api/v1/mapas/${encodeURIComponent(id)}`),
   buscarHistorico: (pacienteId, catalogoId) =>
     request(`/api/v1/mapas/historico?pacienteId=${encodeURIComponent(pacienteId)}&catalogoId=${encodeURIComponent(catalogoId)}`),
+  limparPorFotoGaleria: (fotoGaleriaId, { tipoMapaCodigo = 'avaliacao', atendimentoId = null } = {}) => {
+    const params = new URLSearchParams();
+    if (tipoMapaCodigo) params.set('tipoMapaCodigo', tipoMapaCodigo);
+    if (atendimentoId) params.set('atendimentoId', atendimentoId);
+    const qs = params.toString();
+    return request(`/api/v1/mapas/foto-galeria/${encodeURIComponent(fotoGaleriaId)}${qs ? `?${qs}` : ''}`, {
+      method: 'DELETE',
+    });
+  },
 };
 
 // ── Estoque / Insumos ───────────────────────────────────────

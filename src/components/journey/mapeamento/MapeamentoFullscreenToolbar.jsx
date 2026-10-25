@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState, useMemo } from 'react';
+import React, { useCallback, useRef, useState, useMemo, useEffect } from 'react';
 import {
   Minimize2,
   Trash2,
@@ -189,6 +189,7 @@ export function MapeamentoFullscreenToolbar({
   onToggleProcedimentoPanel: _onToggleProcedimentoPanel,
   procedimentos = [],
   procedimentosDoPlano = [],
+  focusSearchTrigger = 0,
   activeProcedimentoId,
   onSelectProcedimento,
   onAdicionarProcedimento,
@@ -210,8 +211,8 @@ export function MapeamentoFullscreenToolbar({
   isMobileDrawer = false,
   drawerOpen = false,
   onCloseDrawer,
-  modo: _modo = 'ponto',
-  setModo: _setModo,
+  modo = 'ponto',
+  setModo,
   tamanho,
   setTamanho,
   mostrarValores = false,
@@ -247,8 +248,16 @@ export function MapeamentoFullscreenToolbar({
   // Procedimentos do Plano Ativo que ainda NÃO foram adicionados aos procedimentos ativos do mapa
   const procedimentosPlanoNaoAdicionados = useMemo(() => {
     if (!Array.isArray(procedimentosDoPlano) || procedimentosDoPlano.length === 0) return [];
-    const idsAtivos = new Set((procedimentos || []).map((p) => String(p.id || '').trim()));
-    return procedimentosDoPlano.filter((p) => !idsAtivos.has(String(p.id || '').trim()));
+    const idsAtivos = new Set(
+      (procedimentos || [])
+        .flatMap((p) => [p.id, p.catalogoProcedimentoSaudeId, p.catalogoId])
+        .filter(Boolean)
+        .map((id) => String(id).trim())
+    );
+    return procedimentosDoPlano.filter((p) => {
+      const pid = String(p.catalogoProcedimentoSaudeId || p.id || '').trim();
+      return pid && !idsAtivos.has(pid);
+    });
   }, [procedimentosDoPlano, procedimentos]);
 
   const handleSelectCatalogItem = (opt) => {
@@ -267,6 +276,21 @@ export function MapeamentoFullscreenToolbar({
     setIsCollapsed(next);
     persistSidebarCollapsed(next);
   }, []);
+
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (focusSearchTrigger > 0) {
+      const timer = setTimeout(() => {
+        if (isCollapsed) {
+          setCollapsedPersisted(false);
+        }
+        setCatalogDropdownOpen(true);
+        inputRef.current?.focus();
+      }, 60);
+      return () => clearTimeout(timer);
+    }
+  }, [focusSearchTrigger, isCollapsed, setCollapsedPersisted]);
 
   if (showAsDrawer && !drawerOpen) return null;
 
@@ -347,6 +371,56 @@ export function MapeamentoFullscreenToolbar({
         </div>
 
         <div className={`flex flex-1 flex-col gap-2.5 py-2.5 ${collapsed ? 'items-center px-0.5' : 'px-2.5'}`}>
+          {/* SELETOR DE MODO / FERRAMENTAS (PONTO, TRAÇO, BORRACHA) */}
+          {!collapsed ? (
+            <div className="mx-0.5 rounded-xl border border-slate-200 bg-slate-100/90 p-1 flex items-center gap-1 shadow-2xs">
+              {FERRAMENTAS.map(({ id, label, shortcut, Icon: _Icon }) => {
+                const isActive = modo === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setModo?.(id)}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                      isActive
+                        ? id === 'borracha'
+                          ? 'bg-rose-500 text-white shadow-xs'
+                          : 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                    }`}
+                    title={`${label} (${shortcut})`}
+                  >
+                    <_Icon className="h-3.5 w-3.5 shrink-0" />
+                    <span>{label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-1 py-1">
+              {FERRAMENTAS.map(({ id, label, shortcut, Icon: _Icon }) => {
+                const isActive = modo === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setModo?.(id)}
+                    className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all cursor-pointer ${
+                      isActive
+                        ? id === 'borracha'
+                          ? 'bg-rose-500 text-white shadow-xs'
+                          : 'bg-teal-500 text-white shadow-xs'
+                        : 'text-slate-500 hover:bg-slate-200/80 hover:text-slate-900'
+                    }`}
+                    title={`${label} (${shortcut})`}
+                  >
+                    <_Icon className="h-4 w-4" />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {/* BUSCA DE PROCEDIMENTOS (INLINE NO TOPO) */}
           {!hideProcedimentoPicker ? (
             collapsed ? (
@@ -371,6 +445,7 @@ export function MapeamentoFullscreenToolbar({
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
                   <input
+                    ref={inputRef}
                     type="text"
                     placeholder="Buscar procedimento para o plano..."
                     value={catalogSearchQuery}
@@ -466,10 +541,13 @@ export function MapeamentoFullscreenToolbar({
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {procedimentosPlanoNaoAdicionados.map((procPlano) => {
+                  const catOpt = catalogoOptions.find(
+                    (o) => String(o.id).trim() === String(procPlano.catalogoProcedimentoSaudeId || procPlano.id).trim()
+                  );
                   const nomeExibicao =
-                    procPlano.nome ||
-                    catalogoOptions.find((o) => o.id === procPlano.id)?.nome ||
-                    'Procedimento';
+                    [procPlano.nomeProcedimento, procPlano.catalogoNome, procPlano.nome, catOpt?.nomeProcedimento, catOpt?.nome]
+                      .map((s) => String(s || '').trim())
+                      .find((s) => s && s.toLowerCase() !== 'procedimento') || 'Procedimento';
 
                   return (
                     <button

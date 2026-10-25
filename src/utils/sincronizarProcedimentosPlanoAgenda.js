@@ -43,7 +43,7 @@ export async function garantirProcedimentosNoPlano({
 
     let planoAtivo = planos.find((p) => {
       const st = String(p.statusCodigo || p.status || '').toLowerCase();
-      return st === 'ativo' || st === 'em_andamento' || st === 'aberto';
+      return st === 'ativo' || st === 'em_andamento' || st === 'aberto' || st === 'rascunho';
     });
 
     planoId = planoAtivo?.id || planoAtivo?.planejamentoId || null;
@@ -109,12 +109,7 @@ export async function garantirProcedimentosNoPlano({
   }
 
   if (planoId) {
-    Object.defineProperty(resultadoMap, 'planoId', {
-      value: String(planoId).trim(),
-      enumerable: false,
-      configurable: true,
-      writable: true,
-    });
+    resultadoMap.planoId = String(planoId).trim();
   }
 
   return resultadoMap;

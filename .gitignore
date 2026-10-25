@@ -39,6 +39,8 @@ scratch/
 
 # Agentes / Skills locais
 .agents/
+AGENTS.md
+graphify-out/
 
 # Documentos exportados para leitura / WhatsApp
 docs_export/

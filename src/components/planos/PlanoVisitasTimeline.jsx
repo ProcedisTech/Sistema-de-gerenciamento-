@@ -404,9 +404,10 @@ export function PlanoVisitasTimeline({
 
     // SÍNTESE DA VISITA DE AVALIAÇÃO CLÍNICA (quando há fotos/mapas de avaliação vinculados ao plano)
     const fotosDeAvaliacao = (fotosDoPlano || []).filter((f) => {
-      const cat = String(f.categoria || '').toLowerCase();
-      const cod = String(f.tipoFotoCodigo || '').toUpperCase();
-      return cat === 'avaliacao' || cod === 'AVALIACAO' || Boolean(f.isAvaliacao) || Boolean(f.mapaOverlay);
+      const cat = String(f.categoria || '').toLowerCase().trim();
+      const cod = String(f.tipoFotoCodigo || '').toUpperCase().trim();
+      const tipoMapa = String(f.mapaOverlay?.tipoMapaCodigo || '').toLowerCase().trim();
+      return cat === 'avaliacao' || cod === 'AVALIACAO' || Boolean(f.isAvaliacao) || tipoMapa === 'avaliacao' || (Boolean(f.mapaOverlay) && tipoMapa !== 'procedimento' && tipoMapa !== 'retorno');
     });
 
     if (fotosDeAvaliacao.length > 0) {

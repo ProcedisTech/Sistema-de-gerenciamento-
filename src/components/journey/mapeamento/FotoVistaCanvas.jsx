@@ -4,6 +4,10 @@ import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { Camera, ImageIcon, Maximize2, Upload, X, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { ProtectedPatientMedia } from '../../ui/ProtectedPatientMedia.jsx';
 import { GaleriaArquivoImage } from '../../patients/GaleriaArquivoImage.jsx';
+import {
+  usePacienteGaleriaArquivoBlobUrl,
+  buildGaleriaArquivoFallbackPath,
+} from '../../../hooks/usePacienteGaleriaArquivoBlobUrl.js';
 
 import {
   clickToPercent,
@@ -81,6 +85,7 @@ export function FotoVistaCanvasCore({
   onAddPonto,
   onEditarPonto,
   onRemovePonto,
+  onTentativaSemProcedimento,
   className = '',
   showToolbar = true,
   readOnly = false,
@@ -135,7 +140,29 @@ export function FotoVistaCanvasCore({
   const [comparacaoModalOpen, setComparacaoModalOpen] = useState(false);
   const [mapaComparacaoSelecionado, setMapaComparacaoSelecionado] = useState(null);
 
-  const displayUrl = foto?.displayUrl;
+  const rawUrl = foto?.displayUrl || foto?.cleanUrl || foto?.url || null;
+  const isApiUrl = typeof rawUrl === 'string' && (rawUrl.startsWith('/api/') || rawUrl.includes('/arquivo') || rawUrl.includes('/pacientes/'));
+  const fotoId = foto?.fotoGaleriaId || foto?.id || foto?.meta?.fotoId || null;
+  const fallbackUrl = buildGaleriaArquivoFallbackPath(pacienteId || foto?.pacienteId, fotoId);
+  const {
+    src: authenticatedSrc,
+    loading: mediaLoading,
+    error: mediaError,
+    onImgError,
+  } = usePacienteGaleriaArquivoBlobUrl(isApiUrl ? rawUrl : null, isApiUrl, false, fallbackUrl);
+
+  const displayUrl = isApiUrl ? authenticatedSrc : (authenticatedSrc || rawUrl);
+  const isCarregandoFoto = Boolean(rawUrl) && isApiUrl && (mediaLoading || !authenticatedSrc);
+  const isErroFoto = Boolean(rawUrl) && isApiUrl && mediaError && !authenticatedSrc;
+
+  const prevDisplayUrlRef = useRef(displayUrl);
+  useEffect(() => {
+    if (displayUrl && prevDisplayUrlRef.current && prevDisplayUrlRef.current !== displayUrl) {
+      effectiveTransformRef?.current?.resetTransform?.();
+    }
+    prevDisplayUrlRef.current = displayUrl;
+  }, [displayUrl, effectiveTransformRef]);
+
   const effectiveAspect = imgLayout.url === displayUrl ? imgLayout.aspect : null;
   const layoutMetrics = imgLayout.url === displayUrl ? imgLayout.metrics : null;
 
@@ -224,7 +251,13 @@ export function FotoVistaCanvasCore({
       return;
     }
 
-    if (!procedimentoArmado?.id || !foto?.displayUrl) return;
+    if (!procedimentoArmado?.id) {
+      if ((modo === 'ponto' || modo === 'traco') && (foto?.displayUrl || displayUrl)) {
+        onTentativaSemProcedimento?.();
+      }
+      return;
+    }
+    if (!foto?.displayUrl && !displayUrl) return;
 
     if (modo === 'ponto') {
       const coords = clickToPercent(e.clientX, e.clientY, containerRef.current, imgRef.current);
@@ -455,7 +488,22 @@ export function FotoVistaCanvasCore({
 
     <div className={`flex min-h-[280px] flex-1 flex-col ${className}`}>
 
-      {!displayUrl ? (
+      {isCarregandoFoto ? (
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 rounded-xl bg-slate-300 p-8 text-center min-h-[320px]">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/80 backdrop-blur shadow-sm">
+            <Loader2 className="h-6 w-6 animate-spin text-[#00a88e]" />
+          </div>
+          <p className="text-sm font-semibold text-slate-700">Carregando foto com segurança...</p>
+        </div>
+      ) : isErroFoto ? (
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 rounded-xl bg-slate-300 p-8 text-center min-h-[320px]">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/80 backdrop-blur shadow-sm">
+            <ImageIcon className="h-6 w-6 text-slate-400" />
+          </div>
+          <p className="text-sm font-semibold text-slate-700">Foto indisponível ou excluída</p>
+          <p className="text-xs text-slate-500 max-w-xs">Não foi possível carregar a imagem do paciente pelo servidor.</p>
+        </div>
+      ) : !displayUrl ? (
 
         <div className="flex flex-1 flex-col items-center justify-center gap-5 rounded-xl border border-dashed border-app-accent/30 bg-app-canvas p-8 text-center min-h-[320px]">
 
@@ -599,6 +647,7 @@ export function FotoVistaCanvasCore({
                       className="z-0 h-full w-full pointer-events-none"
                       imgClassName="h-full w-full object-contain pointer-events-none"
                       onLoad={handleImgLoad}
+                      onError={onImgError}
                     />
 
                     <MapaRetornoOverlay
