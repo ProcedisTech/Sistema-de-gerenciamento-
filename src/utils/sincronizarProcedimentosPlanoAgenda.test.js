@@ -137,6 +137,7 @@ describe('sincronizarProcedimentosPlanoAgenda', () => {
     expect(res).toEqual({
       [botoxCatUuid]: 'item-criado-1',
     });
+    expect(res.planoId).toBe(novoPlanoId);
   });
 
   it('é resiliente a falhas de rede e não lança exceção', async () => {

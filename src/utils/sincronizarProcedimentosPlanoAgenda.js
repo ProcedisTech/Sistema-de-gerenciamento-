@@ -43,7 +43,7 @@ export async function garantirProcedimentosNoPlano({
 
     let planoAtivo = planos.find((p) => {
       const st = String(p.statusCodigo || p.status || '').toLowerCase();
-      return st === 'ativo' || st === 'em_andamento' || st === 'aberto';
+      return st === 'ativo' || st === 'em_andamento' || st === 'aberto' || st === 'rascunho';
     });
 
     planoId = planoAtivo?.id || planoAtivo?.planejamentoId || null;

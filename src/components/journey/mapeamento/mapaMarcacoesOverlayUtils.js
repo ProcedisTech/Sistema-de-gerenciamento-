@@ -31,8 +31,9 @@ export function marcacoesApiToOverlayPontos(marcacoes, procedimentos = []) {
     const catId = m.catalogoId || m.catalogoProcedimentoSaudeId || null;
     const mapaProcId = m.mapaProcedimentoId != null ? String(m.mapaProcedimentoId) : null;
     const proc = (mapaProcId ? procMap.get(mapaProcId) : null) || (catId ? procMap.get(String(catId)) : null);
+    const resolvedCatId = catId || proc?.catalogoProcedimentoSaudeId || proc?.catalogoId || proc?.id || null;
 
-    let cor = m.corHex || m.cor || proc?.corHex || (catId ? corParaProcedimento(catId) : null);
+    let cor = m.corHex || m.cor || proc?.corHex || (resolvedCatId ? corParaProcedimento(resolvedCatId) : null);
     if (!cor && mapaProcId) {
       if (!procIdToIndex.has(mapaProcId)) {
         procIdToIndex.set(mapaProcId, procIdToIndex.size);
@@ -57,10 +58,12 @@ export function marcacoesApiToOverlayPontos(marcacoes, procedimentos = []) {
       quantidade: m.quantidade,
       tamanho: m.tamanho,
       cor: finalCor,
+      corHex: finalCor,
       vertices,
       posX: resolvedPosX,
       posY: resolvedPosY,
-      catalogoId: catId,
+      catalogoId: resolvedCatId,
+      catalogoProcedimentoSaudeId: resolvedCatId,
       mapaProcedimentoId: mapaProcId,
       nomeProcedimento,
       ordemPonto: m.ordemPonto || idx + 1,

@@ -365,19 +365,30 @@ export function PlanoFotoLightbox({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [handleAnterior, handleProxima, onClose, isDrawerOpen, isPopoverOpen]);
 
+  const tipoMapaCodigo = fotoAtual?.mapaOverlay?.tipoMapaCodigo;
+
   const isAvaliacao =
     fotoAtual?.categoria === 'avaliacao' ||
     fotoAtual?.tipoFotoCodigo === 'avaliacao' ||
+    tipoMapaCodigo === 'avaliacao' ||
     (typeof fotoAtual?.fileName === 'string' && fotoAtual.fileName.toLowerCase().includes('avaliacao'));
 
   const isMapa =
     Boolean(fotoAtual?.mapaOverlay?.marcacoes?.length) ||
     fotoAtual?.categoria === 'mapa' ||
     Boolean(fotoAtual?.pontos?.length) ||
+    Boolean(tipoMapaCodigo) ||
     isAvaliacao;
 
   const categoria = fotoAtual?.categoria || (isAvaliacao ? 'avaliacao' : 'outro');
-  const catLabel = isAvaliacao ? 'Mapa de Avaliação' : (GALERIA_CATEGORIA_LABELS[categoria] || categoria);
+  const catLabel =
+    tipoMapaCodigo === 'avaliacao' || isAvaliacao
+      ? 'Mapa de Avaliação'
+      : tipoMapaCodigo === 'retorno'
+        ? 'Mapa de Retorno'
+        : tipoMapaCodigo === 'procedimento'
+          ? 'Mapa de Procedimento'
+          : (GALERIA_CATEGORIA_LABELS[categoria] || categoria);
   const dataRaw =
     fotoAtual?.dataISO ||
     fotoAtual?.dataReferencia ||

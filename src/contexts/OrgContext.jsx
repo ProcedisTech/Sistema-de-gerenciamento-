@@ -1,8 +1,26 @@
 import React, { createContext, useCallback, useContext, useMemo, useState, useEffect, useRef } from 'react';
-import { setOrgId as apiSetOrgId, getOrgId as apiGetOrgId } from '../services/api';
+import * as apiModule from '../services/api';
 import { invalidateAuthMeCache } from '../utils/authMeProbe';
 import { DEFAULT_ORG_ID, ALT_ORG_ID, sanitizeOrgId } from '../config/apiEnv';
 import { FUSO_PADRAO } from '../utils/datasClinica';
+
+function apiGetOrgId(fallback) {
+  try {
+    return typeof apiModule?.getOrgId === 'function' ? apiModule.getOrgId(fallback) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function apiSetOrgId(id) {
+  try {
+    if (typeof apiModule?.setOrgId === 'function') {
+      apiModule.setOrgId(id);
+    }
+  } catch {
+    /* vi.mock sem setOrgId */
+  }
+}
 
 const LS_ORG = 'procedi_org_id';
 const LS_SLUG = 'procedi_org_slug';
@@ -210,8 +228,8 @@ export function useOrg() {
   const ctx = useContext(OrgContext);
   if (!ctx) {
     return {
-      orgId: apiGetOrgId(),
-      setOrgId: apiSetOrgId,
+      orgId: typeof apiGetOrgId === 'function' ? apiGetOrgId() : null,
+      setOrgId: typeof apiSetOrgId === 'function' ? apiSetOrgId : () => {},
       orgSlug: '',
       roleUserId: '',
       setRoleUserId: () => {},

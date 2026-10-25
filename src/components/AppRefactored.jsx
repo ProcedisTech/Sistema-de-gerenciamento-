@@ -126,8 +126,7 @@ import {
   aplicarCenaAntesDoPlanoConcluido,
   loteConcluiuPlano,
 } from './planos/planoConcluidoClinica.js';
-import { JourneyPhotoAnnotationEditor } from './journey/JourneyPhotoAnnotationEditor.jsx';
-import { AnnotationCanvasAvaliacao } from './journey/AnnotationCanvasAvaliacao.jsx';
+import { MapeamentoFullscreenOverlay } from './journey/mapeamento/MapeamentoFullscreenOverlay.jsx';
 import {
   normalizeOrientacoesTemplateResponse,
   orientacoesTemplateSignature,
@@ -504,8 +503,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
   const [notifVersion, setNotifVersion] = useState(0);
   const [journeyTermoTitulo, setJourneyTermoTitulo] = React.useState('');
   const [journeyTermoConteudo, setJourneyTermoConteudo] = React.useState('');
-  const canvasRef = useRef(null);
-  const containerRef = useRef(null);
   const anamneseRef = useRef(null);
   const planosTabRef = useRef(null);
   /** Vista alvo ao confirmar foto da câmera no step 2 (mapeamento). */
@@ -1255,6 +1252,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
     journeyState.setTermoSelecionadoId(null);
     setAssinaturasRealizadasIds([]);
     journeyState.setJourneyPlanejamentoCtx(null);
+    journeyState.setProcedimentosAvaliados([]);
+    journeyState.setDestinoAvaliacao(null);
     if (typeof mapaAplicacaoState?.resetMapa === 'function') {
       mapaAplicacaoState.resetMapa();
     }
@@ -1670,24 +1669,13 @@ function AppRefactoredInner({ onCanalAvisos }) {
     journeyState.setImageSrc(resolvedCleanUrl);
     journeyState.setPaths([]);
     if (Array.isArray(procedimentosMapeados) && procedimentosMapeados.length > 0) {
-      journeyState.setProcedimentosAvaliados((prev) => {
-        const map = new Map();
-        (prev || []).forEach((p) => map.set(p.catalogoProcedimentoSaudeId, p));
-        procedimentosMapeados.forEach((p) => {
-          const existing = map.get(p.catalogoProcedimentoSaudeId);
-          if (existing) {
-            map.set(p.catalogoProcedimentoSaudeId, {
-              ...existing,
-              ...p,
-              pontosCount: (existing.pontosCount || 0) + (p.pontosCount || 0),
-              quantidadeTotal: (existing.quantidadeTotal || 0) + (p.quantidadeTotal || 0),
-            });
-          } else {
-            map.set(p.catalogoProcedimentoSaudeId, p);
-          }
-        });
-        return Array.from(map.values());
-      });
+      const procsValidos = procedimentosMapeados
+        .filter((p) => isRealUuid(p.catalogoProcedimentoSaudeId || p.id))
+        .map((p) => ({
+          ...p,
+          catalogoProcedimentoSaudeId: p.catalogoProcedimentoSaudeId || p.id,
+        }));
+      journeyState.setProcedimentosAvaliados(procsValidos);
 
       if (destinoAvaliacao === 'plano' || resolvedPlanId) {
         const itemMap = {};
@@ -5076,75 +5064,47 @@ function AppRefactoredInner({ onCanalAvisos }) {
                 (photoAnnotationScope === 'procedure'
                   ? (cameraState.procedureCapturedPhotos || [])[photoAnnotationIndex]
                   : (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]) ? (
-                photoAnnotationScope === 'procedure' ? (
-                  <JourneyPhotoAnnotationEditor
-                    photos={cameraState.procedureCapturedPhotos || []}
-                    editingIndex={photoAnnotationIndex}
-                    setEditingIndex={setPhotoAnnotationIndex}
-                    imageSrc={
-                      (cameraState.procedureCapturedPhotos || [])[photoAnnotationIndex]?.cleanUrl ||
-                      (cameraState.procedureCapturedPhotos || [])[photoAnnotationIndex]?.url ||
-                      journeyState.imageSrc
-                    }
-                    activeTool={journeyState.activeTool}
-                    setActiveTool={journeyState.setActiveTool}
-                    activeColor={journeyState.activeColor}
-                    setActiveColor={journeyState.setActiveColor}
-                    pointSize={journeyState.pointSize}
-                    setPointSize={journeyState.setPointSize}
-                    showPointNumbers={journeyState.showPointNumbers}
-                    setShowPointNumbers={journeyState.setShowPointNumbers}
-                    eraserSize={journeyState.eraserSize}
-                    setEraserSize={journeyState.setEraserSize}
-                    cursorPos={journeyState.cursorPos}
-                    setCursorPos={journeyState.setCursorPos}
-                    isHoveringCanvas={journeyState.isHoveringCanvas}
-                    setIsHoveringCanvas={journeyState.setIsHoveringCanvas}
-                    paths={journeyState.paths}
-                    setPaths={journeyState.setPaths}
-                    isDrawing={journeyState.isDrawing}
-                    setIsDrawing={journeyState.setIsDrawing}
-                    canvasRef={canvasRef}
-                    containerRef={containerRef}
-                    evaluationAnnotatedPhotoUrl={journeyState.evaluationAnnotatedPhotoUrl}
-                    setEvaluationAnnotatedPhotoUrl={journeyState.setEvaluationAnnotatedPhotoUrl}
-                    onSelectCapturedPhoto={(i) => {
-                      setPhotoAnnotationIndex(i);
-                      const ph = (cameraState.procedureCapturedPhotos || [])[i];
-                      if (ph?.cleanUrl || ph?.url) {
-                        journeyState.setImageSrc(ph.cleanUrl || ph.url);
-                        journeyState.setPaths([]);
-                      }
-                    }}
-                    onAnnotatedCaptureSaved={salvarFotoProcedimentoAnotada}
-                    urlArquivoReserva={urlArquivoReservaDaFoto}
-                    onClose={closeJourneyPhotoAnnotation}
-                  />
-                ) : (
-                  <AnnotationCanvasAvaliacao
-                    photos={cameraState.evaluationCapturedPhotos || []}
-                    editingIndex={photoAnnotationIndex}
-                    setEditingIndex={setPhotoAnnotationIndex}
-                    onSelectCapturedPhoto={(i) => {
+                <MapeamentoFullscreenOverlay
+                  open={true}
+                  scope={photoAnnotationScope}
+                  photos={
+                    photoAnnotationScope === 'procedure'
+                      ? cameraState.procedureCapturedPhotos || []
+                      : cameraState.evaluationCapturedPhotos || []
+                  }
+                  editingIndex={photoAnnotationIndex}
+                  setEditingIndex={setPhotoAnnotationIndex}
+                  onSelectCapturedPhoto={(i) => {
+                    if (photoAnnotationScope === 'evaluation') {
                       handleSelectCapturedPhoto(i);
-                      setPhotoAnnotationIndex(i);
-                    }}
-                    imageSrc={
-                      (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]?.cleanUrl ||
-                      (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]?.url ||
-                      journeyState.imageSrc
                     }
-                    onAnnotatedCaptureSaved={handleAnnotatedCaptureSaved}
-                    persistAnnotatedPhotoToGallery={persistAnnotatedPhotoToGallery}
-                    aguardarFotosPendentes={aguardarFotosPendentes}
-                    obterFotoId={obterFotoIdConsulta}
-                    onClose={closeJourneyPhotoAnnotation}
-                    pacienteId={pacienteAtual?.id}
-                    roleUserId={roleUserId}
-                    procedimentosIniciais={procedimentosIniciaisAvaliacao}
-                    planoContexto={planoContextoAvaliacao}
-                  />
-                )
+                    setPhotoAnnotationIndex(i);
+                  }}
+                  foto={
+                    (photoAnnotationScope === 'procedure'
+                      ? cameraState.procedureCapturedPhotos || []
+                      : cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]
+                  }
+                  onSalvarFotoAnotada={
+                    photoAnnotationScope === 'procedure'
+                      ? salvarFotoProcedimentoAnotada
+                      : handleAnnotatedCaptureSaved
+                  }
+                  onAnnotatedCaptureSaved={handleAnnotatedCaptureSaved}
+                  persistAnnotatedPhotoToGallery={persistAnnotatedPhotoToGallery}
+                  aguardarFotosPendentes={aguardarFotosPendentes}
+                  obterFotoId={obterFotoIdConsulta}
+                  onClose={closeJourneyPhotoAnnotation}
+                  pacienteId={pacienteAtual?.id}
+                  roleUserId={roleUserId}
+                  atendimentoId={consultaAtualServidor?.id || consultaServidor?.atual?.id || atendimentoIdConsultaRef.current || null}
+                  procedimentosIniciais={
+                    photoAnnotationScope === 'procedure'
+                      ? journeyState.procedimentosSessao || []
+                      : procedimentosIniciaisAvaliacao
+                  }
+                  planoContexto={planoContextoAvaliacao}
+                />
               ) : null}
 
               <div
@@ -5695,75 +5655,47 @@ function AppRefactoredInner({ onCanalAvisos }) {
               (photoAnnotationScope === 'procedure'
                 ? (cameraState.procedureCapturedPhotos || [])[photoAnnotationIndex]
                 : (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]) ? (
-              photoAnnotationScope === 'procedure' ? (
-                <JourneyPhotoAnnotationEditor
-                  photos={cameraState.procedureCapturedPhotos || []}
-                  editingIndex={photoAnnotationIndex}
-                  setEditingIndex={setPhotoAnnotationIndex}
-                  imageSrc={
-                    (cameraState.procedureCapturedPhotos || [])[photoAnnotationIndex]?.cleanUrl ||
-                    (cameraState.procedureCapturedPhotos || [])[photoAnnotationIndex]?.url ||
-                    journeyState.imageSrc
-                  }
-                  activeTool={journeyState.activeTool}
-                  setActiveTool={journeyState.setActiveTool}
-                  activeColor={journeyState.activeColor}
-                  setActiveColor={journeyState.setActiveColor}
-                  pointSize={journeyState.pointSize}
-                  setPointSize={journeyState.setPointSize}
-                  showPointNumbers={journeyState.showPointNumbers}
-                  setShowPointNumbers={journeyState.setShowPointNumbers}
-                  eraserSize={journeyState.eraserSize}
-                  setEraserSize={journeyState.setEraserSize}
-                  cursorPos={journeyState.cursorPos}
-                  setCursorPos={journeyState.setCursorPos}
-                  isHoveringCanvas={journeyState.isHoveringCanvas}
-                  setIsHoveringCanvas={journeyState.setIsHoveringCanvas}
-                  paths={journeyState.paths}
-                  setPaths={journeyState.setPaths}
-                  isDrawing={journeyState.isDrawing}
-                  setIsDrawing={journeyState.setIsDrawing}
-                  canvasRef={canvasRef}
-                  containerRef={containerRef}
-                  evaluationAnnotatedPhotoUrl={journeyState.evaluationAnnotatedPhotoUrl}
-                  setEvaluationAnnotatedPhotoUrl={journeyState.setEvaluationAnnotatedPhotoUrl}
-                  onSelectCapturedPhoto={(i) => {
-                    setPhotoAnnotationIndex(i);
-                    const ph = (cameraState.procedureCapturedPhotos || [])[i];
-                    if (ph?.cleanUrl || ph?.url) {
-                      journeyState.setImageSrc(ph.cleanUrl || ph.url);
-                      journeyState.setPaths([]);
-                    }
-                  }}
-                  onAnnotatedCaptureSaved={salvarFotoProcedimentoAnotada}
-                  urlArquivoReserva={urlArquivoReservaDaFoto}
-                  onClose={closeJourneyPhotoAnnotation}
-                />
-              ) : (
-                <AnnotationCanvasAvaliacao
-                  photos={cameraState.evaluationCapturedPhotos || []}
-                  editingIndex={photoAnnotationIndex}
-                  setEditingIndex={setPhotoAnnotationIndex}
-                  onSelectCapturedPhoto={(i) => {
+              <MapeamentoFullscreenOverlay
+                open={true}
+                scope={photoAnnotationScope}
+                photos={
+                  photoAnnotationScope === 'procedure'
+                    ? cameraState.procedureCapturedPhotos || []
+                    : cameraState.evaluationCapturedPhotos || []
+                }
+                editingIndex={photoAnnotationIndex}
+                setEditingIndex={setPhotoAnnotationIndex}
+                onSelectCapturedPhoto={(i) => {
+                  if (photoAnnotationScope === 'evaluation') {
                     handleSelectCapturedPhoto(i);
-                    setPhotoAnnotationIndex(i);
-                  }}
-                  imageSrc={
-                    (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]?.cleanUrl ||
-                    (cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]?.url ||
-                    journeyState.imageSrc
                   }
-                  onAnnotatedCaptureSaved={handleAnnotatedCaptureSaved}
-                  persistAnnotatedPhotoToGallery={persistAnnotatedPhotoToGallery}
-                  aguardarFotosPendentes={aguardarFotosPendentes}
-                  obterFotoId={obterFotoIdConsulta}
-                  onClose={closeJourneyPhotoAnnotation}
-                  pacienteId={pacienteAtual?.id}
-                  roleUserId={roleUserId}
-                  procedimentosIniciais={procedimentosIniciaisAvaliacao}
-                  planoContexto={planoContextoAvaliacao}
-                />
-              )
+                  setPhotoAnnotationIndex(i);
+                }}
+                foto={
+                  (photoAnnotationScope === 'procedure'
+                    ? cameraState.procedureCapturedPhotos || []
+                    : cameraState.evaluationCapturedPhotos || [])[photoAnnotationIndex]
+                }
+                onSalvarFotoAnotada={
+                  photoAnnotationScope === 'procedure'
+                    ? salvarFotoProcedimentoAnotada
+                    : handleAnnotatedCaptureSaved
+                }
+                onAnnotatedCaptureSaved={handleAnnotatedCaptureSaved}
+                persistAnnotatedPhotoToGallery={persistAnnotatedPhotoToGallery}
+                aguardarFotosPendentes={aguardarFotosPendentes}
+                obterFotoId={obterFotoIdConsulta}
+                onClose={closeJourneyPhotoAnnotation}
+                pacienteId={pacienteAtual?.id}
+                roleUserId={roleUserId}
+                atendimentoId={consultaAtualServidor?.id || consultaServidor?.atual?.id || atendimentoIdConsultaRef.current || null}
+                procedimentosIniciais={
+                  photoAnnotationScope === 'procedure'
+                    ? journeyState.procedimentosSessao || []
+                    : procedimentosIniciaisAvaliacao
+                }
+                planoContexto={planoContextoAvaliacao}
+              />
             ) : null}
           </>
         ) : (

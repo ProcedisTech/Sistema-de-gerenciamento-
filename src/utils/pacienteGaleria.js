@@ -305,6 +305,14 @@ export function normalizePacienteGaleriaItem(raw) {
         mapaOverlayRaw.planejamentoId != null
           ? String(mapaOverlayRaw.planejamentoId).trim()
           : (planejamentoId ? String(planejamentoId).trim() : null),
+      tipoMapaCodigo:
+        mapaOverlayRaw.tipoMapaCodigo != null
+          ? String(mapaOverlayRaw.tipoMapaCodigo)
+          : null,
+      tipoMapaNome:
+        mapaOverlayRaw.tipoMapaNome != null
+          ? String(mapaOverlayRaw.tipoMapaNome)
+          : null,
       procedimentos,
       marcacoes,
     };
