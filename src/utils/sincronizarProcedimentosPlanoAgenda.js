@@ -109,7 +109,12 @@ export async function garantirProcedimentosNoPlano({
   }
 
   if (planoId) {
-    resultadoMap.planoId = String(planoId).trim();
+    Object.defineProperty(resultadoMap, 'planoId', {
+      value: String(planoId).trim(),
+      enumerable: false,
+      configurable: true,
+      writable: true,
+    });
   }
 
   return resultadoMap;
