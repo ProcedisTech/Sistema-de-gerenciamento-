@@ -135,6 +135,7 @@ export function usePapel() {
   const canSeeConfigAuditoria   = hasPerm(PERMISSOES.AUDITORIA_VER, PERFIS_ACESSO.NIVEL_5);
   const canExportPdf            = hasPerm(PERMISSOES.PDF_EXPORTAR, PERFIS_ACESSO.NIVEL_5);
   const canSeeNotificacoes      = hasPerm(PERMISSOES.NOTIFICACAO_VER, PERFIS_ACESSO.NIVEL_1);
+  const canConfigurarNotificacoes = hasPerm(PERMISSOES.NOTIFICACAO_CONFIGURAR, PERFIS_ACESSO.NIVEL_5);
   const canManageMsgTemplates   = hasPerm(PERMISSOES.MSG_TEMPLATE_GERENCIAR, PERFIS_ACESSO.NIVEL_5);
 
   // Acesso geral a configurações
@@ -252,6 +253,7 @@ export function usePapel() {
     canSeeConfigAuditoria,
     canExportPdf,
     canSeeNotificacoes,
+    canConfigurarNotificacoes,
     canManageMsgTemplates,
   };
 }

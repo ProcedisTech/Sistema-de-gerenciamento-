@@ -32,6 +32,8 @@ export function ConfiguracoesView({
   canSeeClinica = false,
   canSeeAgendaConfig = false,
   canSeeEquipe = false,
+  canConfigurarNotificacoes = false,
+  canSeeNotificacoes = false,
   onClinicaAtualizada,
   onPerfilAtualizado,
   onNavigateAgenda,
@@ -46,7 +48,7 @@ export function ConfiguracoesView({
 }) {
   const sectionGuardRef = useRef(null);
 
-  const flags = { canSeeAnamnese, canSeeProcedimentos, canSeeTermos, canSeePerfil, canSeeClinica, canSeeAgendaConfig, canSeeEquipe };
+  const flags = { canSeeAnamnese, canSeeProcedimentos, canSeeTermos, canSeePerfil, canSeeClinica, canSeeAgendaConfig, canSeeEquipe, canConfigurarNotificacoes, canSeeNotificacoes };
 
   // Categoria ativa: null = hub. Inicializa em detalhe se vier um deep-link (configSection não-null do pai).
   const [activeCategory, setActiveCategory] = useState(() => {
@@ -80,13 +82,15 @@ export function ConfiguracoesView({
       canSeeClinica,
       canSeeAgendaConfig,
       canSeeEquipe,
+      canConfigurarNotificacoes,
+      canSeeNotificacoes,
     };
     return getVisibleCategories(f).map((cat) => ({
       key: cat.key,
       label: cat.label,
       items: cat.visibleItems,
     }));
-  }, [canSeeAnamnese, canSeeProcedimentos, canSeeTermos, canSeePerfil, canSeeClinica, canSeeAgendaConfig, canSeeEquipe]);
+  }, [canSeeAnamnese, canSeeProcedimentos, canSeeTermos, canSeePerfil, canSeeClinica, canSeeAgendaConfig, canSeeEquipe, canConfigurarNotificacoes, canSeeNotificacoes]);
 
   const handleSelectCategory = (categoryKey) => {
     setActiveCategory(categoryKey);
@@ -154,6 +158,8 @@ export function ConfiguracoesView({
             canSeeClinica={canSeeClinica}
             canSeeAgendaConfig={canSeeAgendaConfig}
             canSeeEquipe={canSeeEquipe}
+            canConfigurarNotificacoes={canConfigurarNotificacoes}
+            canSeeNotificacoes={canSeeNotificacoes}
             onSelectCategory={handleSelectCategory}
           />
         ) : (
@@ -169,6 +175,8 @@ export function ConfiguracoesView({
             canSeeClinica={canSeeClinica}
             canSeeAgendaConfig={canSeeAgendaConfig}
             canSeeEquipe={canSeeEquipe}
+            canConfigurarNotificacoes={canConfigurarNotificacoes}
+            canSeeNotificacoes={canSeeNotificacoes}
             onClinicaAtualizada={onClinicaAtualizada}
             onPerfilAtualizado={onPerfilAtualizado}
             onNavigateAgenda={onNavigateAgenda}

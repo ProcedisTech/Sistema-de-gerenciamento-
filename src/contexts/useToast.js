@@ -16,6 +16,7 @@ export function useToast() {
       error: noop,
       warning: noop,
       info: noop,
+      urgente: noop,
       dismiss: noop,
     };
   }

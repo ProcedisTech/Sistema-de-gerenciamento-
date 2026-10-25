@@ -1,5 +1,5 @@
-import React from 'react';
-import { CalendarPlus, Plus, Search } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Bell, CalendarPlus, Plus, Search, Settings, User } from 'lucide-react';
 import { usePapel } from '../../hooks/usePapel';
 import { PacienteSearchInput } from '../agenda/PacienteSearchInput.jsx';
 import NotificationBell from './NotificationBell.jsx';
@@ -26,6 +26,8 @@ import { resolveIdentity } from './identityDisplay';
  *   perfilFotoUrl?: string,
  *   onOpenClinicaSettings?: () => void,
  *   onOpenPerfilSettings?: () => void,
+ *   onOpenConfiguracoes?: () => void,
+ *   onOpenMinhasNotificacoes?: () => void,
  *   atalhoConsulta?: React.ReactNode,
  * }} props
  */
@@ -47,9 +49,28 @@ export function GlobalHeader({
   perfilFotoUrl,
   onOpenClinicaSettings,
   onOpenPerfilSettings,
+  onOpenConfiguracoes,
+  onOpenMinhasNotificacoes,
   atalhoConsulta = null,
 }) {
-  const { canCreatePacientes, canWriteAgenda, isNivel1, canSeeConfig } = usePapel();
+  const { canCreatePacientes, canWriteAgenda, isNivel1, canSeeConfig, canSeeNotificacoes } = usePapel();
+  const [menuPerfilAberto, setMenuPerfilAberto] = useState(false);
+  const menuRef = useRef(null);
+  const chipRef = useRef(null);
+  // O chip é o elemento focado ao abrir; guardamos para devolver o foco no Esc (sem mexer no chip, que é compartilhado).
+  const abrirMenu = () => {
+    chipRef.current = document.activeElement;
+    setMenuPerfilAberto((v) => !v);
+  };
+  useEffect(() => {
+    if (menuPerfilAberto) menuRef.current?.querySelector('[role="menuitem"]')?.focus();
+  }, [menuPerfilAberto]);
+  const irPara = (fn) => () => {
+    setMenuPerfilAberto(false);
+    fn?.();
+  };
+  const itemMenuClass =
+    'flex min-h-[44px] w-full items-center gap-2.5 rounded-lg px-3 text-[14px] font-medium text-[#0f172a] hover:bg-[#f8fafc]';
   const { tituloClinica, clinicaLogoResolved, displayName, shortName, perfilFotoResolved, roleLabel } =
     resolveIdentity({
       clinicaNome,
@@ -147,13 +168,15 @@ export function GlobalHeader({
             </div>
           ) : null}
 
-          <div className="shrink-0">
-            <NotificationBell
-              variant="header"
-              onVerTodas={onOpenNotificacoes}
-              notificacoesRefreshKey={notificacoesRefreshKey}
-            />
-          </div>
+          {canSeeNotificacoes ? (
+            <div className="shrink-0">
+              <NotificationBell
+                variant="header"
+                onVerTodas={onOpenNotificacoes}
+                notificacoesRefreshKey={notificacoesRefreshKey}
+              />
+            </div>
+          ) : null}
 
           <UsuarioIdentityCard
             variant="header"
@@ -162,8 +185,48 @@ export function GlobalHeader({
             perfilFotoResolved={perfilFotoResolved}
             roleLabel={roleLabel}
             canSeeConfig={canSeeConfig}
-            onOpenPerfilSettings={onOpenPerfilSettings}
+            onOpenPerfilSettings={abrirMenu}
           />
+          {menuPerfilAberto ? (
+            <>
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-hidden="true"
+                className="fixed inset-0 z-40 cursor-default"
+                onClick={() => setMenuPerfilAberto(false)}
+              />
+              <div
+                ref={menuRef}
+                role="menu"
+                aria-label="Menu do perfil"
+                onKeyDown={(e) => {
+                  if (e.key !== 'Escape') return;
+                  setMenuPerfilAberto(false);
+                  chipRef.current?.focus?.();
+                }}
+                className="fixed right-4 top-14 z-50 w-64 rounded-xl bg-white p-1.5 shadow-2xl ring-1 ring-gray-200 sm:right-6 lg:right-8 lg:top-[4.25rem]"
+              >
+                <div className="px-3 py-2">
+                  <p className="truncate text-[14px] font-bold text-[#0f172a]">{displayName}</p>
+                  <p className="text-[12px] text-[#64748b]">{roleLabel}</p>
+                </div>
+                <button type="button" role="menuitem" onClick={irPara(onOpenPerfilSettings)} className={itemMenuClass}>
+                  <User className="h-4 w-4 text-[#64748b]" aria-hidden /> Meu perfil
+                </button>
+                {canSeeConfig ? (
+                  <button type="button" role="menuitem" onClick={irPara(onOpenConfiguracoes)} className={itemMenuClass}>
+                    <Settings className="h-4 w-4 text-[#64748b]" aria-hidden /> Configurações
+                  </button>
+                ) : null}
+                {canSeeNotificacoes ? (
+                  <button type="button" role="menuitem" onClick={irPara(onOpenMinhasNotificacoes)} className={itemMenuClass}>
+                    <Bell className="h-4 w-4 text-[#64748b]" aria-hidden /> Minhas notificações
+                  </button>
+                ) : null}
+              </div>
+            </>
+          ) : null}
         </div>
       </div>
     </header>

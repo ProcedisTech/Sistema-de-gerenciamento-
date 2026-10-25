@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react';
+import { AlertTriangle, BellRing, CheckCircle2, Info, X, XCircle } from 'lucide-react';
 import { ToastContext } from './toastContext.js';
 
 const MAX_TOASTS = 5;
@@ -35,7 +35,48 @@ function getToastMountNode() {
   return document.getElementById(TOAST_ROOT_ID) || document.body;
 }
 
-function ToastItem({ id, message, variant, onDismiss }) {
+function ToastUrgente({ id, message, titulo, acao, onDismiss }) {
+  return (
+    <div
+      role="status"
+      aria-live="assertive"
+      className="pointer-events-auto flex w-[400px] max-w-[calc(100vw-2rem)] items-start gap-3 rounded-xl border border-l-4 border-[#e2e8f0] border-l-rose-500 bg-white p-4 shadow-2xl toast-pop-in"
+    >
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
+        <BellRing className="h-5 w-5" aria-hidden />
+      </span>
+      <div className="min-w-0 flex-1">
+        {titulo ? <p className="text-[12px] font-bold uppercase tracking-wide text-rose-600">{titulo}</p> : null}
+        <p className="text-[14px] font-medium leading-snug text-[#0f172a]">{message}</p>
+        {acao ? (
+          <button
+            type="button"
+            onClick={() => {
+              acao.onClick?.();
+              onDismiss(id);
+            }}
+            className="mt-2 inline-flex min-h-[36px] items-center rounded-lg bg-[#00a88e] px-3 text-[13px] font-semibold text-white hover:bg-[#00967f]"
+          >
+            {acao.label}
+          </button>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        onClick={() => onDismiss(id)}
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[#94a3b8] hover:bg-slate-100"
+        aria-label="Fechar notificação"
+      >
+        <X className="h-4 w-4" strokeWidth={2} />
+      </button>
+    </div>
+  );
+}
+
+function ToastItem({ id, message, variant, titulo, acao, onDismiss }) {
+  if (variant === 'urgent') {
+    return <ToastUrgente id={id} message={message} titulo={titulo} acao={acao} onDismiss={onDismiss} />;
+  }
   const cfg = VARIANT_STYLES[variant] || VARIANT_STYLES.info;
   const Icon = cfg.Icon;
   const isError = variant === 'error';
@@ -90,7 +131,7 @@ function ToastStack({ toasts, onDismiss }) {
   return createPortal(
     <>
       {toasts.map((t) => (
-        <ToastItem key={t.id} id={t.id} message={t.message} variant={t.variant} onDismiss={onDismiss} />
+        <ToastItem key={t.id} id={t.id} message={t.message} variant={t.variant} titulo={t.titulo} acao={t.acao} onDismiss={onDismiss} />
       ))}
     </>,
     mount
@@ -118,13 +159,13 @@ export function ToastProvider({ children }) {
   }, []);
 
   const push = useCallback(
-    (message, variant = 'info') => {
+    (message, variant = 'info', opts = {}) => {
       const text = String(message || '').trim() || '—';
       const id = ++idRef.current;
-      const ms = variant === 'error' ? 6500 : 4800;
+      const ms = variant === 'urgent' ? 12000 : variant === 'error' ? 6500 : 4800;
 
       setToasts((prev) => {
-        const next = [...prev, { id, message: text, variant }];
+        const next = [...prev, { id, message: text, variant, titulo: opts.titulo, acao: opts.acao }];
         return next.slice(-MAX_TOASTS);
       });
 
@@ -142,6 +183,7 @@ export function ToastProvider({ children }) {
       error: (m) => push(m, 'error'),
       warning: (m) => push(m, 'warning'),
       info: (m) => push(m, 'info'),
+      urgente: (m, opts) => push(m, 'urgent', opts),
       dismiss,
     }),
     [push, dismiss]

@@ -11,6 +11,7 @@ vi.mock('../../hooks/usePapel', () => ({
     canCreatePacientes: true,
     canWriteAgenda: true,
     isNivel1: false,
+    canSeeNotificacoes: true,
   }),
 }));
 

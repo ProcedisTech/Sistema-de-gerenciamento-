@@ -27,6 +27,7 @@ import {
 import { sanitizeOrgId, resolveApiUrl, shouldAttachApiAuthToFetchUrl } from '../config/apiEnv';
 import { supabase } from '../lib/supabaseClient';
 import { updateServerTimeOffset } from '../utils/serverTime';
+import { normalizarNotificacao } from '../utils/notificacaoFormat.js';
 
 let currentOrgId = '';
 
@@ -1731,7 +1732,10 @@ export const notificacoesApi = {
     if (lida !== undefined && lida !== null) params.set('lida', String(lida));
     params.set('page', String(page));
     params.set('size', String(size));
-    return request(`/api/v1/notificacoes?${params.toString()}`);
+    return request(`/api/v1/notificacoes?${params.toString()}`).then((page) => ({
+      ...page,
+      content: (page?.content ?? []).map(normalizarNotificacao),
+    }));
   },
 
   /**
@@ -1743,7 +1747,8 @@ export const notificacoesApi = {
   /**
    * Marca uma notificação como lida.
    */
-  marcarLida: (id) => request(`/api/v1/notificacoes/${id}/lida`, { method: 'PATCH' }),
+  marcarLida: (id) =>
+    request(`/api/v1/notificacoes/${id}/lida`, { method: 'PATCH' }).then(normalizarNotificacao),
 
   /**
    * Bulk: marca todas como lidas.
@@ -1762,17 +1767,34 @@ export const notificacoesApi = {
    * @returns {Promise<{ removidas: number }>}
    */
   limparLidas: () => request('/api/v1/notificacoes/lidas', { method: 'DELETE' }),
+};
 
-  /**
-   * Sugere inclusão de procedimento no catálogo (notifica admins da org).
-   * @param {string} nome
-   * @returns {Promise<{ criadas: number }>}
-   */
-  sugerirProcedimento: (nome) =>
-    request('/api/v1/notificacoes/sugestao-procedimento', {
-      method: 'POST',
-      body: JSON.stringify({ nomeSugerido: String(nome).trim() }),
+// ── Notificações: configuração da clínica e preferências pessoais ──
+const NOTIF = '/api/v1/notificacoes';
+export const notificacoesConfigApi = {
+  /** Tipos ativos [{codigo,nome,descricao,modulo,nivel,papel,ativo}]; com incluirInativos traz também os desligados (ativo:false). */
+  tipos: (incluirInativos = false) => request(`${NOTIF}/tipos${incluirInativos ? '?incluirInativos=true' : ''}`),
+  /** @returns {Promise<{perfis:{id,nome}[], pessoas:{roleUserId,nome}[]}>} */
+  extras: (codigo) => request(`${NOTIF}/config/tipos/${encodeURIComponent(codigo)}/extras`),
+  salvarExtras: (codigo, perfilIds, roleUserIds) =>
+    request(`${NOTIF}/config/tipos/${encodeURIComponent(codigo)}/extras`, {
+      method: 'PUT',
+      body: JSON.stringify({ perfilIds, roleUserIds }),
     }),
+  /** @returns {Promise<{tipos:{codigo,nome,nivel,motivos:string[],silenciado:boolean}[], acompanhando:{roleUserId,nome}[]}>} */
+  preferencias: () => request(`${NOTIF}/preferencias`),
+  silenciar: (codigo) =>
+    request(`${NOTIF}/preferencias/silenciados/${encodeURIComponent(codigo)}`, { method: 'PUT' }),
+  deixarDeSilenciar: (codigo) =>
+    request(`${NOTIF}/preferencias/silenciados/${encodeURIComponent(codigo)}`, { method: 'DELETE' }),
+  acompanhar: (roleUserId) =>
+    request(`${NOTIF}/preferencias/acompanhando/${encodeURIComponent(roleUserId)}`, { method: 'PUT' }),
+  deixarDeAcompanhar: (roleUserId) =>
+    request(`${NOTIF}/preferencias/acompanhando/${encodeURIComponent(roleUserId)}`, { method: 'DELETE' }),
+  /** Seletor de "também recebem" (exige CONFIGURAR). @returns {Promise<{perfis:{id,nome,pessoas,temVer}[], pessoas:{roleUserId,nome,perfilNome}[]}>} (só quem tem NOTIFICACAO_VER conta/aparece) */
+  opcoes: () => request(`${NOTIF}/config/opcoes`),
+  /** Profissionais que dá para acompanhar (sem a própria pessoa). @returns {Promise<{roleUserId,nome}[]>} */
+  profissionais: () => request(`${NOTIF}/preferencias/profissionais`),
 };
 
 // ── Disponibilidade do Profissional ───────────────────────

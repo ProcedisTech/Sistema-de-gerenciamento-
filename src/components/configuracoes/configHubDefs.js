@@ -11,6 +11,8 @@ import {
   Clock,
   MessageCircle,
   UserX,
+  Bell,
+  BellRing,
 } from 'lucide-react';
 
 /**
@@ -21,6 +23,17 @@ import {
  * Categoria some do hub se nenhum item for visível ao usuário.
  */
 export const CATEGORY_DEFS = [
+  {
+    key: 'notificacoes',
+    label: 'Notificações',
+    description: 'Quem recebe cada aviso',
+    icon: Bell,
+    color: '#00A88E',
+    items: [
+      { id: 'notif-config', label: 'Quem recebe cada aviso', subtitle: 'Perfis e pessoas por tipo', icon: BellRing, requireFlag: 'canConfigurarNotificacoes' },
+      { id: 'notif-prefs', label: 'Minhas preferências', subtitle: 'Silenciar e acompanhar', icon: Bell, requireFlag: 'canSeeNotificacoes' },
+    ],
+  },
   {
     key: 'clinica-group',
     label: 'Clínica',
@@ -91,7 +104,7 @@ export const CATEGORY_DEFS = [
 /**
  * Filtra os itens de uma categoria pelo conjunto de flags de permissão.
  * @param {object} category — entrada de CATEGORY_DEFS
- * @param {object} flags    — { canSeeAnamnese, canSeeProcedimentos, canSeeTermos, canSeePerfil, canSeeClinica, canSeeAgendaConfig, canSeeEquipe }
+ * @param {object} flags    — { canSeeAnamnese, canSeeProcedimentos, canSeeTermos, canSeePerfil, canSeeClinica, canSeeAgendaConfig, canSeeEquipe, canConfigurarNotificacoes, canSeeNotificacoes }
  * @returns {Array} itens visíveis ao usuário
  */
 export function filterCategoryItems(category, flags) {

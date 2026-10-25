@@ -16,6 +16,8 @@ export const VALID_SECTIONS = new Set([
   'agenda-templates',
   'pacientes-inativados',
   'metodos-assinatura',
+  'notif-config',
+  'notif-prefs',
 ]);
 
 export function readStoredSection() {

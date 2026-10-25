@@ -27,6 +27,7 @@ import { SelecionarClinica } from './auth/SelecionarClinica.jsx';
 import { RoleGuard, PERMISSOES } from './auth/RoleGuard.jsx';
 import { Sidebar, Stepper, MobileNavigation, GlobalHeader, PageSlot } from './layout';
 import NotificacoesView from './notificacoes/NotificacoesView.jsx';
+import NotificacoesConfigView from './notificacoes/NotificacoesConfigView.jsx';
 
 import { usePapel } from '../hooks/usePapel';
 import { useAlertasClinicos } from '../hooks/useAlertasClinicos';
@@ -242,6 +243,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
     canSeeConfigClinica,
     canSeeConfigAgenda,
     canSeeConfigEquipe,
+    canConfigurarNotificacoes,
+    canSeeNotificacoes,
     canDeleteAgenda,
     canSeePacientes,
     canStartAtendimento,
@@ -2915,6 +2918,11 @@ function AppRefactoredInner({ onCanalAvisos }) {
     goToViewWithGuard('notificacoes');
   }, [activeView, goToViewWithGuard]);
 
+  const handleOpenMinhasNotificacoes = React.useCallback(() => {
+    if (activeView !== 'notificacoes-config') setPreviousView(activeView);
+    goToViewWithGuard('notificacoes-config');
+  }, [activeView, goToViewWithGuard]);
+
   const handleVoltarNotificacoes = React.useCallback(() => {
     goToViewWithGuard(previousView || 'pacientes');
   }, [previousView, goToViewWithGuard]);
@@ -2922,12 +2930,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
   const handleNotificacoesChanged = React.useCallback(() => {
     setNotifVersion((v) => v + 1);
   }, []);
-
-  const handleNavigateToCatalogo = React.useCallback(() => {
-    if (!canSeeConfig) return;
-    goToViewWithGuard('configuracoes');
-    setConfigSection('procedimentos');
-  }, [canSeeConfig, goToViewWithGuard, setConfigSection]);
 
   const handleNavigateToMetodosAssinatura = React.useCallback(() => {
     if (!canSeeConfig) return;
@@ -4721,6 +4723,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
       case 'configuracoes':
         return <PageSlot icon={Settings} title="Configurações" />;
       case 'notificacoes':
+      case 'notificacoes-config':
         return <PageSlot icon={Bell} title="Notificações" />;
       default:
         return null;
@@ -5786,6 +5789,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
               perfilFotoUrl={perfilInfo.fotoUrl}
               onOpenClinicaSettings={onOpenClinicaSettings}
               onOpenPerfilSettings={onOpenPerfilSettings}
+              onOpenConfiguracoes={() => goToViewWithGuard('configuracoes')}
+              onOpenMinhasNotificacoes={handleOpenMinhasNotificacoes}
               atalhoConsulta={
                 canStartAtendimento && minhasCarregadas ? (
                   <AtalhoConsulta
@@ -5897,6 +5902,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
                       canSeeClinica={canSeeConfigClinica}
                       canSeeAgendaConfig={canSeeConfigAgenda}
                       canSeeEquipe={canSeeConfigEquipe}
+                      canConfigurarNotificacoes={canConfigurarNotificacoes}
+                      canSeeNotificacoes={canSeeNotificacoes}
                       configSection={configSection}
                       setConfigSection={setConfigSection}
                       onClinicaAtualizada={(nome, logoUrl) => {
@@ -5936,11 +5943,17 @@ function AppRefactoredInner({ onCanalAvisos }) {
 
                 {activeView === 'notificacoes' && (
                   <NotificacoesView
+                    semAcesso={!canSeeNotificacoes}
                     onVoltar={handleVoltarNotificacoes}
-                    onNavigateToCatalogo={handleNavigateToCatalogo}
                     onNavigateToAgenda={handleNavigateToAgenda}
                     onNotificacoesChanged={handleNotificacoesChanged}
                   />
+                )}
+
+                {activeView === 'notificacoes-config' && (
+                  <RoleGuard condition={canSeeNotificacoes} showError>
+                    <NotificacoesConfigView abaInicial="prefs" onVoltar={handleVoltarNotificacoes} />
+                  </RoleGuard>
                 )}
 
                 {activeView === 'agenda' && (
@@ -5966,7 +5979,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                 )}
 
                 {/* @deprecated — 'jornada' legado; 'consulta' reservado para ConsultaHub (render-block). */}
-                {!['jornada', 'consulta', 'pacientes', 'agenda', 'configuracoes', 'gestao-equipe', 'notificacoes'].includes(activeView) && (
+                {!['jornada', 'consulta', 'pacientes', 'agenda', 'configuracoes', 'gestao-equipe', 'notificacoes', 'notificacoes-config'].includes(activeView) && (
                   <div className="p-6 rounded-2xl border border-app-border bg-app-surface text-[#64748b] font-bold text-[14px]">
                     Visao nao encontrada.
                   </div>

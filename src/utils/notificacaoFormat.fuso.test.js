@@ -21,10 +21,10 @@ describe('grupoTemporal — "hoje" no fuso da clínica (21:30 Brasília = 00:30 
     expect(grupoTemporal(criadoEm, AC)).toBe('hoje');
   });
 
-  it('01:00 de 30/09 em Brasília é 23:00 de 29/09 no Acre: "hoje" em DF, "semana" em AC', () => {
+  it('01:00 de 30/09 em Brasília é 23:00 de 29/09 no Acre: "hoje" em DF, "ontem" em AC', () => {
     const criadoEm = '2026-09-30T04:00:00Z';
     expect(grupoTemporal(criadoEm, DF)).toBe('hoje');
-    expect(grupoTemporal(criadoEm, AC)).toBe('semana');
+    expect(grupoTemporal(criadoEm, AC)).toBe('ontem');
   });
 
   it('groupNotificacoes usa o fuso recebido (sem default do navegador)', () => {
@@ -36,6 +36,6 @@ describe('grupoTemporal — "hoje" no fuso da clínica (21:30 Brasília = 00:30 
     const ac = groupNotificacoes(items, 'todas', AC);
     expect(df.hoje.map((n) => n.id)).toEqual([1, 2]);
     expect(ac.hoje.map((n) => n.id)).toEqual([2]);
-    expect(ac.semana.map((n) => n.id)).toEqual([1]);
+    expect(ac.ontem.map((n) => n.id)).toEqual([1]);
   });
 });

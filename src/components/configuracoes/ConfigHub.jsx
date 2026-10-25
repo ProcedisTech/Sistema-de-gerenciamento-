@@ -15,9 +15,11 @@ export function ConfigHub({
   canSeeClinica,
   canSeeAgendaConfig,
   canSeeEquipe,
+  canConfigurarNotificacoes,
+  canSeeNotificacoes,
   onSelectCategory,
 }) {
-  const flags = { canSeeAnamnese, canSeeProcedimentos, canSeeTermos, canSeePerfil, canSeeClinica, canSeeAgendaConfig, canSeeEquipe };
+  const flags = { canSeeAnamnese, canSeeProcedimentos, canSeeTermos, canSeePerfil, canSeeClinica, canSeeAgendaConfig, canSeeEquipe, canConfigurarNotificacoes, canSeeNotificacoes };
   const visibleCategories = getVisibleCategories(flags);
   const [pendencias, setPendencias] = useState({ termos: false, fichas: false });
 

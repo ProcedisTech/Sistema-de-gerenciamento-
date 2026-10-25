@@ -5,6 +5,7 @@ import { useToast } from '../../contexts/useToast.js';
 import { formatarMensagemNotificacao, formatarTempoRelativo } from '../../utils/notificacaoFormat.js';
 import { useAviso } from '../../contexts/useAviso.js';
 import { PREFIXO_AVISO } from '../../services/avisos/tiposAviso.js';
+import { useFusoClinica } from '../hooks/useFusoClinica.js';
 
 export default function NotificationBell({
   variant = 'default',
@@ -18,8 +19,15 @@ export default function NotificationBell({
   const [items, setItems] = useState([]);
   const [totalElements, setTotalElements] = useState(0);
   const [loading, setLoading] = useState(false);
-  const { error: toastError } = useToast();
+  const { error: toastError, urgente } = useToast();
+  const { fuso } = useFusoClinica();
   const containerRef = useRef(null);
+  const vistas = useRef(new Set());
+  const primeiraCarga = useRef(true);
+  const onVerTodasRef = useRef(onVerTodas);
+  onVerTodasRef.current = onVerTodas;
+  const urgenteRef = useRef(urgente);
+  urgenteRef.current = urgente;
 
   const refreshCount = useCallback(async () => {
     try {
@@ -30,11 +38,39 @@ export default function NotificationBell({
     }
   }, []);
 
-  useEffect(() => {
+  // Rebusca contador + 1ª página; a 1ª carga só registra os ids, depois cada URGENTE nova vira toast.
+  const sincronizar = useCallback(async () => {
     refreshCount();
-  }, [refreshCount, notificacoesRefreshKey]);
+    try {
+      const page = await notificacoesApi.listar({ page: 0, size: 20 });
+      const lista = Array.isArray(page?.content) ? page.content : [];
+      const novas = lista.filter((n) => !vistas.current.has(n.id));
+      lista.forEach((n) => vistas.current.add(n.id));
+      if (primeiraCarga.current) {
+        primeiraCarga.current = false;
+        return;
+      }
+      novas
+        .filter((n) => n.nivel === 'URGENTE' && !n.lida)
+        .forEach((n) =>
+          urgenteRef.current(formatarMensagemNotificacao(n), {
+            titulo: `Urgente · ${n.tipoNome}`,
+            acao:
+              typeof onVerTodasRef.current === 'function'
+                ? { label: 'Ver notificações', onClick: () => onVerTodasRef.current() }
+                : undefined,
+          })
+        );
+    } catch {
+      // silencioso
+    }
+  }, [refreshCount]);
 
-  useAviso(PREFIXO_AVISO.NOTIFICACAO, refreshCount);
+  useEffect(() => {
+    sincronizar();
+  }, [sincronizar, notificacoesRefreshKey]);
+
+  useAviso(PREFIXO_AVISO.NOTIFICACAO, sincronizar);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -172,15 +208,15 @@ export default function NotificationBell({
                   }}
                   role="button"
                   tabIndex={0}
-                  className={`cursor-pointer p-3 hover:bg-gray-50 ${!n.lida ? 'bg-emerald-50' : ''}`}
+                  className={`cursor-pointer p-3 hover:bg-gray-50 ${!n.lida && n.acendeSino ? 'bg-emerald-50' : ''}`}
                 >
                   <div className="flex items-start gap-2">
-                    {!n.lida ? (
+                    {!n.lida && n.acendeSino ? (
                       <span className="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
                     ) : null}
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-gray-900">{formatarMensagemNotificacao(n)}</p>
-                      <p className="text-xs text-gray-500">{formatarTempoRelativo(n.criadoEm)}</p>
+                      <p className="text-xs text-gray-500">{formatarTempoRelativo(n.criadoEm, Date.now(), fuso)}</p>
                     </div>
                   </div>
                 </li>

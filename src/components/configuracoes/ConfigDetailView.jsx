@@ -15,6 +15,7 @@ import { FeriadosPanel } from './FeriadosPanel';
 import { TemplatesMensagemPanel } from './TemplatesMensagemPanel';
 import { PacientesInativadosPanel } from './PacientesInativadosPanel';
 import { BancoProcedimentosPanel } from './BancoProcedimentosPanel';
+import NotificacoesConfigView from '../notificacoes/NotificacoesConfigView';
 import { authHeadersForFetch } from '../../services/api';
 
 /**
@@ -54,6 +55,8 @@ export function ConfigDetailView({
   canSeeClinica,
   canSeeAgendaConfig,
   canSeeEquipe,
+  canConfigurarNotificacoes,
+  canSeeNotificacoes,
   onClinicaAtualizada,
   onPerfilAtualizado,
   onNavigateAgenda,
@@ -65,7 +68,7 @@ export function ConfigDetailView({
   onDirtyFichaChange,
   sectionGuardRef,
 }) {
-  const flags = { canSeeAnamnese, canSeeProcedimentos, canSeeTermos, canSeePerfil, canSeeClinica, canSeeAgendaConfig, canSeeEquipe };
+  const flags = { canSeeAnamnese, canSeeProcedimentos, canSeeTermos, canSeePerfil, canSeeClinica, canSeeAgendaConfig, canSeeEquipe, canConfigurarNotificacoes, canSeeNotificacoes };
 
   const categoryDef = CATEGORY_DEFS.find((c) => c.key === categoryKey);
   const visibleItems = categoryDef ? filterCategoryItems(categoryDef, flags) : [];
@@ -194,6 +197,8 @@ export function ConfigDetailView({
               canSeeClinica={canSeeClinica}
               canSeeAgendaConfig={canSeeAgendaConfig}
               canSeeEquipe={canSeeEquipe}
+              canConfigurarNotificacoes={canConfigurarNotificacoes}
+              canSeeNotificacoes={canSeeNotificacoes}
               onClinicaAtualizada={onClinicaAtualizada}
               onPerfilAtualizado={onPerfilAtualizado}
               onNavigateAgenda={onNavigateAgenda}
@@ -227,6 +232,8 @@ function PainelAtivo({
   canSeeClinica,
   canSeeAgendaConfig,
   canSeeEquipe,
+  canConfigurarNotificacoes,
+  canSeeNotificacoes,
   onClinicaAtualizada,
   onPerfilAtualizado,
   onNavigateAgenda,
@@ -296,6 +303,12 @@ function PainelAtivo({
   }
   if (configSection === 'pacientes-inativados' && canSeeEquipe) {
     return <PacientesInativadosPanel onPacientesCatalogRefresh={onPacientesCatalogRefresh} />;
+  }
+  if (configSection === 'notif-config' && canConfigurarNotificacoes) {
+    return <NotificacoesConfigView aba="clinica" embutido />;
+  }
+  if (configSection === 'notif-prefs' && canSeeNotificacoes) {
+    return <NotificacoesConfigView aba="prefs" embutido />;
   }
 
   return null;

@@ -7,7 +7,6 @@ import {
   FormInput, 
   Clock, 
   QrCode, 
-  Bell, 
   Loader2, 
   Copy, 
   Check, 
@@ -25,9 +24,7 @@ export function AnamneseConfigPublicaPanel() {
   const [config, setConfig] = useState({ 
     slug: '', 
     validadeAnamneseDias: 180, 
-    anamnesePadraoId: '',
-    notificarNovaFicha: true,
-    notificarVencimento: true
+    anamnesePadraoId: ''
   });
   const [copied, setCopied] = useState(false);
   const toast = useToast();
@@ -46,9 +43,7 @@ export function AnamneseConfigPublicaPanel() {
           setConfig({
             slug: acessoData.slug || '',
             validadeAnamneseDias: acessoData.validadeAnamneseDias ?? 180,
-            anamnesePadraoId: acessoData.anamnesePadraoId || '',
-            notificarNovaFicha: acessoData.notificarNovaFicha ?? true,
-            notificarVencimento: acessoData.notificarVencimento ?? true
+            anamnesePadraoId: acessoData.anamnesePadraoId || ''
           });
           setLoading(false);
         }
@@ -70,9 +65,7 @@ export function AnamneseConfigPublicaPanel() {
       await acessoPublicoApi.atualizar({
         slug: config.slug,
         validadeAnamneseDias: Number(config.validadeAnamneseDias),
-        anamnesePadraoId: config.anamnesePadraoId || null,
-        notificarNovaFicha: config.notificarNovaFicha,
-        notificarVencimento: config.notificarVencimento
+        anamnesePadraoId: config.anamnesePadraoId || null
       });
       toast.success('Configurações salvas com sucesso!');
     } catch {
@@ -267,7 +260,7 @@ export function AnamneseConfigPublicaPanel() {
           </div>
 
           {/* Seção 4 — QR Code */}
-          <div className="py-6 border-b border-slate-100 flex flex-col md:flex-row gap-6 md:items-start">
+          <div className="py-6 flex flex-col md:flex-row gap-6 md:items-start">
             <div className="flex gap-4 md:w-1/3 shrink-0">
               <div className="w-10 h-10 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
                 <QrCode className="w-5 h-5 text-slate-400" />
@@ -316,62 +309,6 @@ export function AnamneseConfigPublicaPanel() {
                   Nenhum identificador configurado para gerar o QR Code.
                 </div>
               )}
-            </div>
-          </div>
-
-          {/* Seção 5 — Notificações */}
-          <div className="py-6 flex flex-col md:flex-row gap-6 md:items-start">
-            <div className="flex gap-4 md:w-1/3 shrink-0">
-              <div className="w-10 h-10 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
-                <Bell className="w-5 h-5 text-slate-400" />
-              </div>
-              <div>
-                <h3 className="font-bold text-[15px] text-slate-800">Notificações</h3>
-                <p className="text-[13px] text-slate-500 leading-snug mt-0.5">Alertas sobre atividade no portal</p>
-              </div>
-            </div>
-            <div className="flex-1 flex flex-col gap-5">
-              {/* Toggle Nova Ficha */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-[14px] font-bold text-slate-800">Notificar ao receber nova ficha</div>
-                  <div className="text-[13px] text-slate-500 mt-0.5">Alerta no painel quando um paciente enviar a anamnese</div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setConfig({ ...config, notificarNovaFicha: !config.notificarNovaFicha })}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                    config.notificarNovaFicha ? 'bg-[#00a88e]' : 'bg-slate-200'
-                  }`}
-                >
-                  <span
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                      config.notificarNovaFicha ? 'translate-x-5' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
-              
-              {/* Toggle Vencimento */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-[14px] font-bold text-slate-800">Lembrete de fichas a vencer</div>
-                  <div className="text-[13px] text-slate-500 mt-0.5">Aviso 7 dias antes do prazo de validade expirar</div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setConfig({ ...config, notificarVencimento: !config.notificarVencimento })}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                    config.notificarVencimento ? 'bg-[#00a88e]' : 'bg-slate-200'
-                  }`}
-                >
-                  <span
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                      config.notificarVencimento ? 'translate-x-5' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
             </div>
           </div>
 
