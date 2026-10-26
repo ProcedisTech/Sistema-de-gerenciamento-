@@ -124,4 +124,54 @@ describe('Regressão Zero — Unificação Atômica de Fotos em Atendimento Avul
     expect(atendimentosAvulsos[0].fotos).toHaveLength(1);
     expect(atendimentosAvulsos[0].fotos[0].id).toBe('foto-1-mapa-avaliacao');
   });
+
+  it('avaliação avulsa (com destino avulso e procedimentos sem planejamentoItemId) NUNCA é sequestrada para dentro de plano ativo existente', () => {
+    const planoAtivo = {
+      id: 'plano-ativo-existente-1',
+      statusCodigo: 'ATIVO',
+      itens: [
+        {
+          id: 'item-plano-1',
+          planejamentoItemId: 'item-plano-1',
+          nome: 'Toxina Botulínica',
+        },
+      ],
+    };
+
+    const fotoAvaliacaoAvulsa = {
+      id: 'foto-avulsa-sem-plano',
+      atendimentoId: 'atend-avulso-123',
+      tipoFotoCodigo: 'AVALIACAO',
+      legenda: '[avulso][avaliacao] Avaliação facial',
+      isAvulso: true,
+      mapaOverlay: {
+        tipoMapaCodigo: 'avaliacao',
+        procedimentos: [
+          {
+            nome: 'Toxina Botulínica',
+            catalogoProcedimentoSaudeId: 'cat-toxina-1',
+            planejamentoItemId: null, // <- forçado nulo no modo avulso!
+          },
+        ],
+        pontos: [{ posX: 50, posY: 50 }],
+      },
+    };
+
+    const { fotosAvulsas, fotosPorPlanoId, atendimentosAvulsos } = resolverFotosEPlanos(
+      [planoAtivo],
+      [fotoAvaliacaoAvulsa],
+      [],
+      'America/Sao_Paulo'
+    );
+
+    // Deve estar nas fotos avulsas
+    expect(fotosAvulsas.map((f) => f.id)).toContain('foto-avulsa-sem-plano');
+
+    // NUNCA deve ser sequestrada para o plano ativo
+    expect(fotosPorPlanoId['plano-ativo-existente-1'] || []).toHaveLength(0);
+
+    // Deve gerar o card de avaliação nos atendimentos avulsos
+    expect(atendimentosAvulsos).toHaveLength(1);
+    expect(atendimentosAvulsos[0].fotos.map((f) => f.id)).toContain('foto-avulsa-sem-plano');
+  });
 });

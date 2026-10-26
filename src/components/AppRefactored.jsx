@@ -1619,6 +1619,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
     mapaId,
     planejamentoId,
     planejamentoItemId,
+    fotoId,
+    isAvulso,
   }) => {
     if (destinoAvaliacao) {
       journeyState.setDestinoAvaliacao(destinoAvaliacao);
@@ -1629,12 +1631,14 @@ function AppRefactoredInner({ onCanalAvisos }) {
     const resolvedCleanUrl = cleanUrl || prevPh?.cleanUrl || prevPh?.url || newUrl || null;
     const resolvedMapaId = mapaId || prevPh?.mapaId || null;
     const resolvedPlanId =
-      planejamentoId ||
-      prevPh?.planejamentoId ||
-      journeyState.journeyPlanejamentoCtx?.id ||
-      journeyState.journeyPlanejamentoCtx?.planejamentoId ||
-      null;
-    const resolvedPlanItemId = planejamentoItemId || prevPh?.planejamentoItemId || null;
+      destinoAvaliacao === 'avulso'
+        ? null
+        : (planejamentoId ||
+           prevPh?.planejamentoId ||
+           journeyState.journeyPlanejamentoCtx?.id ||
+           journeyState.journeyPlanejamentoCtx?.planejamentoId ||
+           null);
+    const resolvedPlanItemId = destinoAvaliacao === 'avulso' ? null : (planejamentoItemId || prevPh?.planejamentoItemId || null);
 
     if (resolvedMapaId) {
       ultimoMapaAvaliacaoRef.current = {
@@ -1650,6 +1654,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
       blob: resolvedCleanBlob,
       cleanBlob: resolvedCleanBlob,
       cleanUrl: resolvedCleanUrl,
+      fotoId: fotoId || prevPh?.fotoId || prevPh?.meta?.fotoId || null,
+      isAvulso: Boolean(isAvulso ?? (destinoAvaliacao === 'avulso')),
+      destinoAvaliacao: destinoAvaliacao || prevPh?.destinoAvaliacao || null,
+      meta: { ...(prevPh?.meta || {}), ...(fotoId ? { fotoId } : {}) },
       pontos: pontos || prevPh?.pontos || [],
       mapaOverlay: {
         pontos: pontos || prevPh?.pontos || [],
@@ -4007,6 +4015,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                 procedimentoFeitoId: pid,
                 catalogoProcedimentoSaudeId: catalogoId,
                 snapshot,
+                tipoMapaCodigo: 'retorno',
                 fuso: fusoClinica,
               });
             } catch (mapErr) {

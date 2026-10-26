@@ -894,6 +894,7 @@ export function ConsultaRetornoFlow({
       {/* Fullscreen Mapeamento de Retoque Overlay */}
       {retornoFullscreenOpen ? (
         <MapeamentoFullscreenOverlay
+          scope="retorno"
           open={retornoFullscreenOpen}
           vistaAtual={retornoVistaAtual}
           foto={retornoFotoAtual}

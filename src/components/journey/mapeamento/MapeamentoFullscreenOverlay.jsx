@@ -37,7 +37,8 @@ import {
   getCorLivreParaProcedimento,
 } from '../../../constants/mapeamentoPaletaCores.js';
 import { AssistiveTouchToolbar } from './AssistiveTouchToolbar.jsx';
-import { mapasApi, planejamentosApi, catalogosApi } from '../../../services/api.js';
+import { mapasApi, planejamentosApi, catalogosApi, pacientesGaleriaApi } from '../../../services/api.js';
+import { convertToWebP } from '../../../utils/imageUtils.js';
 import { isRealUuid } from '../../../utils/planejamentoDraftUtils.js';
 import { garantirProcedimentosNoPlano } from '../../../utils/sincronizarProcedimentosPlanoAgenda.js';
 import { normalizeListaPlanos, enriquecerPlanosComCatalogo } from '../../../utils/planejamentoNormalize.js';
@@ -748,15 +749,44 @@ export function MapeamentoFullscreenOverlay({
         }
 
         let resolvedFotoId =
+          activePhoto?.serverId ||
+          activePhoto?.fotoGaleriaId ||
           activePhoto?.fotoId ||
           activePhoto?.id ||
           activePhoto?.meta?.fotoId ||
           null;
         if (!resolvedFotoId && typeof obterFotoId === 'function') {
-          resolvedFotoId = obterFotoId(activeIndex, activePhoto);
+          resolvedFotoId = obterFotoId(activePhoto);
         }
         if (resolvedFotoId && !isRealUuid(resolvedFotoId)) {
           resolvedFotoId = null;
+        }
+
+        // Se não há foto na galeria ainda (ex: modelo anatômico ou foto local) e há pontos, sobe a imagem limpa para a galeria:
+        if (!resolvedFotoId && internalPontos.length > 0 && isRealUuid(pacienteId) && isRealUuid(roleUserId)) {
+          try {
+            let sourceBlob = activePhoto?.cleanBlob || activePhoto?.blob || null;
+            const urlParaFetch = activePhoto?.cleanUrl || activePhoto?.url || resolvedDisplayUrl;
+            if (!sourceBlob && urlParaFetch) {
+              const resp = await fetch(urlParaFetch);
+              if (resp.ok) sourceBlob = await resp.blob();
+            }
+            if (sourceBlob) {
+              const webpFile = await convertToWebP(sourceBlob, 0.85, 1920);
+              const isAvulsoUpload = destino === 'avulso';
+              const uploadedDto = await pacientesGaleriaApi.upload(pacienteId, webpFile, {
+                roleUserId,
+                tipoFotoCodigo: scope === 'procedure' ? 'MAPA' : 'AVALIACAO',
+                legenda: isAvulsoUpload ? '[avulso][avaliacao] Avaliação facial' : '[avaliacao] Avaliação facial',
+                atendimentoId: isRealUuid(atendimentoId) ? atendimentoId : null,
+              });
+              if (uploadedDto?.id && isRealUuid(uploadedDto.id)) {
+                resolvedFotoId = String(uploadedDto.id);
+              }
+            }
+          } catch (errUp) {
+            console.warn('[MapeamentoFullscreenOverlay] Falha ao subir foto base para galeria:', errUp);
+          }
         }
 
         // DEFESA 5: Sincronização com o Plano Ativo apenas quando autorizado
@@ -784,7 +814,10 @@ export function MapeamentoFullscreenOverlay({
 
         const listaProcedimentosEnriquecida = listaProcedimentos.map((proc) => {
           const catId = String(proc.catalogoProcedimentoSaudeId || proc.catalogoId || proc.id || '').trim();
-          const resolvedPiId = proc.planejamentoItemId || itensCriadosPorCatalogo[catId] || null;
+          const resolvedPiId =
+            destino === 'plano'
+              ? (proc.planejamentoItemId || itensCriadosPorCatalogo[catId] || null)
+              : null;
           return {
             ...proc,
             catalogoProcedimentoSaudeId: isRealUuid(catId) ? catId : proc.catalogoProcedimentoSaudeId,
@@ -854,9 +887,11 @@ export function MapeamentoFullscreenOverlay({
             : null;
         const effectivePlanId = destino === 'plano' ? (planoContexto?.id || itensCriadosPorCatalogo?.planoId || null) : null;
 
+        const resolvedTipoMapaCodigo = scope === 'procedure' ? 'procedimento' : scope === 'retorno' ? 'retorno' : 'avaliacao';
+
         const mapaPayload = {
           pacienteId: pacienteId || null,
-          tipoMapaCodigo: scope === 'procedure' ? 'procedimento' : 'avaliacao',
+          tipoMapaCodigo: resolvedTipoMapaCodigo,
           planejamentoId: effectivePlanId,
           planejamentoItemId: effectivePlanItemId,
           ...(effectivePlanItemId ? { origemTipo: 'planejamento', origemId: effectivePlanItemId } : {}),
@@ -877,7 +912,7 @@ export function MapeamentoFullscreenOverlay({
         } else if (resolvedFotoId && typeof mapasApi.limparPorFotoGaleria === 'function') {
           try {
             await mapasApi.limparPorFotoGaleria(resolvedFotoId, {
-              tipoMapaCodigo: scope === 'procedure' ? 'procedimento' : 'avaliacao',
+              tipoMapaCodigo: resolvedTipoMapaCodigo,
               atendimentoId: isRealUuid(atendimentoId) ? atendimentoId : null,
             });
             savedMapa = null;
@@ -905,10 +940,11 @@ export function MapeamentoFullscreenOverlay({
             planejamentoItemId: effectivePlanItemId,
             destinoAvaliacao: destino,
             isAvulso: destino === 'avulso',
+            fotoId: resolvedFotoId,
             mapaOverlay: internalPontos.length > 0 ? {
               mapaId: savedMapa?.id || null,
-              tipoMapaCodigo: scope === 'procedure' ? 'procedimento' : 'avaliacao',
-              tipoMapaNome: scope === 'procedure' ? 'Procedimento' : 'Avaliação',
+              tipoMapaCodigo: resolvedTipoMapaCodigo,
+              tipoMapaNome: resolvedTipoMapaCodigo === 'procedimento' ? 'Procedimento' : resolvedTipoMapaCodigo === 'retorno' ? 'Retorno' : 'Avaliação',
               pontos: internalPontos,
               marcacoes: internalPontos,
               procedimentos: listaProcedimentosEnriquecida,
@@ -953,7 +989,11 @@ export function MapeamentoFullscreenOverlay({
   const handleIniciarSalvar = useCallback(
     (e) => {
       if (e && e.preventDefault) e.preventDefault();
-      if (isControlledMode || scope !== 'evaluation') {
+      if (isControlledMode) {
+        onClose?.();
+        return;
+      }
+      if (scope !== 'evaluation') {
         executarSalvar({ fecharApos: true });
         return;
       }
