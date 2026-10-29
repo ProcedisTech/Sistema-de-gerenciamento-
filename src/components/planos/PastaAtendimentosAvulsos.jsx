@@ -62,6 +62,7 @@ function AtendimentoAvulsoItemCard({
     const grupos = {
       antes: [],
       mapa: [],
+      mapa_retorno: [],
       depois: [],
       avaliacao: [],
       outro: [],
@@ -69,8 +70,14 @@ function AtendimentoAvulsoItemCard({
 
     fotos.forEach((f) => {
       const cat = String(f.categoria || '').toLowerCase().trim();
-      if (cat === 'antes') grupos.antes.push(f);
-      else if (cat === 'mapa') grupos.mapa.push(f);
+      const cod = String(f.tipoFotoCodigo || '').toUpperCase().trim();
+      const leg = String(f.legenda || '').toLowerCase();
+      const isRetornoOverlay = String(f.mapaOverlay?.tipoMapaCodigo || '').toLowerCase() === 'retorno';
+      const isRetornoMapa = isRetornoOverlay || leg.includes('mapa de retorno');
+
+      if (isRetornoMapa) grupos.mapa_retorno.push(f);
+      else if (cat === 'antes') grupos.antes.push(f);
+      else if (cat === 'mapa' || cod === 'MAPA') grupos.mapa.push(f);
       else if (cat === 'depois') grupos.depois.push(f);
       else if (cat === 'avaliacao') grupos.avaliacao.push(f);
       else grupos.outro.push(f);
@@ -79,6 +86,7 @@ function AtendimentoAvulsoItemCard({
     const ordem = [
       { key: 'antes', label: 'Antes' },
       { key: 'mapa', label: 'Mapa de Aplicação' },
+      { key: 'mapa_retorno', label: 'Mapa de Retorno' },
       { key: 'depois', label: 'Depois' },
       { key: 'avaliacao', label: 'Avaliação' },
       { key: 'outro', label: 'Outros Registros' },
@@ -239,7 +247,11 @@ function AtendimentoAvulsoItemCard({
                     {/* Linha Horizontal de Miniaturas */}
                     <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
                       {catFotos.map((foto) => {
-                        const isMapa = Boolean(foto?.mapaOverlay?.marcacoes?.length) || foto?.categoria === 'mapa';
+                        const isMapa =
+                          Boolean(foto?.mapaOverlay?.marcacoes?.length) ||
+                          foto?.categoria === 'mapa' ||
+                          String(foto?.tipoFotoCodigo || '').toUpperCase() === 'MAPA' ||
+                          String(foto?.mapaOverlay?.tipoMapaCodigo || '').toLowerCase() === 'retorno';
                         return (
                           <div
                             key={foto.id || foto.fotoId || foto.url}

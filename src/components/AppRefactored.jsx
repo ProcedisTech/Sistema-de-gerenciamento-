@@ -525,6 +525,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
    * Nasce só depois do `finalizar`; o próximo "Concluir Retorno" na mesma consulta só encerra. Limpa no resetJourney.
    */
   const retornoFinalizadoRef = useRef(null);
+  /** Guarda {dataIso, itemId, agendaId} do retorno pré-criado antes do encerramento (idempotência). */
+  const retornoAntecipadoRef = useRef(null);
   const [isSalvandoRetorno, setIsSalvandoRetorno] = React.useState(false);
   const [isSalvandoProcedimento] = React.useState(false);
   /** Rastreia ultimo pacienteId para resetar anamnese ao trocar paciente. undefined = primeiro mount. */
@@ -1539,6 +1541,29 @@ function AppRefactoredInner({ onCanalAvisos }) {
     roleUserId: roleUserId || null,
     avisarErro: avisarErroFoto,
   });
+  const itemDoRetornoAtivo = React.useMemo(() => {
+    const itens = consultaAtualServidor?.itens || [];
+    return (
+      itens.find((i) => String(i.agendaTipoProcedimentoCodigo || '').toLowerCase() === 'retorno')?.id ||
+      mapearItensDaSessao(journeyState.procedimentosSessao, itens)[0] ||
+      itens[0]?.id ||
+      null
+    );
+  }, [consultaAtualServidor?.itens, journeyState.procedimentosSessao]);
+  const listaPidsRetorno = React.useMemo(() => {
+    return (journeyState.procedimentosSessao || [])
+      .flatMap((p) => [p.id, p.procedimentoFeitoId, p.procedimentoFeitoOrigemId])
+      .filter(Boolean)
+      .map(String);
+  }, [journeyState.procedimentosSessao]);
+  const { aguardarMapa: aguardarMapaRetorno } = useMapaRascunhoAutosave({
+    consulta: consultaDasFotos,
+    itemId: itemDoRetornoAtivo,
+    mapaState: mapaRetornoState,
+    roleUserId: roleUserId || null,
+    avisarErro: avisarErroFoto,
+    invalidCatIds: listaPidsRetorno,
+  });
   const removerFotoAvaliacao = React.useCallback(
     (idx) => {
       fotoRemovida(cameraState.evaluationCapturedPhotos[idx]);
@@ -1678,10 +1703,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
     journeyState.setPaths([]);
     if (Array.isArray(procedimentosMapeados) && procedimentosMapeados.length > 0) {
       const procsValidos = procedimentosMapeados
-        .filter((p) => isRealUuid(p.catalogoProcedimentoSaudeId || p.id))
+        .filter((p) => isRealUuid(p.catalogoProcedimentoSaudeId || p.catalogoId || p.nomeProcedimentoCatalogoId))
         .map((p) => ({
           ...p,
-          catalogoProcedimentoSaudeId: p.catalogoProcedimentoSaudeId || p.id,
+          catalogoProcedimentoSaudeId: p.catalogoProcedimentoSaudeId || p.catalogoId || p.nomeProcedimentoCatalogoId || null,
         }));
       journeyState.setProcedimentosAvaliados(procsValidos);
 
@@ -1689,7 +1714,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
         const itemMap = {};
         const itensEnriquecidos = [];
         procedimentosMapeados.forEach((p) => {
-          const cid = String(p.catalogoProcedimentoSaudeId || p.id || '').trim();
+          const cid = String(p.catalogoProcedimentoSaudeId || p.catalogoId || p.nomeProcedimentoCatalogoId || '').trim();
           const piId = p.planejamentoItemId ? String(p.planejamentoItemId).trim() : null;
           if (cid && piId) {
             itemMap[cid] = piId;
@@ -1742,8 +1767,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
     const procsFoto = activePhoto?.procedimentosMapeados || activePhoto?.mapaOverlay?.procedimentos;
     if (Array.isArray(procsFoto) && procsFoto.length > 0) {
       return procsFoto.map((p) => ({
-        id: p.catalogoProcedimentoSaudeId || p.id,
-        catalogoProcedimentoSaudeId: p.catalogoProcedimentoSaudeId || p.id,
+        id: p.id || p.catalogoProcedimentoSaudeId || p.catalogoId,
+        catalogoProcedimentoSaudeId: p.catalogoProcedimentoSaudeId || p.catalogoId || null,
         nome: p.nomeProcedimento || p.catalogoNome || p.nome || 'Procedimento',
         corHex: p.corHex || p.cor || null,
         unidadeMedida: p.unidadeMedida || 'un',
@@ -1762,8 +1787,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
         })
         .map((p) => ({
           ...p,
-          id: p.catalogoProcedimentoSaudeId || p.id,
-          catalogoProcedimentoSaudeId: p.catalogoProcedimentoSaudeId || p.id,
+          id: p.id || p.catalogoProcedimentoSaudeId || p.catalogoId,
+          catalogoProcedimentoSaudeId: p.catalogoProcedimentoSaudeId || p.catalogoId || null,
           nome: p.procedimentoNome || p.nomeProcedimento || p.nome || p.catalogoNome || 'Procedimento',
           corHex: p.corHex || p.cor || null,
           unidadeMedida: p.unidadeMedida || 'un',
@@ -2085,9 +2110,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
 
   React.useEffect(() => {
     if (activeView !== 'consulta' || !journeyState.isAgendaRetorno) return;
-    const blocked = ['anamnese', 'avaliacao', 'planejamento', 'procedimento'];
-    if (blocked.includes(consultaModule)) {
-      setConsultaModule('hub');
+    if (consultaModule === 'procedimento') {
+      setConsultaModule('retorno');
     }
   }, [activeView, consultaModule, journeyState.isAgendaRetorno]);
 
@@ -2390,8 +2414,13 @@ function AppRefactoredInner({ onCanalAvisos }) {
         agoraIso: getGuaranteedIso(),
       }));
       journeyState.setTipoAtendimento(wantsRetorno ? 'retorno' : 'consulta');
+      const origemIdResolvidoPre =
+        options.procedimentoFeitoOrigemId ??
+        options.consultaDoServidor?.procedimentoFeitoOrigemId ??
+        options.lote?.[0]?.procedimentoFeitoOrigemId ??
+        null;
       journeyState.setProcedimentoFeitoOrigemId(
-        options.procedimentoFeitoOrigemId != null ? String(options.procedimentoFeitoOrigemId) : null,
+        origemIdResolvidoPre != null ? String(origemIdResolvidoPre) : null,
       );
       hidratarJourneyPlanejamentoCtx(options, { merge: false });
       if (wantsRetorno) {
@@ -2417,8 +2446,13 @@ function AppRefactoredInner({ onCanalAvisos }) {
           agoraIso: getGuaranteedIso(),
         }));
         journeyState.setTipoAtendimento('retorno');
+        const origemIdResolvidoRet =
+          options.procedimentoFeitoOrigemId ??
+          options.consultaDoServidor?.procedimentoFeitoOrigemId ??
+          options.lote?.[0]?.procedimentoFeitoOrigemId ??
+          null;
         journeyState.setProcedimentoFeitoOrigemId(
-          options.procedimentoFeitoOrigemId != null ? String(options.procedimentoFeitoOrigemId) : null,
+          origemIdResolvidoRet != null ? String(origemIdResolvidoRet) : null,
         );
         journeyState.setRetornoAvaliacao({ satisfacao: null, simetria: '', dor: null });
         journeyState.setHouveRetoque(false);
@@ -2497,25 +2531,52 @@ function AppRefactoredInner({ onCanalAvisos }) {
   }, [pacienteAtual?.id]);
 
   const handleRetornoAvulsoPaiEscolhido = React.useCallback(
-    (procedimentoFeitoOrigemId) => {
+    (procedimentosOrigem) => {
       if (!pacienteAtual?.id || !roleUserId) return;
       setRetornoAvulsoPickerOpen(false);
-      const origemId = String(procedimentoFeitoOrigemId || '').trim();
-      if (!origemId) return;
+
+      const items = Array.isArray(procedimentosOrigem)
+        ? procedimentosOrigem
+        : [procedimentosOrigem].filter(Boolean);
+      if (!items.length) return;
+
+      const primeiro = items[0];
+      const primeiroId = String(primeiro?.id || primeiro || '').trim();
+      if (!primeiroId) return;
+
+      const loteValido = items.map((it, idx) => {
+        const itId = String(it?.id || it || '').trim();
+        const nome = it?.nome || it?.catalogoNome || `Retorno ${idx + 1}`;
+        const catId = it?.catalogoProcedimentoSaudeId || it?.catalogoId || null;
+        const planItemId = it?.planejamentoItemId ? String(it.planejamentoItemId).trim() : null;
+        return {
+          id: itId,
+          procedimentoFeitoOrigemId: itId,
+          catalogoProcedimentoSaudeId: catId,
+          catalogoId: catId,
+          planejamentoItemId: planItemId,
+          nome,
+          tipoProcedimentoCodigo: 'retorno',
+        };
+      });
+
+      const loteDaAgenda = criarLoteProcedimentosSessao(loteValido);
 
       handleStartAttendance(pacienteAtual, {
         agendaId: null,
         isAgendaRetorno: true,
         tipoProcedimentoCodigo: 'retorno',
-        procedimentoFeitoOrigemId: origemId,
+        procedimentoFeitoOrigemId: primeiroId,
         fromAgendaSlot: false,
-        initialModule: 'hub',
+        initialModule: 'retorno',
+        loteDaAgenda,
       });
     },
     [handleStartAttendance, pacienteAtual, roleUserId],
   );
 
   const onSairConsulta = React.useCallback(() => {
+    retornoAntecipadoRef.current = null;
     const sCpf = String(selectedPatientCpf || pacienteAtual?.cpf || '').trim();
     setConsultaModule(null);
     setActiveView('pacientes');
@@ -3258,7 +3319,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
       }
       if (catId) {
         const todosCats = (journeyState.procedimentosSessao || [])
-          .map((p) => p.nomeProcedimentoCatalogoId || p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
+          .map((p) => p.nomeProcedimentoCatalogoId || p.catalogoProcedimentoSaudeId || p.catalogoId)
           .filter(Boolean);
         if (catId && !todosCats.includes(catId)) todosCats.push(catId);
         const ok = await validarTermosDoCatalogo(todosCats.length > 0 ? todosCats : catId, nomeP);
@@ -3548,6 +3609,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
     journeyState.setStep5Errors({});
     anamnesePreenchimentoIdRef.current = null;
     retornoFinalizadoRef.current = null;
+    retornoAntecipadoRef.current = null;
     clearTermosJornadaState(journeyState);
     limparResolucoesTermos();
     setLoteProcedimentosFeitosIds([]);
@@ -3808,9 +3870,27 @@ function AppRefactoredInner({ onCanalAvisos }) {
   );
 
   const iniciarProcedimentoRetorno = React.useCallback(
-    async (paciente, { isRetoque }) => {
-      const existing = loteProcedimentosFeitosIds[0];
+    async (paciente, { isRetoque, procItem = null, procIndex = 0 } = {}) => {
+      const existing = loteProcedimentosFeitosIds[procIndex];
       if (existing) return String(existing);
+
+      const currentProc =
+        procItem ||
+        journeyState.procedimentosSessao?.[procIndex] ||
+        journeyState.procedimentosSessao?.[journeyState.activeProcedureIndex || 0];
+      const catalogoId =
+        currentProc?.catalogoProcedimentoSaudeId ||
+        currentProc?.catalogoId ||
+        journeyState.nomeProcedimentoCatalogoId ||
+        null;
+      const rawPlanejamentoItemId =
+        currentProc?.planejamentoItemId ||
+        (catalogoId ? resolvePlanejamentoItemId(catalogoId) : null) ||
+        journeyState.planejamentoItemId ||
+        null;
+      const cleanPlanejamentoItemId = rawPlanejamentoItemId
+        ? String(rawPlanejamentoItemId).replace(/_retorno$/, '').trim()
+        : null;
 
       let currentAgendaId = journeyState.agendaId;
 
@@ -3822,6 +3902,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
           roleUserId,
           novosIdsValidos: [],
           attendanceStartTimeIso: startTimeIso,
+          planejamentoItemId: cleanPlanejamentoItemId,
           fuso: fusoClinica,
         }).catch((err) => {
           console.warn('[iniciarProcedimentoRetorno] Erro ao registrar agenda avulsa:', err);
@@ -3832,19 +3913,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
           journeyState.setAgendaId(currentAgendaId);
         }
       }
-
-      const currentProc = journeyState.procedimentosSessao?.[journeyState.activeProcedureIndex || 0];
-      const catalogoId =
-        journeyState.nomeProcedimentoCatalogoId ||
-        currentProc?.catalogoProcedimentoSaudeId ||
-        null;
-      const rawPlanejamentoItemId =
-        currentProc?.planejamentoItemId ||
-        (catalogoId ? resolvePlanejamentoItemId(catalogoId) : null) ||
-        null;
-      const cleanPlanejamentoItemId = rawPlanejamentoItemId
-        ? String(rawPlanejamentoItemId).replace(/_retorno$/, '').trim()
-        : null;
 
       return getOrCreateProcedimentoFeitoId(paciente, {
         allowCreate: true,
@@ -3895,16 +3963,19 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     ? 'ANTES'
                     : categoria === 'pos_imediato'
                       ? 'POS_IMEDIATO'
-                      : categoria === 'mapa' || categoria === GALERIA_CATEGORIA.MAPA
-                        ? 'MAPA'
-                        : 'POS_IMEDIATO';
+                      : categoria === 'depois' || categoria === GALERIA_CATEGORIA.DEPOIS
+                        ? 'DEPOIS'
+                        : categoria === 'mapa' || categoria === GALERIA_CATEGORIA.MAPA
+                          ? 'MAPA'
+                          : 'POS_IMEDIATO';
+                const legendaTexto =
+                  categoria === 'depois' || categoria === GALERIA_CATEGORIA.DEPOIS
+                    ? 'Resultado do retorno'
+                    : journeyState.nomeProcedimento.trim() || 'Foto do procedimento';
                 const uploadOpts = {
                   roleUserId: ridUpload,
                   procedimentoFeitoId: pid,
-                  legenda: formatGaleriaLegendaForUpload(
-                    categoria,
-                    journeyState.nomeProcedimento.trim() || 'Foto do procedimento'
-                  ),
+                  legenda: formatGaleriaLegendaForUpload(categoria, legendaTexto),
                   dataReferencia: dataRefSessao,
                 };
                 if (targetAgendaId) uploadOpts.agendaId = targetAgendaId;
@@ -3979,73 +4050,109 @@ function AppRefactoredInner({ onCanalAvisos }) {
           toast.error(e.message);
           return;
         }
-        const pid = await iniciarProcedimentoRetorno(paciente, {
-          isRetoque: journeyState.houveRetoque,
-        });
-        if (!pid) {
+
+        const procs = (Array.isArray(journeyState.procedimentosSessao) && journeyState.procedimentosSessao.length > 0)
+          ? journeyState.procedimentosSessao
+          : [null];
+
+        const listaPids = [];
+        for (let i = 0; i < procs.length; i++) {
+          const pItem = procs[i];
+          const pid = await iniciarProcedimentoRetorno(paciente, {
+            isRetoque: journeyState.houveRetoque,
+            procItem: pItem,
+            procIndex: i,
+          });
+          if (pid) listaPids.push(pid);
+        }
+
+        if (!listaPids.length) {
           toast.error('Não foi possível iniciar o retorno.');
           return;
         }
 
-        if (journeyState.houveRetoque) {
-          const snapshot = mapaRetornoState.getSnapshotForPersist();
-          const hasMarkings = Object.values(snapshot.pontosPorVista || {}).some(
-            (lista) => Array.isArray(lista) && lista.length > 0,
-          );
-          if (hasMarkings) {
-            let catalogoId = null;
-            const origemId = journeyState.procedimentoFeitoOrigemId;
-            if (origemId) {
-              try {
-                const procListRaw = await procedimentosApi.byPaciente(paciente.id);
-                const procList = Array.isArray(procListRaw)
-                  ? procListRaw
-                  : procListRaw?.content ?? [];
-                const pai = procList.find((p) => String(p.id) === String(origemId));
-                catalogoId = pai?.catalogoProcedimentoSaudeId ?? null;
-              } catch (e) {
-                console.warn('Falha ao resolver catálogo do procedimento pai:', e);
-              }
-            }
-            let resultado;
+        const snapshot = mapaRetornoState.getSnapshotForPersist();
+        const hasMarkings = Object.values(snapshot.pontosPorVista || {}).some(
+          (lista) => Array.isArray(lista) && lista.length > 0,
+        );
+        if (hasMarkings) {
+          let catalogoId = null;
+          const origemId = journeyState.procedimentoFeitoOrigemId;
+          if (origemId) {
             try {
-              resultado = await persistirMapaAplicacao({
-                pacienteId: paciente.id,
-                roleUserId,
-                procedimentoFeitoId: pid,
-                catalogoProcedimentoSaudeId: catalogoId,
-                snapshot,
-                tipoMapaCodigo: 'retorno',
-                fuso: fusoClinica,
-              });
-            } catch (mapErr) {
-              console.error('Erro ao salvar mapa de retoque:', mapErr);
-              toast.error('Não foi possível salvar o mapa de retoque. Tente concluir novamente.');
-              return;
+              const procListRaw = await procedimentosApi.byPaciente(paciente.id);
+              const procList = Array.isArray(procListRaw)
+                ? procListRaw
+                : procListRaw?.content ?? [];
+              const pai = procList.find((p) => String(p.id) === String(origemId));
+              catalogoId = pai?.catalogoProcedimentoSaudeId ?? null;
+            } catch (e) {
+              console.warn('Falha ao resolver catálogo do procedimento pai:', e);
             }
-            if (!resultado?.ok) {
-              toast.error('Não foi possível salvar o mapa de retoque. Tente concluir novamente.');
-              return;
-            }
-            mapaRetornoState.clearAllDirty();
           }
+          if (!catalogoId) {
+            catalogoId =
+              journeyState.nomeProcedimentoCatalogoId ??
+              journeyState.procedimentosSessao?.[0]?.catalogoProcedimentoSaudeId ??
+              null;
+          }
+
+          const rawItem =
+            journeyState.procedimentosSessao?.[0]?.planejamentoItemId ||
+            (journeyState.nomeProcedimentoCatalogoId ? resolvePlanejamentoItemId(journeyState.nomeProcedimentoCatalogoId) : null) ||
+            journeyState.planejamentoItemId ||
+            null;
+          const cleanPlanejamentoItemId = rawItem
+            ? String(rawItem).replace(/_retorno$/, '').trim()
+            : null;
+
+          let resultado;
+          try {
+            resultado = await persistirMapaAplicacao({
+              pacienteId: paciente.id,
+              roleUserId,
+              procedimentoFeitoId: listaPids[0],
+              procedimentoFeitoIds: listaPids,
+              catalogoProcedimentoSaudeId: catalogoId,
+              planejamentoItemId: cleanPlanejamentoItemId,
+              procedimentosSessao: journeyState.procedimentosSessao,
+              snapshot,
+              tipoMapaCodigo: 'retorno',
+              fuso: fusoClinica,
+            });
+          } catch (mapErr) {
+            console.error('Erro ao salvar mapa de retorno:', mapErr);
+            toast.error('Não foi possível salvar o mapa de retorno. Tente concluir novamente.');
+            return;
+          }
+          if (!resultado?.ok) {
+            toast.error('Não foi possível salvar o mapa de retorno. Tente concluir novamente.');
+            return;
+          }
+          mapaRetornoState.clearAllDirty();
         }
         journeyState.setObservacoesExecucao(
           formatRetornoAvaliacaoTexto(journeyState.retornoAvaliacao),
         );
         await uploadEvaluationCapturedPhotos({
           paciente,
-          procIdOpt: pid,
+          procIdOpt: listaPids[0],
           dataRefSessao: hojeDaClinica(fusoClinica),
           tipoFotoCodigo: 'DEPOIS',
         });
         await uploadProcedureCapturedPhotos(
           paciente,
-          [pid],
+          listaPids,
           hojeDaClinica(fusoClinica),
         );
-        dtoFinalizar = await procedimentosApi.finalizar(pid);
-        retornoFinalizadoRef.current = { atendimentoId: atendimentoAcompanhadoId, pid, dtoFinalizar };
+
+        const dtosFinalizar = [];
+        for (const p of listaPids) {
+          const dto = await procedimentosApi.finalizar(p);
+          dtosFinalizar.push(dto);
+        }
+        dtoFinalizar = dtosFinalizar[0];
+        retornoFinalizadoRef.current = { atendimentoId: atendimentoAcompanhadoId, pids: listaPids, dtosFinalizar, dtoFinalizar };
       }
       if (consultaEncerraNoServidor) {
         // Y13: o retorno já foi gravado como hoje; a consulta só fecha. A falha aqui não desfaz o retorno.
@@ -4061,7 +4168,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
           return;
         }
       }
-      if (loteConcluiuPlano([dtoFinalizar])) {
+      const dtosParaChecar = Array.isArray(retornoFinalizadoRef.current?.dtosFinalizar)
+        ? retornoFinalizadoRef.current.dtosFinalizar
+        : [dtoFinalizar];
+      if (loteConcluiuPlano(dtosParaChecar)) {
         const escolha = await askPlanoConcluidoClinica(paciente);
         if (escolha === 'aceitar') {
           setConsultaModule(null);
@@ -4276,6 +4386,41 @@ function AppRefactoredInner({ onCanalAvisos }) {
     async ({ pularGateTermos }) => {
       const sCpf = String(selectedPatientCpf || pacienteAtual?.cpf || '').trim();
       const paciente = resolvePacienteAtendimento();
+
+      const { validIso: returnIsoPre } = evaluateProximoRetornoStep5(
+        journeyProcedureDateIso,
+        journeyState.proximoRetornoDisplay,
+        hojeDaClinica(fusoClinica)
+      );
+
+      const rawItem =
+        journeyState.procedimentosSessao?.[0]?.planejamentoItemId ||
+        (journeyState.nomeProcedimentoCatalogoId ? resolvePlanejamentoItemId(journeyState.nomeProcedimentoCatalogoId) : null) ||
+        journeyState.planejamentoItemId ||
+        null;
+      const itemPlanoId = rawItem ? String(rawItem).replace(/_retorno$/, '').trim() : null;
+
+      // RAMO COM PLANO: cria ANTES de encerrar (B-09). Falha => aborta, nada foi gravado ainda.
+      if (returnIsoPre && paciente && roleUserId && itemPlanoId) {
+        const ja = retornoAntecipadoRef.current;
+        if (!(ja && ja.dataIso === returnIsoPre && ja.itemId === itemPlanoId)) {
+          const criado = await registrarRetornoFuturo({
+            paciente,
+            roleUserId,
+            dataRetornoIso: returnIsoPre,
+            procedimentoOrigemId: null,
+            planejamentoItemId: itemPlanoId,
+          });
+          if (!criado?.id) {
+            toast.error(
+              'Não foi possível agendar o retorno na data escolhida. Ajuste a data ou resolva o conflito na agenda antes de encerrar.'
+            );
+            return;
+          }
+          retornoAntecipadoRef.current = { dataIso: returnIsoPre, itemId: itemPlanoId, agendaId: criado.id };
+        }
+      }
+
       let resultado;
       try {
         resultado = await encerrarConsultaNoServidor({
@@ -4324,22 +4469,21 @@ function AppRefactoredInner({ onCanalAvisos }) {
         await perguntarPadraoECatalogo({ nomesUnicos, orientacoesPorItem, jaVinculadoAoCatalogo });
       }
 
-      const { validIso: returnIsoPre } = evaluateProximoRetornoStep5(
-        journeyProcedureDateIso,
-        journeyState.proximoRetornoDisplay,
-        hojeDaClinica(fusoClinica)
-      );
-
-      if (returnIsoPre && paciente && roleUserId) {
-        await registrarRetornoFuturo({
+      // RAMO SEM PLANO: depois do encerrar, com a origem real do DTO (campo certo: procedimentoFeitoId)
+      if (returnIsoPre && paciente && roleUserId && !itemPlanoId) {
+        const criado = await registrarRetornoFuturo({
           paciente,
           roleUserId,
           dataRetornoIso: returnIsoPre,
-          procedimentoOrigemId: procedimentos[0]?.id || null,
-          planejamentoItemId: procedimentos[0]?.planejamentoItemId || null,
+          procedimentoOrigemId: procedimentos[0]?.procedimentoFeitoId || null,
+          planejamentoItemId: null,
         }).catch((err) => {
           console.warn('[encerrarAtendimento] Erro ao agendar retorno futuro:', err);
+          return null;
         });
+        if (!criado?.id) {
+          toast.warning('Consulta encerrada, mas o retorno não pôde ser agendado. Agende-o pela agenda.');
+        }
       }
 
       setAttendanceStartTime(null);
@@ -4409,7 +4553,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
         toast.error('Assine os termos obrigatórios antes de finalizar o procedimento.');
         return;
       }
-      await Promise.all([aguardarFotosPendentes(), aguardarMapaRascunho()]);
+      await Promise.all([aguardarFotosPendentes(), aguardarMapaRascunho(), aguardarMapaRetorno()]);
 
       await encerrarPeloServidor({ pularGateTermos });
     } catch (error) {
@@ -4430,6 +4574,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
   }, [
     aguardarFotosPendentes,
     aguardarMapaRascunho,
+    aguardarMapaRetorno,
     consultaEncerraNoServidor,
     encerrarPeloServidor,
     journeyState.nomeProcedimento,
@@ -4470,7 +4615,11 @@ function AppRefactoredInner({ onCanalAvisos }) {
 
       if (decision === 'finalizar') {
         try {
-          await encerrarAtendimento({ pularGateTermos: true });
+          if (consultaModule === 'retorno') {
+            await handleConcluirRetorno();
+          } else {
+            await encerrarAtendimento({ pularGateTermos: true });
+          }
         } catch (err) {
           erroJaAvisado = true;
           throw err;
@@ -4478,7 +4627,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
       } else {
         // "Apenas Sair": espera as fotos, o mapa e a fila; a consulta continua aberta no servidor (sem rota de
         // consulta). Não cria procedimento nem mexe em agenda.
-        const [fotosNaoEnviadas] = await Promise.all([aguardarFotosPendentes(), aguardarMapaRascunho()]);
+        const [fotosNaoEnviadas] = await Promise.all([aguardarFotosPendentes(), aguardarMapaRascunho(), aguardarMapaRetorno()]);
         const { esvaziou: filaEsvaziou, tiposPendentes } = await guardarConsultaAntesDeSair();
         toast.success(textoDoApenasSair({ filaEsvaziou, tiposPendentes, fotosNaoEnviadas }));
         setConsultaModule(null);
@@ -4500,12 +4649,17 @@ function AppRefactoredInner({ onCanalAvisos }) {
   }, [
     autoSaveAnamneseSilently,
     consultaEncerraNoServidor,
+    handleConcluirRetorno,
+    journeyState.isAgendaRetorno,
+    journeyState.tipoProcedimentoCodigo,
     journeyState.observacoesExecucao,
     onSairConsulta,
     encerrarAtendimento,
     guardarConsultaAntesDeSair,
     aguardarFotosPendentes,
     aguardarMapaRascunho,
+    aguardarMapaRetorno,
+    consultaModule,
     toast,
   ]);
 
@@ -5292,6 +5446,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     }
                     catalogoId={journeyState.nomeProcedimentoCatalogoId}
                     nomeProcedimento={journeyState.nomeProcedimento}
+                    procedimentosSessao={journeyState.procedimentosSessao}
+                    setProcedimentosSessao={journeyState.setProcedimentosSessao}
+                    activeProcedureIndex={journeyState.activeProcedureIndex}
+                    setActiveProcedureIndex={journeyState.setActiveProcedureIndex}
                     onOrigemResolved={(origemId) => journeyState.setProcedimentoFeitoOrigemId(origemId)}
                     mapaRetornoState={mapaRetornoState}
                     retornoAvaliacao={journeyState.retornoAvaliacao}
@@ -5316,7 +5474,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     onPrepareMapaCapture={handlePrepareMapaRetornoCapture}
                   />
                 ) : null}
-                {consultaModule === 'anamnese' && !journeyState.isAgendaRetorno ? (
+                {consultaModule === 'anamnese' ? (
                   <>
                     {!clinicaInfo?.anamnesePadraoId ? (
                       <div className="mb-4 rounded-xl border border-[#fde68a] bg-[#fffbeb] px-4 py-3 text-[13px] font-medium text-[#92400e]">
@@ -5358,7 +5516,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     />
                   </>
                 ) : null}
-                {consultaModule === 'avaliacao' && !journeyState.isAgendaRetorno ? (
+                {consultaModule === 'avaliacao' ? (
                   <ConsultaAvaliacaoFlow
                     queixa={journeyState.queixa}
                     setQueixa={journeyState.setQueixa}
@@ -5377,7 +5535,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     onConcluirAvaliacao={handleConcluirAvaliacao}
                   />
                 ) : null}
-                {consultaModule === 'planejamento' && !journeyState.isAgendaRetorno ? (
+                {consultaModule === 'planejamento' ? (
                   <PlanosTab
                     ref={planosTabRef}
                     variant="consulta"
@@ -5558,7 +5716,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     toast={toast}
                   />
                 ) : null}
-                {consultaModule !== 'hub' ? (
+                {consultaModule !== 'hub' && consultaModule !== 'retorno' ? (
                   <ConsultaEncerrarFooter onEncerrarConsulta={requestEncerrarConsulta} isFinishing={isFinishing} />
                 ) : null}
               </div>
@@ -5997,7 +6155,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
       <ProcedureCameraWidget
         visible={
           (isConsultaView &&
-            ['avaliacao', 'procedimento', 'termos'].includes(consultaModule) &&
+            ['avaliacao', 'procedimento', 'termos', 'retorno'].includes(consultaModule) &&
             !(consultaModule === 'procedimento' && execucaoBloqueadaPorTermos)) ||
           (activeView === 'jornada' &&
             currentStep >= 2 &&

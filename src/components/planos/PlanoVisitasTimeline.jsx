@@ -66,7 +66,7 @@ function PlanoVisitaGaleria({
       const fotosDoItem = fotosPorPlanejamentoItemId[lookupKey] || [];
       fotosDoItem.forEach((f) => {
         const fData = String(f.dataISO || f.dataReferencia || '').slice(0, 10);
-        if (fData && fData !== visita.data) return;
+        if (fData && fData !== visita.data && !isVisitaRetorno && !isRetornoItem) return;
         const key = String(f.id || f.fotoId || f.url);
         if (!map.has(key)) map.set(key, f);
       });
@@ -107,6 +107,7 @@ function PlanoVisitaGaleria({
     const grupos = {
       antes: [],
       mapa: [],
+      mapa_retorno: [],
       depois: [],
       avaliacao: [],
       outro: [],
@@ -115,9 +116,14 @@ function PlanoVisitaGaleria({
     fotos.forEach((f) => {
       const cat = String(f.categoria || '').toLowerCase().trim();
       const cod = String(f.tipoFotoCodigo || '').toUpperCase().trim();
+      const leg = String(f.legenda || '').toLowerCase();
+      const isRetornoOverlay = String(f.mapaOverlay?.tipoMapaCodigo || '').toLowerCase() === 'retorno';
+      const isRetornoMapa = isRetornoOverlay || leg.includes('mapa de retorno');
       const isAv = cat === 'avaliacao' || cod === 'AVALIACAO' || Boolean(f.isAvaliacao);
-      if (cat === 'antes') grupos.antes.push(f);
-      else if (cat === 'mapa') grupos.mapa.push(f);
+
+      if (isRetornoMapa) grupos.mapa_retorno.push(f);
+      else if (cat === 'antes') grupos.antes.push(f);
+      else if (cat === 'mapa' || cod === 'MAPA') grupos.mapa.push(f);
       else if (cat === 'depois') grupos.depois.push(f);
       else if (isAv) grupos.avaliacao.push(f);
       else grupos.outro.push(f);
@@ -139,6 +145,7 @@ function PlanoVisitaGaleria({
     const ordem = [
       { key: 'antes', label: 'Antes' },
       { key: 'mapa', label: 'Mapa de Aplicação' },
+      { key: 'mapa_retorno', label: 'Mapa de Retorno' },
       { key: 'depois', label: 'Depois' },
       { key: 'avaliacao', label: 'Avaliação' },
       { key: 'outro', label: 'Outros Registros' },
@@ -342,7 +349,17 @@ export function PlanoVisitasTimeline({
 
       // VÍNCULO DE RETORNO DO PLANO (PADRÃO A: VISITA DEDICADA)
       const sessaoRetorno = item.sessaoRetornoAtiva || item.sessaoRetornoRealizada;
-      const retornoDataIso = sessaoRetorno?.dataAgendamento;
+      const basePlanejamentoItemId = String(item.planejamentoItemId || item.id || '').replace(/_retorno$/, '').trim();
+      let retornoDataIso = sessaoRetorno?.dataAgendamento;
+
+      // Se retornoDataIso for vazio mas houver fotos em fotosPorPlanejamentoItemId[`${basePlanejamentoItemId}_retorno`], sintetiza a visita usando a data da primeira foto
+      if (!retornoDataIso) {
+        const fotosRetorno = fotosPorPlanejamentoItemId[`${basePlanejamentoItemId}_retorno`];
+        if (Array.isArray(fotosRetorno) && fotosRetorno.length > 0) {
+          retornoDataIso = String(fotosRetorno[0].dataISO || fotosRetorno[0].dataReferencia || '').slice(0, 10);
+        }
+      }
+
       if (retornoDataIso) {
         const retornoKey = String(retornoDataIso).slice(0, 10);
         const isRetornoRealizado = Boolean(item.sessaoRetornoRealizada) ||
@@ -446,7 +463,7 @@ export function PlanoVisitasTimeline({
 
     const visitas = Array.from(gruposPorData.values()).sort((a, b) => a.data.localeCompare(b.data));
     return { poolSemData: semData, visitasAgrupadas: visitas };
-  }, [itens, fotosDoPlano, plano, fuso, hojeIso]);
+  }, [itens, fotosDoPlano, fotosPorPlanejamentoItemId, plano, fuso, hojeIso]);
 
   // Tempo total e valor do pool sem data
   const duracaoSemData = useMemo(() => {

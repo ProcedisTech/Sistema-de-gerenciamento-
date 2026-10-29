@@ -137,6 +137,7 @@ export function MapeamentoFullscreenOverlay({
   onSelectCapturedPhoto,
   procedimentoArmado,
   onArmar,
+  onAdicionarProcedimento,
   procedimentosUsados = [],
   procedimentosIniciais = [],
   planoContexto,
@@ -515,6 +516,7 @@ export function MapeamentoFullscreenOverlay({
     });
     setActiveProcedimentoId(catId);
     onArmar?.(procNormalizado);
+    onAdicionarProcedimento?.(procNormalizado);
   };
 
   const handleRemoverProcedimento = useCallback(

@@ -1125,21 +1125,24 @@ export function useAtendimentoServidor({
       return true;
     });
     enfileirarAlteracoes(fila, alterar);
-    for (const novo of itens.criar) {
-      const corpo = { catalogoProcedimentoSaudeId: novo.catalogoProcedimentoSaudeId, nomeLivre: novo.nomeLivre };
-      if (novo.planejamentoItemId) {
-        corpo.planejamentoItemId = novo.planejamentoItemId;
+    const ehRetorno = String(at?.tipoProcedimentoCodigo || '').toLowerCase() === 'retorno';
+    if (!ehRetorno) {
+      for (const novo of itens.criar) {
+        const corpo = { catalogoProcedimentoSaudeId: novo.catalogoProcedimentoSaudeId, nomeLivre: novo.nomeLivre };
+        if (novo.planejamentoItemId) {
+          corpo.planejamentoItemId = novo.planejamentoItemId;
+        }
+        fila.enfileirar({
+          chave: `item:novo:${novo.indice}`,
+          grupo: 'item:novo',
+          tipo: 'itemNovo',
+          dados: {
+            indice: novo.indice,
+            corpo,
+          },
+          debounceMs: DEBOUNCE_TEXTO_MS,
+        });
       }
-      fila.enfileirar({
-        chave: `item:novo:${novo.indice}`,
-        grupo: 'item:novo',
-        tipo: 'itemNovo',
-        dados: {
-          indice: novo.indice,
-          corpo,
-        },
-        debounceMs: DEBOUNCE_TEXTO_MS,
-      });
     }
   }, [emConsulta, atualId, versaoBase, procedimentosSessao, enfileirarAlteracoes]);
 

@@ -128,7 +128,7 @@ describe('AssistiveTouchToolbar', () => {
     expect(popover).toBeInTheDocument();
 
     // Seleciona a cor vermelha (#ef4444)
-    const redButton = screen.getByTitle('Em uso por: Ácido Hialurônico');
+    const redButton = screen.getByTitle('Em uso por: Ácido Hialurônico (clique para inverter)');
     fireEvent.click(redButton);
 
     expect(onMudarCor).toHaveBeenCalledWith('#ef4444');
@@ -137,9 +137,9 @@ describe('AssistiveTouchToolbar', () => {
     expect(screen.getByTestId('assistive-touch-capsule')).toBeInTheDocument();
   });
 
-  // Regressão prevenida: Ao clicar na cor pertencente a outro procedimento na paleta,
-  // deve armar/selecionar aquele procedimento em vez de forçar mutação da cor atual
-  it('quando onArmar é fornecido e clica em cor em uso por outro procedimento, aciona onArmar', () => {
+  // Melhoria UX: Ao clicar na cor pertencente a outro procedimento na paleta,
+  // aciona onMudarCor para permitir a inversão inteligente (Smart Swap) entre procedimentos
+  it('quando clica em cor em uso por outro procedimento, aciona onMudarCor para Smart Swap', () => {
     const onArmar = vi.fn();
     const onMudarCor = vi.fn();
     render(
@@ -159,13 +159,11 @@ describe('AssistiveTouchToolbar', () => {
     fireEvent.click(screen.getByTestId('btn-capsule-color'));
 
     // Clica no botão com a cor do Ácido Hialurônico (proc-2)
-    const redButton = screen.getByTitle('Em uso por: Ácido Hialurônico');
+    const redButton = screen.getByTitle('Em uso por: Ácido Hialurônico (clique para inverter)');
     fireEvent.click(redButton);
 
-    expect(onArmar).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'proc-2', nome: 'Ácido Hialurônico' })
-    );
-    expect(onMudarCor).not.toHaveBeenCalled();
+    expect(onMudarCor).toHaveBeenCalled();
+    expect(screen.queryByTestId('color-picker-popover')).not.toBeInTheDocument();
   });
 
   it('restaura posição salva do localStorage', () => {

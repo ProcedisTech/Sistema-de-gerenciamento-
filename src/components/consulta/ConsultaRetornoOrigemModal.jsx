@@ -12,7 +12,7 @@ export function ConsultaRetornoOrigemModal({
   onClose,
   onConfirm,
 }) {
-  const [selectedId, setSelectedId] = useState('');
+  const [selectedItemsMap, setSelectedItemsMap] = useState(() => new Map());
   const [optionsPlano, setOptionsPlano] = useState([]);
   const [optionsHistorico, setOptionsHistorico] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -125,13 +125,36 @@ export function ConsultaRetornoOrigemModal({
 
   if (!open) return null;
 
+  const handleToggleItem = (item) => {
+    if (!item?.id) return;
+    const itemId = String(item.id);
+    setSelectedItemsMap((prev) => {
+      const next = new Map(prev);
+      if (next.has(itemId)) {
+        next.delete(itemId);
+      } else {
+        next.set(itemId, item);
+      }
+      return next;
+    });
+    setFieldError('');
+  };
+
+  const selectedCount = selectedItemsMap.size;
+
+  const handleClose = () => {
+    setSelectedItemsMap(new Map());
+    setFieldError('');
+    onClose?.();
+  };
+
   const handleConfirm = () => {
-    const id = String(selectedId || '').trim();
-    if (!id) {
-      setFieldError('Selecione o procedimento de origem do retorno.');
+    const items = Array.from(selectedItemsMap.values());
+    if (items.length === 0) {
+      setFieldError('Selecione ao menos um procedimento de origem do retorno.');
       return;
     }
-    onConfirm?.(id);
+    onConfirm?.(items);
   };
 
   return (
@@ -151,12 +174,12 @@ export function ConsultaRetornoOrigemModal({
               Iniciar retorno
             </h3>
             <p className="mt-1 text-[13px] sm:text-[14px] text-[#64748b] leading-relaxed">
-              Escolha o procedimento anterior que será avaliado neste retorno.
+              Escolha os procedimentos anteriores que serão avaliados neste retorno. Você pode selecionar múltiplos procedimentos.
             </p>
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="rounded-xl p-2 text-[#64748b] hover:bg-slate-100 hover:text-slate-900 transition-colors"
             aria-label="Fechar"
           >
@@ -165,10 +188,10 @@ export function ConsultaRetornoOrigemModal({
         </div>
 
         <RetornoOrigemSelect
-          value={selectedId}
-          onChange={(val) => {
-            setSelectedId(val);
-            setFieldError('');
+          multiSelect={true}
+          selectedIds={new Set(selectedItemsMap.keys())}
+          onChange={(_id, _tipo, item) => {
+            if (item) handleToggleItem(item);
           }}
           optionsPlano={optionsPlano}
           optionsHistorico={optionsHistorico}
@@ -181,22 +204,33 @@ export function ConsultaRetornoOrigemModal({
           fieldError={fieldError}
         />
 
-        <div className="mt-6 flex flex-wrap justify-end gap-2.5 border-t border-slate-100 pt-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl border border-app-border px-5 py-2.5 text-[13px] sm:text-[14px] font-semibold text-[#64748b] hover:bg-app-nav-hover transition-colors"
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            onClick={handleConfirm}
-            disabled={loading || !selectedId}
-            className="rounded-xl bg-[#00a88e] px-6 py-2.5 text-[13px] sm:text-[14px] font-semibold text-white shadow-sm hover:bg-[#00967f] disabled:opacity-50 transition-all"
-          >
-            Continuar
-          </button>
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-2.5 border-t border-slate-100 pt-4">
+          {selectedCount > 0 ? (
+            <span className="text-[12px] font-semibold text-teal-800 bg-teal-50 px-3 py-1.5 rounded-lg border border-teal-200">
+              {selectedCount === 1 ? '1 procedimento selecionado' : `${selectedCount} procedimentos selecionados`}
+            </span>
+          ) : (
+            <span className="text-[12px] text-ink-400">
+              Nenhum procedimento selecionado
+            </span>
+          )}
+          <div className="flex items-center gap-2.5 ml-auto">
+            <button
+              type="button"
+              onClick={handleClose}
+              className="rounded-xl border border-app-border px-5 py-2.5 text-[13px] sm:text-[14px] font-semibold text-[#64748b] hover:bg-app-nav-hover transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirm}
+              disabled={loading || selectedCount === 0}
+              className="rounded-xl bg-[#00a88e] px-6 py-2.5 text-[13px] sm:text-[14px] font-semibold text-white shadow-sm hover:bg-[#00967f] disabled:opacity-50 transition-all"
+            >
+              Iniciar Retorno{selectedCount > 1 ? ` (${selectedCount})` : ''}
+            </button>
+          </div>
         </div>
       </div>
     </div>

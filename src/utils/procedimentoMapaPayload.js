@@ -35,6 +35,8 @@ export function mapLocalPontoToApi(p) {
   if (p.corHex != null && String(p.corHex).trim()) {
     row.corHex = String(p.corHex).trim();
   }
+  if (p.procedimentoFeitoId != null) row.procedimentoFeitoId = String(p.procedimentoFeitoId);
+  if (p.procedimentoId != null) row.procedimentoId = String(p.procedimentoId);
   return row;
 }
 

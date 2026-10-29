@@ -85,11 +85,18 @@ function getCardPendingDot(cardId, paciente, termosPendentes, progressoPlano, an
   return null;
 }
 
+const RETORNO_MODULE_CARD = {
+  id: 'retorno',
+  label: 'Retorno / Retoque',
+  description: 'Foto do resultado, avaliação pós, mapa de retoque e conclusão',
+  icon: RotateCcw,
+};
+
 function buildModuleCards(isRetorno) {
-  if (isRetorno) {
-    return MODULE_CARDS.filter((c) => c.id !== 'planejamento' && c.id !== 'retorno-avulso');
-  }
-  return MODULE_CARDS;
+  if (!isRetorno) return MODULE_CARDS;
+  return MODULE_CARDS
+    .filter((c) => c.id !== 'retorno-avulso' && c.id !== 'procedimento')
+    .concat([RETORNO_MODULE_CARD]);
 }
 
 export function ConsultaHub({
@@ -123,7 +130,7 @@ export function ConsultaHub({
   });
   const { planos } = usePlanosPaciente({
     pacienteId: paciente?.id,
-    enabled: Boolean(paciente?.id) && !isRetorno,
+    enabled: Boolean(paciente?.id),
     chaveRebusca: chavePlanos,
   });
   const anamneseStatus = useAnamneseStatusPaciente(paciente, {
@@ -145,6 +152,8 @@ export function ConsultaHub({
       case 'termos':
         return Boolean(papel.canSeeHubTermos);
       case 'procedimento':
+        return Boolean(papel.canExecuteHubProcedimento);
+      case 'retorno':
         return Boolean(papel.canExecuteHubProcedimento);
       case 'retorno-avulso':
         return Boolean(papel.canSeeHubOrientacao);
