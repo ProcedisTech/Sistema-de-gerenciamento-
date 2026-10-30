@@ -2549,12 +2549,14 @@ function AppRefactoredInner({ onCanalAvisos }) {
         const nome = it?.nome || it?.catalogoNome || `Retorno ${idx + 1}`;
         const catId = it?.catalogoProcedimentoSaudeId || it?.catalogoId || null;
         const planItemId = it?.planejamentoItemId ? String(it.planejamentoItemId).trim() : null;
+        const planoId = it?.planoId ? String(it.planoId).trim() : null;
         return {
           id: itId,
           procedimentoFeitoOrigemId: itId,
           catalogoProcedimentoSaudeId: catId,
           catalogoId: catId,
           planejamentoItemId: planItemId,
+          planoId,
           nome,
           tipoProcedimentoCodigo: 'retorno',
         };
@@ -2567,6 +2569,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
         isAgendaRetorno: true,
         tipoProcedimentoCodigo: 'retorno',
         procedimentoFeitoOrigemId: primeiroId,
+        planoId: primeiro?.planoId || null,
         fromAgendaSlot: false,
         initialModule: 'retorno',
         loteDaAgenda,
