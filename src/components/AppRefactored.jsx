@@ -2551,7 +2551,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
         const planItemId = it?.planejamentoItemId ? String(it.planejamentoItemId).trim() : null;
         const planoId = it?.planoId ? String(it.planoId).trim() : null;
         return {
-          id: itId,
+          id: null,
           procedimentoFeitoOrigemId: itId,
           catalogoProcedimentoSaudeId: catId,
           catalogoId: catId,
@@ -3839,6 +3839,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
         roleUserId,
         ...(catalogoId ? { catalogoProcedimentoSaudeId: catalogoId } : {}),
         ...(opts.isRetoque != null ? { isRetoque: Boolean(opts.isRetoque) } : {}),
+        ...(opts.procedimentoFeitoOrigemId ? { procedimentoFeitoOrigemId: opts.procedimentoFeitoOrigemId } : {}),
       };
       if (planejamentoItemId) body.planejamentoItemId = planejamentoItemId;
 
@@ -3873,7 +3874,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
   );
 
   const iniciarProcedimentoRetorno = React.useCallback(
-    async (paciente, { isRetoque, procItem = null, procIndex = 0 } = {}) => {
+    async (paciente, { isRetoque, procItem = null, procIndex = 0, sharedAgendaId = null, onAgendaCreated = null } = {}) => {
       const existing = loteProcedimentosFeitosIds[procIndex];
       if (existing) return String(existing);
 
@@ -3895,7 +3896,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
         ? String(rawPlanejamentoItemId).replace(/_retorno$/, '').trim()
         : null;
 
-      let currentAgendaId = journeyState.agendaId;
+      let currentAgendaId = sharedAgendaId || journeyState.agendaId;
 
       if (!currentAgendaId) {
         const startTimeIso = journeyState.getAttendanceStartTime(consultaAtualServidor?.iniciadoEm);
@@ -3914,8 +3915,14 @@ function AppRefactoredInner({ onCanalAvisos }) {
         if (createdSlot?.id) {
           currentAgendaId = String(createdSlot.id);
           journeyState.setAgendaId(currentAgendaId);
+          onAgendaCreated?.(currentAgendaId);
         }
       }
+
+      const origemId =
+        currentProc?.procedimentoFeitoOrigemId ||
+        journeyState.procedimentoFeitoOrigemId ||
+        null;
 
       return getOrCreateProcedimentoFeitoId(paciente, {
         allowCreate: true,
@@ -3923,6 +3930,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
         catalogoId,
         agendaId: currentAgendaId,
         planejamentoItemId: cleanPlanejamentoItemId,
+        procedimentoFeitoOrigemId: origemId,
       });
     },
     [
@@ -3958,40 +3966,37 @@ function AppRefactoredInner({ onCanalAvisos }) {
             }
             if (!fileToUpload) return false;
             const webp = await convertToWebP(fileToUpload, 0.85, 1920);
-            const uploadsForThisPhoto = ids.map(async (pid) => {
-              try {
-                const categoria = String(foto.meta?.categoria || GALERIA_CATEGORIA.DEPOIS).toLowerCase();
-                const tipoFotoCodigo =
-                  categoria === 'antes' || categoria === GALERIA_CATEGORIA.ANTES
-                    ? 'ANTES'
-                    : categoria === 'pos_imediato'
-                      ? 'POS_IMEDIATO'
-                      : categoria === 'depois' || categoria === GALERIA_CATEGORIA.DEPOIS
-                        ? 'DEPOIS'
-                        : categoria === 'mapa' || categoria === GALERIA_CATEGORIA.MAPA
-                          ? 'MAPA'
-                          : 'POS_IMEDIATO';
-                const legendaTexto =
-                  categoria === 'depois' || categoria === GALERIA_CATEGORIA.DEPOIS
-                    ? 'Resultado do retorno'
-                    : journeyState.nomeProcedimento.trim() || 'Foto do procedimento';
-                const uploadOpts = {
-                  roleUserId: ridUpload,
-                  procedimentoFeitoId: pid,
-                  legenda: formatGaleriaLegendaForUpload(categoria, legendaTexto),
-                  dataReferencia: dataRefSessao,
-                };
-                if (targetAgendaId) uploadOpts.agendaId = targetAgendaId;
-                if (tipoFotoCodigo) uploadOpts.tipoFotoCodigo = tipoFotoCodigo;
-                await pacientesGaleriaApi.upload(paciente.id, webp, uploadOpts);
-                return true;
-              } catch (e) {
-                console.warn('Erro ao salvar foto para procedimento:', pid, e);
-                return false;
-              }
-            });
-            const photoResults = await Promise.all(uploadsForThisPhoto);
-            return photoResults.every(Boolean);
+            const pidPrincipal = ids[0];
+            try {
+              const categoria = String(foto.meta?.categoria || GALERIA_CATEGORIA.DEPOIS).toLowerCase();
+              const tipoFotoCodigo =
+                categoria === 'antes' || categoria === GALERIA_CATEGORIA.ANTES
+                  ? 'ANTES'
+                  : categoria === 'pos_imediato'
+                    ? 'POS_IMEDIATO'
+                    : categoria === 'depois' || categoria === GALERIA_CATEGORIA.DEPOIS
+                      ? 'DEPOIS'
+                      : categoria === 'mapa' || categoria === GALERIA_CATEGORIA.MAPA
+                        ? 'MAPA'
+                        : 'POS_IMEDIATO';
+              const legendaTexto =
+                categoria === 'depois' || categoria === GALERIA_CATEGORIA.DEPOIS
+                  ? 'Resultado do retorno'
+                  : journeyState.nomeProcedimento.trim() || 'Foto do procedimento';
+              const uploadOpts = {
+                roleUserId: ridUpload,
+                procedimentoFeitoId: pidPrincipal,
+                legenda: formatGaleriaLegendaForUpload(categoria, legendaTexto),
+                dataReferencia: dataRefSessao,
+              };
+              if (targetAgendaId) uploadOpts.agendaId = targetAgendaId;
+              if (tipoFotoCodigo) uploadOpts.tipoFotoCodigo = tipoFotoCodigo;
+              await pacientesGaleriaApi.upload(paciente.id, webp, uploadOpts);
+              return true;
+            } catch (e) {
+              console.warn('Erro ao salvar foto para procedimento:', pidPrincipal, e);
+              return false;
+            }
           } catch (e) {
             console.warn('Erro ao preparar foto:', e);
             return false;
@@ -4059,12 +4064,17 @@ function AppRefactoredInner({ onCanalAvisos }) {
           : [null];
 
         const listaPids = [];
+        let sharedAgendaId = journeyState.agendaId || null;
         for (let i = 0; i < procs.length; i++) {
           const pItem = procs[i];
           const pid = await iniciarProcedimentoRetorno(paciente, {
             isRetoque: journeyState.houveRetoque,
             procItem: pItem,
             procIndex: i,
+            sharedAgendaId,
+            onAgendaCreated: (id) => {
+              sharedAgendaId = id;
+            },
           });
           if (pid) listaPids.push(pid);
         }

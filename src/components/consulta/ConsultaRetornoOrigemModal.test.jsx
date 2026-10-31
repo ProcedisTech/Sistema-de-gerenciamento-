@@ -119,9 +119,9 @@ describe('ConsultaRetornoOrigemModal — Abas, Accordion Natural e Trava de Esco
     });
 
     // 2 planos válidos (o cancelado foi descartado)
-    expect(screen.getByRole('tab', { name: /Planos de Tratamento 2/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Planos de Tratamento.*2/i })).toBeInTheDocument();
     // 2 avulsos
-    expect(screen.getByRole('tab', { name: /Sem Plano \(Avulsos\) 2/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Sem Plano \(Avulsos\).*2/i })).toBeInTheDocument();
 
     // O plano cancelado não deve aparecer
     expect(screen.queryByText('Procedimento Cancelado')).not.toBeInTheDocument();
@@ -243,7 +243,7 @@ describe('ConsultaRetornoOrigemModal — Abas, Accordion Natural e Trava de Esco
     ).toBeInTheDocument();
 
     // Se clicar em 'Cancelar', permanece na aba Planos
-    const btnCancelar = screen.getByRole('button', { name: /Cancelar/i });
+    const btnCancelar = screen.getByRole('button', { name: /Cancelar troca de aba/i });
     await user.click(btnCancelar);
     expect(screen.getByRole('tab', { name: /Planos de Tratamento/i })).toHaveAttribute(
       'aria-selected',

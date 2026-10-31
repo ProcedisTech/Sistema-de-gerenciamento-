@@ -66,13 +66,23 @@ export function ConsultaRetornoOrigemModal({
         // Mapa de planos por item ID
         const planosMap = new Map();
         const planosValidos = [];
+        const itensDePlanosCancelados = new Set();
 
         if (resPlanos.status === 'fulfilled') {
           const planos = normalizeListaPlanos(resPlanos.value);
           (planos || []).forEach((plano) => {
             const st = String(plano.statusCodigo || '').toLowerCase();
             // Oculta planos cancelados (Decisão 3 do /grill-me)
-            if (st === 'cancelado') return;
+            if (st === 'cancelado') {
+              const itens = Array.isArray(plano.itens) ? plano.itens : [];
+              itens.forEach((it) => {
+                const itemId = String(it.id || it.planejamentoItemId || '').trim();
+                if (itemId) {
+                  itensDePlanosCancelados.add(itemId);
+                }
+              });
+              return;
+            }
 
             const pId = String(plano.id);
             const planoTitulo = 'Plano de Tratamento'; // Nomenclatura canônica
@@ -114,6 +124,9 @@ export function ConsultaRetornoOrigemModal({
           ).length;
 
           const planItemId = r.planejamentoItemId ? String(r.planejamentoItemId).trim() : null;
+          if (planItemId && itensDePlanosCancelados.has(planItemId)) {
+            return;
+          }
           const planoDono = planItemId ? planosMap.get(planItemId) : null;
 
           const baseItem = {
@@ -412,6 +425,7 @@ export function ConsultaRetornoOrigemModal({
             <div className="flex items-center gap-1.5 shrink-0">
               <button
                 type="button"
+                aria-label="Cancelar troca de aba"
                 onClick={handleCancelTabChange}
                 className="px-2.5 py-1 text-[11.5px] font-semibold text-slate-600 hover:bg-amber-100 rounded-lg transition-colors"
               >

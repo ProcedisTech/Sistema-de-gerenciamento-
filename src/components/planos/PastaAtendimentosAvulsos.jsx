@@ -109,8 +109,18 @@ function AtendimentoAvulsoItemCard({
         className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 cursor-pointer hover:bg-slate-50/80 transition-colors select-none"
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-7 h-7 rounded-md bg-purple-50 text-purple-700 flex items-center justify-center font-bold text-xs border border-purple-100 shrink-0">
-            <Sparkles className="w-3.5 h-3.5" />
+          <div
+            className={`w-7 h-7 rounded-md flex items-center justify-center font-bold text-xs border shrink-0 ${
+              atendimento.isRetorno
+                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                : 'bg-purple-50 text-purple-700 border border-purple-100'
+            }`}
+          >
+            {atendimento.isRetorno ? (
+              <RotateCcw className="w-3.5 h-3.5 text-amber-600" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5" />
+            )}
           </div>
           
           <div className="min-w-0">
@@ -140,7 +150,12 @@ function AtendimentoAvulsoItemCard({
                   {atendimento.nomeProcedimento}
                 </h4>
               )}
-              {atendimento.isAvaliacao ? (
+              {atendimento.isRetorno ? (
+                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
+                  <RotateCcw className="w-2.5 h-2.5 text-amber-600" />
+                  RETORNO
+                </span>
+              ) : atendimento.isAvaliacao ? (
                 <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
                   AVALIAÇÃO
                 </span>
@@ -185,7 +200,9 @@ function AtendimentoAvulsoItemCard({
 
           <div className="p-1 rounded-md text-slate-400 hover:text-slate-700">
             <ChevronDown 
-              className={`w-4 h-4 transition-transform duration-200 ${expandido ? 'rotate-180 text-purple-700' : ''}`} 
+              className={`w-4 h-4 transition-transform duration-200 ${
+                expandido ? (atendimento.isRetorno ? 'rotate-180 text-amber-700' : 'rotate-180 text-purple-700') : ''
+              }`} 
             />
           </div>
         </div>
