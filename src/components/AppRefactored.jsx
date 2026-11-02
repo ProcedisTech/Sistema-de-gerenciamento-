@@ -5748,7 +5748,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     mapaState={mapaAplicacaoState}
                     roleUserId={roleUserId}
                     procedimentoFeitoId={loteProcedimentosFeitosIds[0]}
-                    catalogoId={journeyState.nomeProcedimentoCatalogoId}
                     planejamentoItemId={resolvePlanejamentoItemId(
                         journeyState.nomeProcedimentoCatalogoId,
                     )}
