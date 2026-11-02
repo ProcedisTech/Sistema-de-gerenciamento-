@@ -20,7 +20,7 @@ import {
   procedimentosApi,
 } from '../../services/api';
 import { normalizeListaPlanos } from '../../utils/planejamentoNormalize.js';
-import { nomeProcedimentoRaiz } from './retornoOrigemUtils.js';
+import { ehProcedimentoRetorno, nomeProcedimentoRaiz } from './retornoOrigemUtils.js';
 import { mapBackendPatient } from '../../utils/patientMapping';
 import { resolveAnamneseDesatualizada } from '../../utils/patientAnamneseAlerts.js';
 import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
@@ -940,7 +940,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     ]).then(([resHistorico, resPlanos]) => {
       const listHistorico =
         resHistorico.status === 'fulfilled'
-          ? normalizeApiList(resHistorico.value).map((r) => ({
+          ? normalizeApiList(resHistorico.value).filter((r) => !ehProcedimentoRetorno(r)).map((r) => ({
             id: String(r.id),
             procedimentoFeitoOrigemId: String(r.id),
             nome: nomeProcedimentoRaiz(r),

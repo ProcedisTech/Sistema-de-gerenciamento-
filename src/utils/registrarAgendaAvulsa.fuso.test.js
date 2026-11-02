@@ -54,4 +54,11 @@ describe('registrarAgendaAvulsa — dia e horas no fuso da clínica', () => {
     const [body] = vi.mocked(agendasApi.create).mock.calls[0];
     expect(body).toMatchObject({ dataAgendamento: '2026-10-01', horaInicio: '22:30', horaFim: '22:31' });
   });
+
+  it('quando inicio for posterior ao fim por desvio de relogio, estende fim com piso de 1 minuto', async () => {
+    vi.mocked(getGuaranteedNow).mockReturnValue(new Date('2026-10-02T17:54:00Z'));
+    await registrar('America/Sao_Paulo', '2026-10-02T17:56:00Z');
+    const [body] = vi.mocked(agendasApi.create).mock.calls[0];
+    expect(body).toMatchObject({ dataAgendamento: '2026-10-02', horaInicio: '14:56', horaFim: '14:57' });
+  });
 });

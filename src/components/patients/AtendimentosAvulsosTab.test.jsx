@@ -33,7 +33,7 @@ describe('AtendimentosAvulsosTab', () => {
       />
     );
 
-    expect(screen.getByText(/Carregando atendimentos avulsos do paciente\.\.\./i)).toBeInTheDocument();
+    expect(screen.getByText(/Carregando atendimentos sem plano do paciente\.\.\./i)).toBeInTheDocument();
   });
 
   it('exibe mensagem de erro e permite tentar novamente', async () => {
@@ -54,7 +54,7 @@ describe('AtendimentosAvulsosTab', () => {
       />
     );
 
-    expect(screen.getByText(/Erro ao carregar atendimentos avulsos/i)).toBeInTheDocument();
+    expect(screen.getByText(/Erro ao carregar atendimentos sem plano/i)).toBeInTheDocument();
     expect(screen.getByText(/Falha na conexão com o servidor/i)).toBeInTheDocument();
 
     const retryBtn = screen.getByRole('button', { name: /Tentar novamente/i });
@@ -80,7 +80,7 @@ describe('AtendimentosAvulsosTab', () => {
       />
     );
 
-    expect(screen.getByText(/Nenhum atendimento avulso registrado/i)).toBeInTheDocument();
+    expect(screen.getByText(/Nenhum atendimento sem plano registrado/i)).toBeInTheDocument();
     expect(
       screen.getByText(/Procedimentos, consultas pontuais e fotos registrados fora de um plano/i)
     ).toBeInTheDocument();
@@ -138,7 +138,7 @@ describe('AtendimentosAvulsosTab', () => {
     expect(screen.getByText('1 atendimento')).toBeInTheDocument();
 
     // Deve mostrar o título e a descrição da aba
-    expect(screen.getByRole('heading', { level: 3, name: 'Atendimentos Avulsos' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: 'Atendimentos Sem Plano' })).toBeInTheDocument();
 
     // Deve renderizar o procedimento avulso
     expect(screen.getByText('Preenchimento Labial Avulso')).toBeInTheDocument();

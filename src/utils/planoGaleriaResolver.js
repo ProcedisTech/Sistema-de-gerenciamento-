@@ -25,7 +25,8 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
     if (!cat || cat === 'outro') {
       const code = String(f.tipoFotoCodigo || f.tipo_foto_codigo || '').toUpperCase();
       if (code === 'ANTES') cat = 'antes';
-      else if (code === 'DEPOIS' || code === 'POS_IMEDIATO') cat = 'depois';
+      else if (code === 'POS_IMEDIATO') cat = 'pos_imediato';
+      else if (code === 'DEPOIS') cat = 'depois';
       else if (code === 'MAPA') cat = 'mapa';
       else if (code === 'AVALIACAO') cat = 'avaliacao';
       else if (code === 'PLANEJAMENTO') cat = 'planejamento';

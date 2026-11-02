@@ -1204,6 +1204,41 @@ function AppRefactoredInner({ onCanalAvisos }) {
     isProcedimentoMode,
   });
 
+  const [retornoResultadoPhotos, setRetornoResultadoPhotos] = React.useState([]);
+
+  const uploadRetornoResultadoFiles = React.useCallback(async (files) => {
+    if (!files || !files.length) return;
+    const newEntries = Array.from(files).map((file) => ({
+      url: URL.createObjectURL(file),
+      blob: file,
+      fileName: file.name,
+      categoria: 'depois',
+      meta: { categoria: 'depois' },
+    }));
+    setRetornoResultadoPhotos((prev) => [...prev, ...newEntries].slice(0, cameraState.EVALUATION_PHOTO_MAX));
+  }, [cameraState.EVALUATION_PHOTO_MAX]);
+
+  const removerFotoRetornoResultado = React.useCallback((idx) => {
+    setRetornoResultadoPhotos((prev) => {
+      const target = prev[idx];
+      if (target?.url?.startsWith('blob:')) {
+        try { URL.revokeObjectURL(target.url); } catch { /* ignore */ }
+      }
+      return prev.filter((_, i) => i !== idx);
+    });
+  }, []);
+
+  const resetRetornoResultadoPhotos = React.useCallback(() => {
+    setRetornoResultadoPhotos((prev) => {
+      prev.forEach((ph) => {
+        if (ph?.url?.startsWith('blob:')) {
+          try { URL.revokeObjectURL(ph.url); } catch { /* ignore */ }
+        }
+      });
+      return [];
+    });
+  }, []);
+
   // Reseta estado de anamnese ao trocar de paciente para evitar vazamento de draft entre pacientes
   React.useEffect(() => {
     const newId = pacienteAtual?.id ?? null;
@@ -1242,6 +1277,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
     journeyState.setEvaluationAnnotatedPhotoUrl(null);
     cameraState.resetEvaluationPhotos();
     cameraState.resetProcedureCapturedPhotos();
+    resetRetornoResultadoPhotos();
     cameraState.setAnamnesePhotoUrl(null);
     cameraState.setAnamnesePhotoBlob(null);
     cameraState.setAnamnesePhotoMeta(null);
@@ -3637,9 +3673,11 @@ function AppRefactoredInner({ onCanalAvisos }) {
     mapaRetornoState.resetMapa();
     cameraState.resetProcedureCapturedPhotos();
     cameraState.resetEvaluationPhotos();
+    resetRetornoResultadoPhotos();
   }, [
     limparResolucoesTermos,
     cameraState,
+    resetRetornoResultadoPhotos,
     journeyState,
     patientState,
     setAssinaturasRealizadasIds,
@@ -4147,12 +4185,40 @@ function AppRefactoredInner({ onCanalAvisos }) {
         journeyState.setObservacoesExecucao(
           formatRetornoAvaliacaoTexto(journeyState.retornoAvaliacao),
         );
-        await uploadEvaluationCapturedPhotos({
-          paciente,
-          procIdOpt: listaPids[0],
-          dataRefSessao: hojeDaClinica(fusoClinica),
-          tipoFotoCodigo: 'DEPOIS',
-        });
+        const ridUpload = roleUserId;
+        const ridOk = Boolean(ridUpload && /^[0-9a-f-]{36}$/i.test(String(ridUpload)));
+        if (retornoResultadoPhotos.length > 0 && paciente?.id && ridOk) {
+          const targetAgendaId = journeyState.agendaId || null;
+          await Promise.all(
+            retornoResultadoPhotos.map(async (foto) => {
+              try {
+                let fileToUpload = foto.cleanBlob || foto.blob;
+                if (!fileToUpload && (foto.cleanUrl || foto.url)) {
+                  const resp = await fetch(foto.cleanUrl || foto.url);
+                  const blob = await resp.blob();
+                  fileToUpload = new File([blob], 'foto-resultado-retorno.jpg', {
+                    type: blob.type || 'image/jpeg',
+                  });
+                }
+                if (!fileToUpload) return false;
+                const webp = await convertToWebP(fileToUpload, 0.85, 1920);
+                const uploadOpts = {
+                  roleUserId: ridUpload,
+                  procedimentoFeitoId: listaPids[0],
+                  legenda: formatGaleriaLegendaForUpload(GALERIA_CATEGORIA.DEPOIS, '', { isAvulso: true }),
+                  dataReferencia: hojeDaClinica(fusoClinica),
+                  tipoFotoCodigo: 'DEPOIS',
+                };
+                if (targetAgendaId) uploadOpts.agendaId = targetAgendaId;
+                await pacientesGaleriaApi.upload(paciente.id, webp, uploadOpts);
+                return true;
+              } catch (e) {
+                console.error('Falha no upload da foto do resultado do retorno:', e);
+                return false;
+              }
+            })
+          );
+        }
         await uploadProcedureCapturedPhotos(
           paciente,
           listaPids,
@@ -4224,6 +4290,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
     resolvePacienteAtendimento,
     roleUserId,
     selectedPatientCpf,
+    retornoResultadoPhotos,
     uploadEvaluationCapturedPhotos,
     uploadProcedureCapturedPhotos,
     journeyState,
@@ -4628,7 +4695,13 @@ function AppRefactoredInner({ onCanalAvisos }) {
 
       if (decision === 'finalizar') {
         try {
-          if (consultaModule === 'retorno') {
+          const isRetornoConsulta =
+            consultaModule === 'retorno' ||
+            Boolean(journeyState.isAgendaRetorno) ||
+            journeyState.tipoAtendimento === 'retorno' ||
+            Boolean(journeyState.procedimentoFeitoOrigemId);
+
+          if (isRetornoConsulta) {
             await handleConcluirRetorno();
           } else {
             await encerrarAtendimento({ pularGateTermos: true });
@@ -4664,6 +4737,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
     consultaEncerraNoServidor,
     handleConcluirRetorno,
     journeyState.isAgendaRetorno,
+    journeyState.tipoAtendimento,
+    journeyState.procedimentoFeitoOrigemId,
     journeyState.tipoProcedimentoCodigo,
     journeyState.observacoesExecucao,
     onSairConsulta,
@@ -5463,16 +5538,16 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     setProcedimentosSessao={journeyState.setProcedimentosSessao}
                     activeProcedureIndex={journeyState.activeProcedureIndex}
                     setActiveProcedureIndex={journeyState.setActiveProcedureIndex}
-                    onOrigemResolved={(origemId) => journeyState.setProcedimentoFeitoOrigemId(origemId)}
+                    onOrigemResolved={journeyState.setProcedimentoFeitoOrigemId}
                     mapaRetornoState={mapaRetornoState}
                     retornoAvaliacao={journeyState.retornoAvaliacao}
                     setRetornoAvaliacao={journeyState.setRetornoAvaliacao}
                     houveRetoque={journeyState.houveRetoque}
                     setHouveRetoque={journeyState.setHouveRetoque}
-                    evaluationCapturedPhotos={cameraState.evaluationCapturedPhotos ?? []}
+                    evaluationCapturedPhotos={retornoResultadoPhotos}
                     evaluationPhotoMax={cameraState.EVALUATION_PHOTO_MAX}
-                    onEvaluationUploadFiles={cameraState.uploadPhotoFiles}
-                    onEvaluationRemovePhoto={removerFotoAvaliacao}
+                    onEvaluationUploadFiles={uploadRetornoResultadoFiles}
+                    onEvaluationRemovePhoto={removerFotoRetornoResultado}
                     procedureCapturedPhotos={cameraState.procedureCapturedPhotos ?? []}
                     onProcedureUploadFiles={(files, cat) => cameraState.uploadProcedureFiles(files, cat)}
                     onProcedureRemovePhoto={removerFotoProcedimento}

@@ -82,6 +82,9 @@ export function ConsultaRetornoFlow({
   const uploadPreRef = useRef(null);
   const uploadPosRef = useRef(null);
   const blobUrlsRef = useRef([]);
+  const onOrigemResolvedRef = useRef(onOrigemResolved);
+  onOrigemResolvedRef.current = onOrigemResolved;
+  const loadedPaiKeyRef = useRef(null);
   const photos = evaluationCapturedPhotos || [];
 
   const procedurePhotos = procedureCapturedPhotos || [];
@@ -291,12 +294,20 @@ export function ConsultaRetornoFlow({
 
   useEffect(() => {
     if (!pacienteId) {
+      loadedPaiKeyRef.current = null;
       setParentMeta(null);
       setFotosPorTipo({});
       setParentFotosPorVista({});
       setParentPontosPorVista({});
       setParentSemMapa(false);
       setParentError(null);
+      return undefined;
+    }
+
+    if (
+      procedimentoFeitoOrigemId &&
+      loadedPaiKeyRef.current === `${pacienteId}:${procedimentoFeitoOrigemId}`
+    ) {
       return undefined;
     }
 
@@ -342,8 +353,11 @@ export function ConsultaRetornoFlow({
             ) || null;
         }
 
+        if (pai) {
+          loadedPaiKeyRef.current = `${pacienteId}:${pai.id}`;
+        }
         if (pai && (!procedimentoFeitoOrigemId || String(procedimentoFeitoOrigemId) !== String(pai.id))) {
-          onOrigemResolved?.(String(pai.id));
+          onOrigemResolvedRef.current?.(String(pai.id));
         }
 
         setParentMeta(pai);
@@ -441,7 +455,7 @@ export function ConsultaRetornoFlow({
     return () => {
       cancelled = true;
     };
-  }, [pacienteId, procedimentoFeitoOrigemId, planejamentoItemId, catalogoId, onOrigemResolved]);
+  }, [pacienteId, procedimentoFeitoOrigemId, planejamentoItemId, catalogoId]);
 
   useEffect(
     () => () => {

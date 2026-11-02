@@ -14,6 +14,7 @@ import { pacientesApi, planejamentosApi, procedimentosApi } from '../../services
 import { normalizeApiList } from '../../utils/agendaDashboardMapping.js';
 import { normalizeListaPlanos } from '../../utils/planejamentoNormalize.js';
 import {
+  ehProcedimentoRetorno,
   formatProcedimentoRaizData,
   nomeProcedimentoRaiz,
 } from '../agenda/retornoOrigemUtils.js';
@@ -119,6 +120,10 @@ export function ConsultaRetornoOrigemModal({
 
         raizesRaw.forEach((r) => {
           const rId = String(r.id);
+          const procCompleto = allProcs.find((p) => String(p.id) === rId);
+          if (ehProcedimentoRetorno(r) || ehProcedimentoRetorno(procCompleto)) {
+            return;
+          }
           const retornosCount = allProcs.filter(
             (p) => String(p.procedimentoFeitoOrigemId || '') === rId,
           ).length;
