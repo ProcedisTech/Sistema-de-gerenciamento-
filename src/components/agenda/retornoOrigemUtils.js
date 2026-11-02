@@ -21,10 +21,21 @@ export function nomeProcedimentoRaiz(item) {
  */
 export function ehProcedimentoRetorno(item) {
   if (!item || typeof item !== 'object') return false;
+
+  const proprioId = item.id != null ? String(item.id).trim() : '';
+  const origemId =
+    item.procedimentoFeitoOrigemId != null
+      ? String(item.procedimentoFeitoOrigemId).trim()
+      : (item.procedimentoFeitoOrigem?.id != null ? String(item.procedimentoFeitoOrigem.id).trim() : '');
+
+  // Só é retorno filho se o pai for preenchido E for diferente do próprio ID do item
+  // (itens mapeados na UI recebem procedimentoFeitoOrigemId = item.id para seleção)
+  const temPaiDistinto = Boolean(origemId) && origemId !== proprioId;
+
   if (
     item.isRetoque === true ||
     item.isRetorno === true ||
-    Boolean(item.procedimentoFeitoOrigemId) ||
+    temPaiDistinto ||
     String(item.tipoProcedimentoCodigo || '').trim().toLowerCase() === 'retorno'
   ) {
     return true;

@@ -7,6 +7,7 @@ export const GALERIA_CATEGORIA = {
   ANTES: 'antes',
   PLANEJAMENTO: 'planejamento',
   DEPOIS: 'depois',
+  POS_IMEDIATO: 'pos_imediato',
   MAPA: 'mapa',
   AVALIACAO: 'avaliacao',
   MODELO: 'modelo',
@@ -17,13 +18,14 @@ export const GALERIA_CATEGORIA_LABELS = {
   antes: 'Antes',
   planejamento: 'Planejamento',
   depois: 'Depois',
+  pos_imediato: 'Pós-Imediato',
   mapa: 'Mapa de Aplicação',
   avaliacao: 'Avaliação',
   modelo: 'Modelo',
   outro: 'Outros',
 };
 
-const LEGENDA_TAG_RE = /^\[(antes|depois|planejamento|avaliac[aã]o|modelo|mapa)\]\s*(.*)$/i;
+const LEGENDA_TAG_RE = /^\[(antes|depois|pos[-_ ]?imediato|planejamento|avaliac[aã]o|modelo|mapa)\]\s*(.*)$/i;
 
 /**
  * Lê categoria, flag de avulso e texto livre da legenda enviada/recuperada da API.
@@ -43,7 +45,9 @@ export function parseGaleriaLegenda(legenda) {
         ? GALERIA_CATEGORIA.AVALIACAO
         : catRaw === 'modelo'
           ? GALERIA_CATEGORIA.MODELO
-          : catRaw;
+          : /pos[-_ ]?imediato/.test(catRaw)
+            ? GALERIA_CATEGORIA.POS_IMEDIATO
+            : catRaw;
     const descLimpa = m[2].replace(/\[avulso\]/gi, '').trim() || null;
     return {
       categoria: catNorm,
@@ -72,6 +76,7 @@ export function parseGaleriaLegenda(legenda) {
 export function formatGaleriaLegendaForUpload(categoria, descricaoLivre = '', { isAvulso = false } = {}) {
   const allowed = new Set(Object.values(GALERIA_CATEGORIA));
   let cat = String(categoria || '').toLowerCase().trim();
+  if (cat === 'pos-imediato' || cat === 'posimediato') cat = GALERIA_CATEGORIA.POS_IMEDIATO;
   if (!allowed.has(cat)) cat = GALERIA_CATEGORIA.ANTES;
   const d = String(descricaoLivre || '').replace(/\[avulso\]/gi, '').trim();
   const avulsoTag = isAvulso ? ' [avulso]' : '';
@@ -344,8 +349,9 @@ export function normalizePacienteGaleriaItem(raw) {
     legenda: legenda || null,
     dataReferencia: raw.dataReferencia || null,
     createdAt: raw.registradoEm || raw.criadoEm || raw.dataUpload || raw.createdAt || null,
-    categoria: parsed.categoria,
+    categoria: tipoFotoCodigo === 'POS_IMEDIATO' ? GALERIA_CATEGORIA.POS_IMEDIATO : parsed.categoria,
     descricaoLegenda: parsed.descricao,
+    isAvulso: Boolean(raw.isAvulso || parsed.isAvulso),
     nomeProcedimento,
     procedimentoFeitoId: procedimentoFeitoId != null && String(procedimentoFeitoId).trim() !== '' ? String(procedimentoFeitoId) : null,
     procedimentoFeitoCardId:

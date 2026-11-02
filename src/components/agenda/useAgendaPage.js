@@ -19,7 +19,7 @@ import {
   planejamentosApi,
   procedimentosApi,
 } from '../../services/api';
-import { normalizeListaPlanos } from '../../utils/planejamentoNormalize.js';
+import { normalizeListaPlanos, enriquecerPlanosComCatalogo } from '../../utils/planejamentoNormalize.js';
 import { ehProcedimentoRetorno, nomeProcedimentoRaiz } from './retornoOrigemUtils.js';
 import { mapBackendPatient } from '../../utils/patientMapping';
 import { resolveAnamneseDesatualizada } from '../../utils/patientAnamneseAlerts.js';
@@ -343,6 +343,8 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   const [modalMode, setModalMode] = useState(null);
   const [editingAppointment, setEditingAppointment] = useState(null);
   const { options: procedimentosClinica } = useProcedimentosOptions({ enabled: authEnabled });
+  const procedimentosClinicaRef = useRef(procedimentosClinica);
+  procedimentosClinicaRef.current = procedimentosClinica;
   const [form, setForm] = useState(() => defaultForm(todayIso, [], null));
   const formRef = useRef(form);
   formRef.current = form;
@@ -953,8 +955,12 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
 
       let listPlano = [];
       if (resPlanos.status === 'fulfilled') {
-        const planos = normalizeListaPlanos(resPlanos.value);
-        const planosAtivos = planos.filter((p) => p.statusCodigo === 'ativo');
+        const planosRaw = normalizeListaPlanos(resPlanos.value);
+        const planos = enriquecerPlanosComCatalogo(planosRaw, procedimentosClinicaRef.current);
+        const planosAtivos = planos.filter((p) => {
+          const st = String(p.statusCodigo || p.status || '').toLowerCase();
+          return st !== 'cancelado' && st !== 'desistencia';
+        });
         planosAtivos.forEach((plano) => {
           const itens = Array.isArray(plano.itens) ? plano.itens : [];
           itens.forEach((it) => {
@@ -978,6 +984,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
               planoTitulo: plano.titulo || plano.nome || 'Plano de Tratamento',
               nome: it.catalogoNome || 'Procedimento',
               catalogoNome: it.catalogoNome,
+              catalogoProcedimentoSaudeId: it.catalogoProcedimentoSaudeId || it.catalogoId || null,
               data: it.sessaoAtiva?.dataAgendamento || it.sessaoRealizada?.dataAgendamento || it.dataRealizacao || it.dataPlanejada || null,
               horaInicio: it.sessaoAtiva?.horaInicio || it.sessaoRealizada?.horaInicio || null,
               tipoOrigem: 'plano',
@@ -1019,7 +1026,8 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       const res = await planejamentosApi.listarPorPaciente(id);
       if (token !== planoLoadTokenRef.current) return;
 
-      const planos = normalizeListaPlanos(res);
+      const planosRaw = normalizeListaPlanos(res);
+      const planos = enriquecerPlanosComCatalogo(planosRaw, procedimentosClinicaRef.current);
       const planosAtivos = planos.filter(
         (p) => String(p.statusCodigo || p.status || '').toLowerCase() === 'ativo',
       );
@@ -1069,6 +1077,63 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       }
     }
   }, []);
+
+  // Re-enriquece itens de plano caso o catálogo de procedimentos da clínica termine de carregar depois
+  useEffect(() => {
+    if (!Array.isArray(procedimentosClinica) || procedimentosClinica.length === 0) return;
+
+    setForm((prev) => {
+      const itens = prev.planejamentoItensRaiz;
+      if (!Array.isArray(itens) || itens.length === 0) return prev;
+      const precisaEnriquecer = itens.some(
+        (it) => it.tipoOrigem === 'plano' && (!it.catalogoNome || it.nome === 'Procedimento'),
+      );
+      if (!precisaEnriquecer) return prev;
+
+      const byId = Object.fromEntries(
+        procedimentosClinica
+          .map((o) => {
+            const id = String(o.id ?? o.catalogoProcedimentoSaudeId ?? '').trim();
+            const nome = String(o.nomeProcedimento ?? o.nome ?? '').trim();
+            return id && nome ? [id, nome] : null;
+          })
+          .filter(Boolean),
+      );
+
+      return {
+        ...prev,
+        planejamentoItensRaiz: itens.map((it) => {
+          if (it.catalogoNome && it.nome !== 'Procedimento') return it;
+          const catId = String(it.catalogoProcedimentoSaudeId || it.catalogoId || '').trim();
+          const nome = catId ? byId[catId] : '';
+          return nome ? { ...it, catalogoNome: nome, nome } : it;
+        }),
+      };
+    });
+
+    setPlanoAgendavel((prev) => {
+      if (!Array.isArray(prev) || prev.length === 0) return prev;
+      const precisaEnriquecer = prev.some((it) => !it.nome || it.nome === 'Procedimento');
+      if (!precisaEnriquecer) return prev;
+
+      const byId = Object.fromEntries(
+        procedimentosClinica
+          .map((o) => {
+            const id = String(o.id ?? o.catalogoProcedimentoSaudeId ?? '').trim();
+            const nome = String(o.nomeProcedimento ?? o.nome ?? '').trim();
+            return id && nome ? [id, nome] : null;
+          })
+          .filter(Boolean),
+      );
+
+      return prev.map((it) => {
+        if (it.nome && it.nome !== 'Procedimento') return it;
+        const catId = String(it.catalogoProcedimentoSaudeId || '').trim();
+        const nome = catId ? byId[catId] : '';
+        return nome ? { ...it, nome } : it;
+      });
+    });
+  }, [procedimentosClinica]);
 
   const selectPaciente = useCallback(
     (pacienteId, paciente) => {

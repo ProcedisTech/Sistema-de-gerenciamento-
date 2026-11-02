@@ -1192,7 +1192,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
   );
   const orientacoesOk = itensSemOrientacaoMarcada.length === 0;
 
-  const isProcedimentoMode = currentStep === 4 || (activeView === 'consulta' && consultaModule === 'procedimento');
+  const isProcedimentoMode = currentStep === 4 || (activeView === 'consulta' && (consultaModule === 'procedimento' || consultaModule === 'retorno'));
 
   const cameraState = useProcedureCamera({
     currentStep,
@@ -2018,7 +2018,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
           if (cancel) return;
           const itens = Array.isArray(resp) ? resp : resp?.itens || resp?.fotos || [];
           const currentAtendId = consultaServidor.atual?.id || atendimentoIdConsultaRef.current;
-          const currentPlanId = planoContextoAvaliacao?.id || planoContextoAvaliacao?.planejamentoId;
 
           const filtradas = itens
             .filter((f) => {
@@ -2034,17 +2033,9 @@ function AppRefactoredInner({ onCanalAvisos }) {
               if (!isAvaliacaoFoto) return false;
 
               const fotoAtendId = f.atendimentoId || f.atendimento?.id;
-              const fotoPlanId = f.planejamentoId || f.mapaOverlay?.planejamentoId;
 
-              const pertenceAoAtendimento = Boolean(currentAtendId && fotoAtendId && String(fotoAtendId) === String(currentAtendId));
-              const pertenceAoPlano = Boolean(currentPlanId && fotoPlanId && String(fotoPlanId) === String(currentPlanId));
-
-              // Em atendimento avulso (sem plano), NUNCA vaza fotos de atendimentos passados
-              if (!currentPlanId) {
-                return pertenceAoAtendimento;
-              }
-
-              return Boolean(pertenceAoAtendimento || pertenceAoPlano);
+              // Puxa estritamente fotos de avaliação realizadas NESSA consulta (atendimento atual), sem puxar de outras
+              return Boolean(currentAtendId && fotoAtendId && String(fotoAtendId) === String(currentAtendId));
             })
             .map((f) => ({
               ...f,
@@ -2077,7 +2068,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
     return () => {
       cancel = true;
     };
-  }, [activeView, consultaModule, currentStep, pacienteAtual?.id, consultaServidor.atual?.id, planoContextoAvaliacao?.id]);
+  }, [activeView, consultaModule, currentStep, pacienteAtual?.id, consultaServidor.atual?.id]);
 
   const fotosAvaliacaoParaProcedimento = React.useMemo(() => {
     const daSessao = cameraState.evaluationCapturedPhotos || [];
@@ -2475,6 +2466,11 @@ function AppRefactoredInner({ onCanalAvisos }) {
       if (nomeAgenda) journeyState.setNomeProcedimento(nomeAgenda, { manterMarca: true });
       hidratarJourneyPlanejamentoCtx(options, { merge: true });
       if (wantsRetorno) {
+        if (Array.isArray(options.loteDaAgenda) && options.loteDaAgenda.length > 0) {
+          setProcedimentosLote(options.loteDaAgenda);
+          journeyState.setProcedimentosSessao(options.loteDaAgenda);
+          journeyState.setActiveProcedureIndex(0);
+        }
         journeyState.setAttendanceStartTime(inicioAoEntrarNaConsulta({
           retomadaNoMesmoDia: true,
           retorno: true,
@@ -4122,6 +4118,20 @@ function AppRefactoredInner({ onCanalAvisos }) {
           return;
         }
 
+        const rawItem =
+          journeyState.procedimentosSessao?.[0]?.planejamentoItemId ||
+          (journeyState.nomeProcedimentoCatalogoId ? resolvePlanejamentoItemId(journeyState.nomeProcedimentoCatalogoId) : null) ||
+          journeyState.planejamentoItemId ||
+          null;
+        const cleanPlanejamentoItemId = rawItem
+          ? String(rawItem).replace(/_retorno$/, '').trim()
+          : null;
+        const isPlanoRetorno = Boolean(
+          cleanPlanejamentoItemId ||
+          journeyState.journeyPlanejamentoCtx?.planoId ||
+          journeyState.procedimentosSessao?.[0]?.planejamentoItemId
+        );
+
         const snapshot = mapaRetornoState.getSnapshotForPersist();
         const hasMarkings = Object.values(snapshot.pontosPorVista || {}).some(
           (lista) => Array.isArray(lista) && lista.length > 0,
@@ -4148,20 +4158,12 @@ function AppRefactoredInner({ onCanalAvisos }) {
               null;
           }
 
-          const rawItem =
-            journeyState.procedimentosSessao?.[0]?.planejamentoItemId ||
-            (journeyState.nomeProcedimentoCatalogoId ? resolvePlanejamentoItemId(journeyState.nomeProcedimentoCatalogoId) : null) ||
-            journeyState.planejamentoItemId ||
-            null;
-          const cleanPlanejamentoItemId = rawItem
-            ? String(rawItem).replace(/_retorno$/, '').trim()
-            : null;
-
           let resultado;
           try {
             resultado = await persistirMapaAplicacao({
               pacienteId: paciente.id,
               roleUserId,
+              agendaId: sharedAgendaId,
               procedimentoFeitoId: listaPids[0],
               procedimentoFeitoIds: listaPids,
               catalogoProcedimentoSaudeId: catalogoId,
@@ -4189,6 +4191,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
         const ridOk = Boolean(ridUpload && /^[0-9a-f-]{36}$/i.test(String(ridUpload)));
         if (retornoResultadoPhotos.length > 0 && paciente?.id && ridOk) {
           const targetAgendaId = journeyState.agendaId || null;
+          const targetAgendaIdOk = targetAgendaId && /^[0-9a-f-]{36}$/i.test(String(targetAgendaId));
           await Promise.all(
             retornoResultadoPhotos.map(async (foto) => {
               try {
@@ -4205,11 +4208,18 @@ function AppRefactoredInner({ onCanalAvisos }) {
                 const uploadOpts = {
                   roleUserId: ridUpload,
                   procedimentoFeitoId: listaPids[0],
-                  legenda: formatGaleriaLegendaForUpload(GALERIA_CATEGORIA.DEPOIS, '', { isAvulso: true }),
+                  legenda: formatGaleriaLegendaForUpload(
+                    GALERIA_CATEGORIA.DEPOIS,
+                    'Resultado do retorno',
+                    { isAvulso: !isPlanoRetorno }
+                  ),
                   dataReferencia: hojeDaClinica(fusoClinica),
                   tipoFotoCodigo: 'DEPOIS',
                 };
-                if (targetAgendaId) uploadOpts.agendaId = targetAgendaId;
+                if (cleanPlanejamentoItemId) {
+                  uploadOpts.planejamentoItemId = cleanPlanejamentoItemId;
+                }
+                if (targetAgendaIdOk) uploadOpts.agendaId = String(targetAgendaId);
                 await pacientesGaleriaApi.upload(paciente.id, webp, uploadOpts);
                 return true;
               } catch (e) {

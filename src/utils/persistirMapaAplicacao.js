@@ -36,6 +36,7 @@ async function resolveCleanBlob(foto) {
 async function uploadModeloFoto({
   pacienteId,
   roleUserId,
+  agendaId,
   blob,
   vistaCodigo,
   procedimentoFeitoId,
@@ -64,6 +65,9 @@ async function uploadModeloFoto({
   if (roleUserId && /^[0-9a-f-]{36}$/i.test(String(roleUserId))) {
     opts.roleUserId = String(roleUserId);
   }
+  if (agendaId && /^[0-9a-f-]{36}$/i.test(String(agendaId))) {
+    opts.agendaId = String(agendaId);
+  }
   const res = await pacientesGaleriaApi.upload(pacienteId, file, opts);
   return (
     res?.id ??
@@ -81,6 +85,7 @@ async function uploadModeloFoto({
 export async function persistirMapaAplicacao({
   pacienteId,
   roleUserId,
+  agendaId,
   procedimentoFeitoId,
   procedimentoFeitoIds,
   catalogoProcedimentoSaudeId,
@@ -126,6 +131,7 @@ export async function persistirMapaAplicacao({
           const fid = await uploadModeloFoto({
             pacienteId,
             roleUserId,
+            agendaId,
             blob: cleanBlob,
             vistaCodigo,
             procedimentoFeitoId: mainPfId,

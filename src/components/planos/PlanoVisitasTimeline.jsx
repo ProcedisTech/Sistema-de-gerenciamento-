@@ -21,6 +21,7 @@ import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 import { PlanoFotoLightbox } from './PlanoFotoLightbox.jsx';
 import { PlanoItemCard } from './PlanoItemCard.jsx';
 import { isItemFinalizado } from '../../utils/planejamentoStatusUi.js';
+import { isSessaoRetorno } from '../../utils/planejamentoSessoes.js';
 
 function formatarTempoCadeira(minutos) {
   const m = Number(minutos) || 0;
@@ -57,6 +58,37 @@ function PlanoVisitaGaleria({
     const map = new Map();
     const isVisitaRetorno = Boolean(visita.isRetornoVisita);
 
+    const visitAgendaIds = new Set();
+    const visitPfIds = new Set();
+    (visita.itens || []).forEach((it) => {
+      if (it.agendaId) visitAgendaIds.add(String(it.agendaId).trim());
+      if (it.sessao?.agendaId) visitAgendaIds.add(String(it.sessao.agendaId).trim());
+      if (it.sessaoAtiva?.agendaId) visitAgendaIds.add(String(it.sessaoAtiva.agendaId).trim());
+      if (it.sessaoRealizada?.agendaId) visitAgendaIds.add(String(it.sessaoRealizada.agendaId).trim());
+      if (it.procedimentoFeitoId) visitPfIds.add(String(it.procedimentoFeitoId).trim());
+      if (it.sessao?.procedimentoFeitoId) visitPfIds.add(String(it.sessao.procedimentoFeitoId).trim());
+      if (it.sessaoAtiva?.procedimentoFeitoId) visitPfIds.add(String(it.sessaoAtiva.procedimentoFeitoId).trim());
+      if (it.sessaoRealizada?.procedimentoFeitoId) visitPfIds.add(String(it.sessaoRealizada.procedimentoFeitoId).trim());
+    });
+    if (visita.agendaId) visitAgendaIds.add(String(visita.agendaId).trim());
+
+    const matchesVisit = (f) => {
+      const fAgId = f.agendaId ? String(f.agendaId).trim() : null;
+      const fPfId = f.procedimentoFeitoId ? String(f.procedimentoFeitoId).trim() : null;
+      const fData = String(f.dataISO || f.dataReferencia || '').slice(0, 10);
+
+      if (fAgId && visitAgendaIds.size > 0) {
+        return visitAgendaIds.has(fAgId);
+      }
+      if (fPfId && visitPfIds.size > 0) {
+        return visitPfIds.has(fPfId);
+      }
+      if (fData && visita.data) {
+        return fData === visita.data;
+      }
+      return false;
+    };
+
     (visita.itens || []).forEach((it) => {
       const rawId = String(it.id || it.planejamentoItemId || it.tempId || '');
       const baseItemId = String(it.planejamentoItemId || it.id || '').replace(/_retorno$/, '');
@@ -65,23 +97,23 @@ function PlanoVisitaGaleria({
 
       const fotosDoItem = fotosPorPlanejamentoItemId[lookupKey] || [];
       fotosDoItem.forEach((f) => {
-        const fData = String(f.dataISO || f.dataReferencia || '').slice(0, 10);
-        if (fData && fData !== visita.data && !isVisitaRetorno && !isRetornoItem) return;
+        if (!matchesVisit(f)) return;
         const key = String(f.id || f.fotoId || f.url);
         if (!map.has(key)) map.set(key, f);
       });
     });
 
     (fotosDoPlano || []).forEach((f) => {
-      const fData = String(f.dataISO || f.dataReferencia || '').slice(0, 10);
       const isFotoAvaliacao =
         f.categoria === 'avaliacao' ||
         String(f.tipoFotoCodigo || '').toUpperCase() === 'AVALIACAO' ||
         Boolean(f.isAvaliacao);
 
-      const dataMatch = (fData && fData === visita.data) || (Boolean(visita.isAvaliacaoVisita) && isFotoAvaliacao);
+      const isDataOuAvaliacaoMatch =
+        matchesVisit(f) ||
+        (Boolean(visita.isAvaliacaoVisita) && isFotoAvaliacao);
 
-      if (dataMatch) {
+      if (isDataOuAvaliacaoMatch) {
         const fotoIsRetorno = Boolean(f.isRetorno);
         if (fotoIsRetorno === isVisitaRetorno) {
           // Se a foto já tiver um matchedItemId específico, só descarta se NÃO for foto de avaliação
@@ -100,14 +132,16 @@ function PlanoVisitaGaleria({
     });
 
     return Array.from(map.values());
-  }, [visita.itens, visita.data, visita.isRetornoVisita, visita.isAvaliacaoVisita, fotosPorPlanejamentoItemId, fotosDoPlano]);
+  }, [visita.itens, visita.data, visita.isRetornoVisita, visita.isAvaliacaoVisita, visita.agendaId, fotosPorPlanejamentoItemId, fotosDoPlano]);
 
   // Agrupamento estrito por categoria clínica em prateleiras horizontais separadas
   const categoriasOrganizadas = useMemo(() => {
+    const isVisitaRetorno = Boolean(visita.isRetornoVisita);
     const grupos = {
       antes: [],
       mapa: [],
       mapa_retorno: [],
+      pos_imediato: [],
       depois: [],
       avaliacao: [],
       outro: [],
@@ -122,9 +156,10 @@ function PlanoVisitaGaleria({
       const isAv = cat === 'avaliacao' || cod === 'AVALIACAO' || Boolean(f.isAvaliacao);
 
       if (isRetornoMapa) grupos.mapa_retorno.push(f);
-      else if (cat === 'antes') grupos.antes.push(f);
+      else if (cod === 'POS_IMEDIATO' || cat === 'pos_imediato' || leg.includes('[pos_imediato]') || leg.includes('[pos-imediato]')) grupos.pos_imediato.push(f);
       else if (cat === 'mapa' || cod === 'MAPA') grupos.mapa.push(f);
-      else if (cat === 'depois') grupos.depois.push(f);
+      else if (cat === 'depois' || cod === 'DEPOIS' || leg.includes('[depois]')) grupos.depois.push(f);
+      else if (cat === 'antes' || cod === 'ANTES' || leg.includes('[antes]')) grupos.antes.push(f);
       else if (isAv) grupos.avaliacao.push(f);
       else grupos.outro.push(f);
     });
@@ -143,10 +178,11 @@ function PlanoVisitaGaleria({
     }
 
     const ordem = [
-      { key: 'antes', label: 'Antes' },
+      { key: 'antes', label: isVisitaRetorno ? 'Antes (Retoque)' : 'Antes' },
       { key: 'mapa', label: 'Mapa de Aplicação' },
       { key: 'mapa_retorno', label: 'Mapa de Retorno' },
-      { key: 'depois', label: 'Depois' },
+      { key: 'pos_imediato', label: isVisitaRetorno ? 'Pós-Imediato (Retoque)' : 'Pós-Imediato' },
+      { key: 'depois', label: isVisitaRetorno ? 'Resultado do Retorno' : 'Depois' },
       { key: 'avaliacao', label: 'Avaliação' },
       { key: 'outro', label: 'Outros Registros' },
     ];
@@ -158,7 +194,7 @@ function PlanoVisitaGaleria({
         fotos: key === 'avaliacao' ? fotosAvaliacao : (grupos[key] || []),
       }))
       .filter((c) => c.fotos.length > 0);
-  }, [fotos]);
+  }, [fotos, visita.isRetornoVisita]);
 
   if (!fotos || fotos.length === 0) return null;
 
@@ -348,28 +384,48 @@ export function PlanoVisitasTimeline({
       }
 
       // VÍNCULO DE RETORNO DO PLANO (PADRÃO A: VISITA DEDICADA)
-      const sessaoRetorno = item.sessaoRetornoAtiva || item.sessaoRetornoRealizada;
       const basePlanejamentoItemId = String(item.planejamentoItemId || item.id || '').replace(/_retorno$/, '').trim();
-      let retornoDataIso = sessaoRetorno?.dataAgendamento;
+      let sessoesRetorno = (Array.isArray(item.sessoes) && item.sessoes.length > 0)
+        ? item.sessoes.filter(isSessaoRetorno)
+        : [];
 
-      // Se retornoDataIso for vazio mas houver fotos em fotosPorPlanejamentoItemId[`${basePlanejamentoItemId}_retorno`], sintetiza a visita usando a data da primeira foto
-      if (!retornoDataIso) {
-        const fotosRetorno = fotosPorPlanejamentoItemId[`${basePlanejamentoItemId}_retorno`];
-        if (Array.isArray(fotosRetorno) && fotosRetorno.length > 0) {
-          retornoDataIso = String(fotosRetorno[0].dataISO || fotosRetorno[0].dataReferencia || '').slice(0, 10);
+      if (sessoesRetorno.length === 0) {
+        const fallback = [item.sessaoRetornoAtiva, item.sessaoRetornoRealizada].filter(Boolean);
+        if (fallback.length > 0) {
+          sessoesRetorno = fallback;
         }
       }
 
-      if (retornoDataIso) {
+      // Se ainda não tiver sessão de retorno, mas houver fotos de retorno em fotosPorPlanejamentoItemId, sintetiza
+      if (sessoesRetorno.length === 0) {
+        const fotosRetorno = fotosPorPlanejamentoItemId[`${basePlanejamentoItemId}_retorno`];
+        if (Array.isArray(fotosRetorno) && fotosRetorno.length > 0) {
+          const retornoDataIso = String(fotosRetorno[0].dataISO || fotosRetorno[0].dataReferencia || '').slice(0, 10);
+          if (retornoDataIso) {
+            sessoesRetorno = [{
+              dataAgendamento: retornoDataIso,
+              horaInicio: fotosRetorno[0].registradoEm ? String(fotosRetorno[0].registradoEm).slice(11, 16) : null,
+              statusCodigo: 'realizado',
+              isSynthetic: true,
+            }];
+          }
+        }
+      }
+
+      sessoesRetorno.forEach((sessaoRetorno, sIdx) => {
+        const retornoDataIso = sessaoRetorno?.dataAgendamento;
+        if (!retornoDataIso) return;
         const retornoKey = String(retornoDataIso).slice(0, 10);
-        const isRetornoRealizado = Boolean(item.sessaoRetornoRealizada) ||
-          String(sessaoRetorno?.statusCodigo).toLowerCase() === 'realizado';
+        const isRetornoRealizado =
+          String(sessaoRetorno?.statusCodigo).toLowerCase() === 'realizado' ||
+          Boolean(sessaoRetorno?.dataRealizacao) ||
+          Boolean(sessaoRetorno?.horaRealizacao) ||
+          sessaoRetorno === item.sessaoRetornoRealizada;
         const isPaiRealizado = isItemFinalizado(item.statusItem ?? item.statusItemNome);
 
-        const basePlanejamentoItemId = String(item.planejamentoItemId || item.id || '').replace(/_retorno$/, '').trim();
         const retornoItem = {
           ...item,
-          id: `${basePlanejamentoItemId}_retorno`,
+          id: `${basePlanejamentoItemId}_retorno${sIdx > 0 ? `_${sIdx}` : ''}`,
           planejamentoItemId: basePlanejamentoItemId,
           catalogoNome: `Retorno Clínico · ${item.catalogoNome || 'Procedimento'}`,
           isRetorno: true,
@@ -383,9 +439,10 @@ export function PlanoVisitasTimeline({
           sessaoRealizada: isRetornoRealizado ? sessaoRetorno : null,
           sessaoRetornoAtiva: null,
           sessaoRetornoRealizada: null,
+          agendaId: sessaoRetorno?.agendaId || item.agendaId || null,
           procedimentoFeitoId:
             sessaoRetorno?.procedimentoFeitoId ||
-            item.sessaoRetornoRealizada?.procedimentoFeitoId ||
+            (isRetornoRealizado ? item.sessaoRetornoRealizada?.procedimentoFeitoId : null) ||
             null,
           procedimentoFeitoOrigemId:
             sessaoRetorno?.procedimentoFeitoOrigemId ||
@@ -407,16 +464,32 @@ export function PlanoVisitasTimeline({
           planoTitulo: plano?.titulo || plano?.nome || 'Plano de Tratamento',
         };
 
-        if (!gruposPorData.has(retornoKey)) {
-          gruposPorData.set(retornoKey, {
+        const retSessionKey = sessaoRetorno?.agendaId
+          ? `ag_${sessaoRetorno.agendaId}`
+          : 'dia';
+        const groupKey = `${retornoKey}_ret_${retSessionKey}`;
+
+        if (!gruposPorData.has(groupKey)) {
+          gruposPorData.set(groupKey, {
+            key: groupKey,
             data: retornoKey,
             dataHoraInicio: sessaoRetorno.horaInicio || null,
             isRetornoVisita: true,
+            agendaId: sessaoRetorno?.agendaId || null,
             itens: [],
           });
         }
-        gruposPorData.get(retornoKey).itens.push(retornoItem);
-      }
+        const visitGroup = gruposPorData.get(groupKey);
+        if (!visitGroup.dataHoraInicio && sessaoRetorno.horaInicio) {
+          visitGroup.dataHoraInicio = sessaoRetorno.horaInicio;
+        } else if (visitGroup.dataHoraInicio && sessaoRetorno.horaInicio && sessaoRetorno.horaInicio < visitGroup.dataHoraInicio) {
+          visitGroup.dataHoraInicio = sessaoRetorno.horaInicio;
+        }
+        if (!visitGroup.agendaId && sessaoRetorno?.agendaId) {
+          visitGroup.agendaId = sessaoRetorno.agendaId;
+        }
+        visitGroup.itens.push(retornoItem);
+      });
     });
 
     // SÍNTESE DA VISITA DE AVALIAÇÃO CLÍNICA (quando há fotos/mapas de avaliação vinculados ao plano)
@@ -461,7 +534,11 @@ export function PlanoVisitasTimeline({
       }
     }
 
-    const visitas = Array.from(gruposPorData.values()).sort((a, b) => a.data.localeCompare(b.data));
+    const visitas = Array.from(gruposPorData.values()).sort((a, b) => {
+      const cmp = a.data.localeCompare(b.data);
+      if (cmp !== 0) return cmp;
+      return String(a.dataHoraInicio || '').localeCompare(String(b.dataHoraInicio || ''));
+    });
     return { poolSemData: semData, visitasAgrupadas: visitas };
   }, [itens, fotosDoPlano, fotosPorPlanejamentoItemId, plano, fuso, hojeIso]);
 
@@ -579,7 +656,7 @@ export function PlanoVisitasTimeline({
                   }));
 
               return (
-                <div key={visita.data} className="relative">
+                <div key={visita.key || `${visita.data}_${idx}`} className="relative">
                   <span
                     className={`absolute -left-[21.5px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-white shadow-2xs ${
                       todosFinalizados ? 'bg-emerald-500' : 'bg-[#00a88e]'
@@ -631,6 +708,12 @@ export function PlanoVisitasTimeline({
                           }
                           return null;
                         })()}
+
+                        {visita.itens.length > 1 && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                            {visita.itens.length} procedimentos
+                          </span>
+                        )}
 
                         <span
                           className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${

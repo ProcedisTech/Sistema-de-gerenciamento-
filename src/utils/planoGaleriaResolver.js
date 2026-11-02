@@ -197,8 +197,12 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
   const fotosAvulsas = [];
 
   fotos.forEach((foto) => {
-    // 0. BLINDAGEM ESTREITA: Se for explicitamente avulsa, NUNCA vincula a nenhum plano!
-    if (foto.isAvulso) {
+    // 0. BLINDAGEM ESTREITA: Se for explicitamente avulsa, NUNCA vincula a nenhum plano,
+    // exceto se tiver vínculo DIRETO de procedimento do plano (procedimentoFeitoId ou planejamentoItemId).
+    const hasDirectPlanoProc = foto.procedimentoFeitoId && procedimentoFeitoToPlanoItemMap.has(String(foto.procedimentoFeitoId).trim());
+    const hasDirectPlanoItem = foto.planejamentoItemId && itemToPlanoMap.has(String(foto.planejamentoItemId).replace(/_retorno$/, '').trim());
+
+    if (foto.isAvulso && !hasDirectPlanoProc && !hasDirectPlanoItem) {
       fotosAvulsas.push({
         ...foto,
         matchedItemId: null,
