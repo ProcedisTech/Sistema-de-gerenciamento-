@@ -1126,23 +1126,25 @@ export function useAtendimentoServidor({
     });
     enfileirarAlteracoes(fila, alterar);
     const ehRetorno = String(at?.tipoProcedimentoCodigo || '').toLowerCase() === 'retorno';
-    if (!ehRetorno) {
-      for (const novo of itens.criar) {
-        const corpo = { catalogoProcedimentoSaudeId: novo.catalogoProcedimentoSaudeId, nomeLivre: novo.nomeLivre };
-        if (novo.planejamentoItemId) {
-          corpo.planejamentoItemId = novo.planejamentoItemId;
-        }
-        fila.enfileirar({
-          chave: `item:novo:${novo.indice}`,
-          grupo: 'item:novo',
-          tipo: 'itemNovo',
-          dados: {
-            indice: novo.indice,
-            corpo,
-          },
-          debounceMs: DEBOUNCE_TEXTO_MS,
-        });
+    for (const novo of itens.criar) {
+      let catId = novo.catalogoProcedimentoSaudeId || null;
+      if (ehRetorno && at?.procedimentoFeitoOrigemId && String(catId) === String(at.procedimentoFeitoOrigemId)) {
+        catId = null;
       }
+      const corpo = { catalogoProcedimentoSaudeId: catId, nomeLivre: novo.nomeLivre };
+      if (novo.planejamentoItemId) {
+        corpo.planejamentoItemId = novo.planejamentoItemId;
+      }
+      fila.enfileirar({
+        chave: `item:novo:${novo.indice}`,
+        grupo: 'item:novo',
+        tipo: 'itemNovo',
+        dados: {
+          indice: novo.indice,
+          corpo,
+        },
+        debounceMs: DEBOUNCE_TEXTO_MS,
+      });
     }
   }, [emConsulta, atualId, versaoBase, procedimentosSessao, enfileirarAlteracoes]);
 
@@ -1502,7 +1504,7 @@ export function useAtendimentoServidor({
     try {
       if (indiceItemAtivo != null) {
         const mapa = mapearItensDaSessao(valoresRef.current.procedimentosSessao, atualRef.current?.itens);
-        corpo.itemAtivoId = mapa[indiceItemAtivo] ?? null;
+        corpo.itemAtivoId = mapa[indiceItemAtivo] ?? (atualRef.current?.itens?.length === 1 ? atualRef.current.itens[0]?.id : null);
       }
       const abaId = abaRef.current.idDaAba?.() ?? null;
       const resultado = abaId

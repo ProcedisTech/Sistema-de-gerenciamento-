@@ -58,7 +58,6 @@ import { AguardandoPacienteModal } from '../assinaturas/AguardandoPacienteModal.
 import { useOrg } from '../../contexts/OrgContext.jsx';
 import { generateTermoPdf } from '../../utils/pdfGenerator';
 import { criarItemProcedimentoSessao } from '../../utils/procedimentoSessaoFactory.js';
-import { isRealUuid } from '../../utils/planejamentoDraftUtils.js';
 import { PlanoFotoLightbox } from '../planos/PlanoFotoLightbox.jsx';
 import { GaleriaMapaThumb } from '../patients/galeria/GaleriaMapaThumb.jsx';
 import { GaleriaArquivoImage } from '../patients/GaleriaArquivoImage.jsx';
@@ -2309,7 +2308,7 @@ export function Step4Procedimento({
   }, [journeyPlanejamentoCtx, procedimentosSessao, procedimentoSearchOptions]);
 
   const handleAdicionarItemDoPlano = React.useCallback(async (itemPlano) => {
-    const safeCatId = itemPlano.catalogoProcedimentoSaudeId && isRealUuid(itemPlano.catalogoProcedimentoSaudeId)
+    const safeCatId = itemPlano.catalogoProcedimentoSaudeId
       ? String(itemPlano.catalogoProcedimentoSaudeId)
       : null;
     const jaExiste = (procedimentosSessao || []).some(
@@ -2400,7 +2399,9 @@ export function Step4Procedimento({
     }
 
     // Interceptor: se o item está pendente no plano de tratamento ativo, abrir modal de decisão
-    const itemNoPlano = itensPlanoPendentes.find((it) => String(it.id) === procId);
+    const itemNoPlano = itensPlanoPendentes.find(
+      (it) => String(it.catalogoProcedimentoSaudeId || it.catalogoId || it.id) === procId,
+    );
     if (itemNoPlano) {
       setModalDecisaoPlano({
         open: true,

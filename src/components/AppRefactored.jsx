@@ -4192,42 +4192,52 @@ function AppRefactoredInner({ onCanalAvisos }) {
         if (retornoResultadoPhotos.length > 0 && paciente?.id && ridOk) {
           const targetAgendaId = journeyState.agendaId || null;
           const targetAgendaIdOk = targetAgendaId && /^[0-9a-f-]{36}$/i.test(String(targetAgendaId));
-          await Promise.all(
-            retornoResultadoPhotos.map(async (foto) => {
-              try {
-                let fileToUpload = foto.cleanBlob || foto.blob;
-                if (!fileToUpload && (foto.cleanUrl || foto.url)) {
-                  const resp = await fetch(foto.cleanUrl || foto.url);
-                  const blob = await resp.blob();
-                  fileToUpload = new File([blob], 'foto-resultado-retorno.jpg', {
-                    type: blob.type || 'image/jpeg',
-                  });
-                }
-                if (!fileToUpload) return false;
-                const webp = await convertToWebP(fileToUpload, 0.85, 1920);
-                const uploadOpts = {
-                  roleUserId: ridUpload,
-                  procedimentoFeitoId: listaPids[0],
-                  legenda: formatGaleriaLegendaForUpload(
-                    GALERIA_CATEGORIA.DEPOIS,
-                    'Resultado do retorno',
-                    { isAvulso: !isPlanoRetorno }
-                  ),
-                  dataReferencia: hojeDaClinica(fusoClinica),
-                  tipoFotoCodigo: 'DEPOIS',
-                };
-                if (cleanPlanejamentoItemId) {
-                  uploadOpts.planejamentoItemId = cleanPlanejamentoItemId;
-                }
-                if (targetAgendaIdOk) uploadOpts.agendaId = String(targetAgendaId);
-                await pacientesGaleriaApi.upload(paciente.id, webp, uploadOpts);
-                return true;
-              } catch (e) {
-                console.error('Falha no upload da foto do resultado do retorno:', e);
-                return false;
+          const uploads = retornoResultadoPhotos.map(async (foto) => {
+            try {
+              let fileToUpload = foto.cleanBlob || foto.blob;
+              if (!fileToUpload && (foto.cleanUrl || foto.url)) {
+                const resp = await fetch(foto.cleanUrl || foto.url);
+                const blob = await resp.blob();
+                fileToUpload = new File([blob], 'foto-resultado-retorno.jpg', {
+                  type: blob.type || 'image/jpeg',
+                });
               }
-            })
+              if (!fileToUpload) return false;
+              const webp = await convertToWebP(fileToUpload, 0.85, 1920);
+              const uploadOpts = {
+                roleUserId: ridUpload,
+                procedimentoFeitoId: listaPids[0],
+                legenda: formatGaleriaLegendaForUpload(
+                  GALERIA_CATEGORIA.DEPOIS,
+                  'Resultado do retorno',
+                  { isAvulso: !isPlanoRetorno }
+                ),
+                dataReferencia: hojeDaClinica(fusoClinica),
+                tipoFotoCodigo: 'DEPOIS',
+              };
+              if (cleanPlanejamentoItemId) {
+                uploadOpts.planejamentoItemId = cleanPlanejamentoItemId;
+              }
+              if (targetAgendaIdOk) uploadOpts.agendaId = String(targetAgendaId);
+              await pacientesGaleriaApi.upload(paciente.id, webp, uploadOpts);
+              return true;
+            } catch (e) {
+              console.error('Falha no upload da foto do resultado do retorno:', e);
+              return false;
+            }
+          });
+          const results = await Promise.allSettled(uploads);
+          const sentPhotos = new Set(
+            retornoResultadoPhotos.filter((_, idx) => results[idx].status === 'fulfilled' && results[idx].value === true)
           );
+          const attempted = results.length;
+          const succeeded = sentPhotos.size;
+          if (succeeded > 0) {
+            setRetornoResultadoPhotos((prev) => (prev || []).filter((p) => !sentPhotos.has(p)));
+          }
+          if (succeeded < attempted) {
+            toast.error(textoDasFotosNaoEnviadas(attempted - succeeded, 'resultado'));
+          }
         }
         await uploadProcedureCapturedPhotos(
           paciente,
@@ -4705,13 +4715,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
 
       if (decision === 'finalizar') {
         try {
-          const isRetornoConsulta =
-            consultaModule === 'retorno' ||
-            Boolean(journeyState.isAgendaRetorno) ||
-            journeyState.tipoAtendimento === 'retorno' ||
-            Boolean(journeyState.procedimentoFeitoOrigemId);
-
-          if (isRetornoConsulta) {
+          if (consultaModule === 'retorno') {
             await handleConcluirRetorno();
           } else {
             await encerrarAtendimento({ pularGateTermos: true });
