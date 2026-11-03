@@ -45,7 +45,7 @@ export function PlanoItemCard({
   onReagendarItem,
   onIniciarAtendimento,
   onDarBaixa: _onDarBaixa,
-  onEdit: _onEdit,
+  onEdit,
   onRemover,
   entranceDelayMs,
   selecionavel = false,
@@ -547,6 +547,23 @@ export function PlanoItemCard({
                 >
                   <Zap className="w-3.5 h-3.5 shrink-0" strokeWidth={2.4} />
                   <span>{item.isRetorno ? 'Iniciar Retorno' : 'Iniciar'}</span>
+                </button>
+              )}
+
+              {/* EDITAR PROCEDIMENTO DO PLANO */}
+              {canCrud && onEdit && (
+                <button
+                  type="button"
+                  disabled={mutating}
+                  title="Editar procedimento e valor"
+                  aria-label="Editar procedimento e valor"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit?.(item);
+                  }}
+                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl border border-slate-200 bg-white text-slate-500 flex items-center justify-center hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700 active:scale-95 shadow-2xs transition-all shrink-0 select-none"
+                >
+                  <Pencil className="w-4 h-4" strokeWidth={2} />
                 </button>
               )}
 

@@ -13,7 +13,7 @@ import { PREFIXO_AVISO } from '../../services/avisos/tiposAviso.js';
 const MODULE_CARDS = [
   { id: 'anamnese', label: 'Anamnese', description: 'Ficha e histórico clínico', icon: FileText },
   { id: 'avaliacao', label: 'Avaliação', description: 'Fotos e desenho sobre as imagens', icon: Eye },
-  { id: 'planejamento', label: 'Planejamento', description: 'Planos de tratamento e procedimentos', icon: BookOpen },
+  { id: 'planejamento', label: 'Plano de Tratamento', description: 'Planos de tratamento e procedimentos', icon: BookOpen },
   { id: 'termos', label: 'Termos', description: 'Consentimentos e assinaturas', icon: ClipboardList },
   { id: 'procedimento', label: 'Procedimento', description: 'Registro, fotos e finalização', icon: Syringe },
   {
@@ -248,6 +248,7 @@ export function ConsultaHub({
               key={card.id}
               type="button"
               disabled={!allowed}
+              aria-label={card.id === 'planejamento' ? 'Planejamento — Plano de Tratamento' : undefined}
               onClick={() => {
                 if (!allowed) return;
                 if (card.id === 'retorno-avulso') {
