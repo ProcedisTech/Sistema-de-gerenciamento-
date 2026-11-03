@@ -81,6 +81,13 @@ window.addEventListener('unhandledrejection', (event) => {
   renderFatalBootError(reason);
 });
 
+// Previne inconsistências do bfcache no iOS restaurando páginas em estado quebrado
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) {
+    window.location.reload();
+  }
+});
+
 try {
   if (!rootEl) {
     throw new Error('Elemento #root nao encontrado em index.html')

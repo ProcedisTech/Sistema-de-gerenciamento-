@@ -31,10 +31,10 @@ export function AssistiveTouchToolbar({
   onUndo,
   canUndo = false,
   activeCor = '#06b6d4',
-  activeProc = null,
+  activeProc: _activeProc = null,
   procedimentos = [],
   onMudarCor,
-  onArmar,
+  onArmar: _onArmar,
   containerRef,
   isOpenExternal = undefined,
   onCloseExternal,
@@ -226,13 +226,6 @@ export function AssistiveTouchToolbar({
 
   const handleSelectCor = (corHex, procOwner, e) => {
     e.stopPropagation();
-    if (procOwner && activeProc && String(procOwner.id) !== String(activeProc.id)) {
-      if (onArmar) {
-        onArmar(procOwner);
-        setIsColorPickerOpen(false);
-        return;
-      }
-    }
     onMudarCor?.(corHex);
     setIsColorPickerOpen(false);
     // Cápsula permanece aberta!
@@ -318,7 +311,11 @@ export function AssistiveTouchToolbar({
                         <button
                           key={c}
                           type="button"
-                          title={isEmUso ? `Em uso por: ${procOwner.nome}` : 'Cor livre'}
+                          title={
+                            isEmUso
+                              ? `Em uso por: ${procOwner.nome} (clique para inverter)`
+                              : 'Cor livre'
+                          }
                           onClick={(e) => handleSelectCor(c, procOwner, e)}
                           className={`flex h-6 w-6 items-center justify-center rounded-full border transition-transform hover:scale-120 cursor-pointer ${
                             isAtiva

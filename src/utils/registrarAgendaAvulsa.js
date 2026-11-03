@@ -12,6 +12,12 @@ function addMinutesToHHMM(hhmm, minutesToAdd) {
   return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
 }
 
+/** Converte horário HH:MM para minutos desde meia-noite. */
+function toMinutes(hhmm) {
+  const [h, m] = String(hhmm || '00:00').split(':').map(Number);
+  return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
+}
+
 /** Dedução do tipo de atendimento avulso. Hierarquia: Retorno -> Procedimento -> Consulta */
 export function deduzirTipoAtendimentoAvulso(journeyState, novosIdsValidos = []) {
   if (journeyState?.tipoAtendimento === 'retorno' || journeyState?.isAgendaRetorno) {
@@ -113,11 +119,19 @@ export async function registrarAgendaAvulsa({
       startHh = inicio.hhmm;
     }
 
-    // Se início == fim (ex: clicou em encerrar no mesmo minuto), define piso de 1 minuto
     let finalEndHh = endHh;
-    if (startHh === endHh) {
-      if (startHh === '23:59') startHh = '23:58';
-      finalEndHh = addMinutesToHHMM(startHh, 1);
+    const startMin = toMinutes(startHh);
+    const endMin = toMinutes(endHh);
+
+    // Garante que horaFim seja estritamente posterior a horaInicio no mesmo dia (piso de 1 minuto).
+    // Previne HTTP 400 em encerramentos rápidos ou desvios de relógio entre cliente e servidor (startMin >= endMin).
+    if (endMin <= startMin) {
+      if (startMin >= 1439) {
+        startHh = '23:58';
+        finalEndHh = '23:59';
+      } else {
+        finalEndHh = addMinutesToHHMM(startHh, 1);
+      }
     }
 
     const deduzido = deduzirTipoAtendimentoAvulso(journeyState, novosIdsValidos);

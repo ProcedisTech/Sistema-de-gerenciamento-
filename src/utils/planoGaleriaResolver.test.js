@@ -608,5 +608,144 @@ describe('planoGaleriaResolver - Separação estrita de fotos entre Pai e Retorn
     expect(card.fotos).toHaveLength(1);
     expect(card.fotos[0].id).toBe('foto-procedimento-1');
   });
+
+  it('gera card independente para retorno avulso com status RETORNO e vincula ao procedimento pai avulso', () => {
+    const procedimentosFeitos = [
+      {
+        id: 'pf-pai-avulso',
+        procedimentoNome: 'Drenagem de Abscesso',
+        planejamentoItemId: null,
+        criadoEm: '2026-10-24T14:00:00Z',
+        isRetoque: false,
+        procedimentoFeitoOrigemId: null,
+      },
+      {
+        id: 'pf-retorno-avulso',
+        procedimentoNome: 'Drenagem de Abscesso',
+        planejamentoItemId: null,
+        criadoEm: '2026-10-30T10:00:00Z',
+        isRetoque: true,
+        procedimentoFeitoOrigemId: 'pf-pai-avulso',
+        tipoProcedimentoCodigo: 'retorno',
+      },
+    ];
+
+    const fotosBrutas = [
+      {
+        id: 'foto-pai',
+        categoria: 'antes',
+        procedimentoFeitoId: 'pf-pai-avulso',
+      },
+      {
+        id: 'foto-retorno',
+        categoria: 'mapa_retorno',
+        procedimentoFeitoId: 'pf-retorno-avulso',
+      },
+    ];
+
+    const resultado = resolverFotosEPlanos([], fotosBrutas, procedimentosFeitos);
+
+    expect(resultado.atendimentosAvulsos).toHaveLength(2);
+
+    const cardRetorno = resultado.atendimentosAvulsos.find((at) => at.isRetorno);
+    expect(cardRetorno).toBeDefined();
+    expect(cardRetorno.nomeProcedimento).toBe('Retorno · Drenagem de Abscesso');
+    expect(cardRetorno.statusNome).toBe('RETORNO');
+    expect(cardRetorno.procedimentoFeitoOrigemId).toBe('pf-pai-avulso');
+    expect(cardRetorno.fotos).toHaveLength(1);
+    expect(cardRetorno.fotos[0].id).toBe('foto-retorno');
+
+    const cardPai = resultado.atendimentosAvulsos.find((at) => !at.isRetorno);
+    expect(cardPai).toBeDefined();
+    expect(cardPai.nomeProcedimento).toBe('Drenagem de Abscesso');
+    expect(cardPai.retornosCount).toBe(1);
+    expect(cardPai.retornos[0].id).toBe('pf-retorno-avulso');
+    expect(cardPai.fotos).toHaveLength(1);
+    expect(cardPai.fotos[0].id).toBe('foto-pai');
+  });
+
+  it('unifica múltiplos procedimentos de retorno da mesma consulta em 1 card composto e deduplica fotos', () => {
+    const procedimentosFeitos = [
+      {
+        id: 'pf-pai-1',
+        procedimentoNome: 'Biópsia de Pele',
+        planejamentoItemId: null,
+        criadoEm: '2026-10-24T14:00:00Z',
+      },
+      {
+        id: 'pf-pai-2',
+        procedimentoNome: 'Drenagem de Abscesso',
+        planejamentoItemId: null,
+        criadoEm: '2026-10-24T14:30:00Z',
+      },
+      {
+        id: 'pf-retorno-1',
+        procedimentoNome: 'Biópsia de Pele',
+        planejamentoItemId: null,
+        atendimentoId: 'at-consulta-retorno-999',
+        agendaId: 'ag-slot-1',
+        criadoEm: '2026-10-30T19:47:00Z',
+        isRetoque: true,
+        procedimentoFeitoOrigemId: 'pf-pai-1',
+        tipoProcedimentoCodigo: 'retorno',
+      },
+      {
+        id: 'pf-retorno-2',
+        procedimentoNome: 'Drenagem de Abscesso',
+        planejamentoItemId: null,
+        atendimentoId: 'at-consulta-retorno-999',
+        agendaId: 'ag-slot-2',
+        criadoEm: '2026-10-30T19:47:05Z',
+        isRetoque: true,
+        procedimentoFeitoOrigemId: 'pf-pai-2',
+        tipoProcedimentoCodigo: 'retorno',
+      },
+    ];
+
+    const fotosBrutas = [
+      {
+        id: 'foto-1',
+        categoria: 'antes',
+        procedimentoFeitoId: 'pf-retorno-1',
+        atendimentoId: 'at-consulta-retorno-999',
+        url: 'https://exemplo.com/foto1.jpg',
+      },
+      {
+        id: 'foto-1-duplicada',
+        categoria: 'antes',
+        procedimentoFeitoId: 'pf-retorno-2',
+        atendimentoId: 'at-consulta-retorno-999',
+        url: 'https://exemplo.com/foto1.jpg',
+      },
+      {
+        id: 'foto-mapa',
+        categoria: 'mapa_retorno',
+        procedimentoFeitoId: 'pf-retorno-1',
+        atendimentoId: 'at-consulta-retorno-999',
+        url: 'https://exemplo.com/mapa.jpg',
+      },
+    ];
+
+    const resultado = resolverFotosEPlanos([], fotosBrutas, procedimentosFeitos);
+
+    expect(resultado.atendimentosAvulsos).toHaveLength(3);
+
+    const cardRetorno = resultado.atendimentosAvulsos.find((at) => at.isRetorno);
+    expect(cardRetorno).toBeDefined();
+    expect(cardRetorno.atendimentoId).toBe('at-consulta-retorno-999');
+    expect(cardRetorno.nomeProcedimento).toBe('Retorno · Biópsia de Pele + Drenagem de Abscesso');
+    expect(cardRetorno.statusNome).toBe('RETORNO');
+    expect(cardRetorno.procedimentosFeitosIds).toEqual(['pf-retorno-1', 'pf-retorno-2']);
+
+    expect(cardRetorno.fotos).toHaveLength(2);
+    expect(cardRetorno.fotos.map((f) => f.id)).toEqual(['foto-1', 'foto-mapa']);
+
+    const cardPai1 = resultado.atendimentosAvulsos.find((at) => at.procedimentoFeitoId === 'pf-pai-1');
+    const cardPai2 = resultado.atendimentosAvulsos.find((at) => at.procedimentoFeitoId === 'pf-pai-2');
+    expect(cardPai1.retornosCount).toBe(1);
+    expect(cardPai1.retornos[0].id).toBe('pf-retorno-1');
+    expect(cardPai2.retornosCount).toBe(1);
+    expect(cardPai2.retornos[0].id).toBe('pf-retorno-2');
+  });
 });
 

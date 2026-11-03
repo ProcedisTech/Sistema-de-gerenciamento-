@@ -1,10 +1,11 @@
-export const ORDEM_CATEGORIAS = ['antes', 'planejamento', 'avaliacao', 'mapa', 'depois', 'outro'];
+export const ORDEM_CATEGORIAS = ['antes', 'planejamento', 'avaliacao', 'mapa', 'pos_imediato', 'depois', 'outro'];
 
 export const GALERIA_CATEGORIA_BADGE_CLASS = {
   antes: 'bg-[#fffbeb] text-[#b45309] border-[#fcd34d]/60',
   planejamento: 'bg-[#eef2ff] text-[#4338ca] border-[#c7d2fe]/60',
   avaliacao: 'bg-[#f0f9ff] text-[#0369a1] border-[#bae6fd]/60',
   mapa: 'bg-[#faf5ff] text-[#7e22ce] border-[#e9d5ff]/60',
+  pos_imediato: 'bg-[#ecfdf5] text-[#047857] border-[#a7f3d0]/60',
   depois: 'bg-[#f0fdf4] text-[#15803d] border-[#bbf7d0]/60',
   outro: 'bg-[#f8fafc] text-[#64748b] border-[#e2e8f0]',
 };

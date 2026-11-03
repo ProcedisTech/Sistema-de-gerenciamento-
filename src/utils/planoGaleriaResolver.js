@@ -25,7 +25,8 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
     if (!cat || cat === 'outro') {
       const code = String(f.tipoFotoCodigo || f.tipo_foto_codigo || '').toUpperCase();
       if (code === 'ANTES') cat = 'antes';
-      else if (code === 'DEPOIS' || code === 'POS_IMEDIATO') cat = 'depois';
+      else if (code === 'POS_IMEDIATO') cat = 'pos_imediato';
+      else if (code === 'DEPOIS') cat = 'depois';
       else if (code === 'MAPA') cat = 'mapa';
       else if (code === 'AVALIACAO') cat = 'avaliacao';
       else if (code === 'PLANEJAMENTO') cat = 'planejamento';
@@ -196,8 +197,12 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
   const fotosAvulsas = [];
 
   fotos.forEach((foto) => {
-    // 0. BLINDAGEM ESTREITA: Se for explicitamente avulsa, NUNCA vincula a nenhum plano!
-    if (foto.isAvulso) {
+    // 0. BLINDAGEM ESTREITA: Se for explicitamente avulsa, NUNCA vincula a nenhum plano,
+    // exceto se tiver vínculo DIRETO de procedimento do plano (procedimentoFeitoId ou planejamentoItemId).
+    const hasDirectPlanoProc = foto.procedimentoFeitoId && procedimentoFeitoToPlanoItemMap.has(String(foto.procedimentoFeitoId).trim());
+    const hasDirectPlanoItem = foto.planejamentoItemId && itemToPlanoMap.has(String(foto.planejamentoItemId).replace(/_retorno$/, '').trim());
+
+    if (foto.isAvulso && !hasDirectPlanoProc && !hasDirectPlanoItem) {
       fotosAvulsas.push({
         ...foto,
         matchedItemId: null,
@@ -314,6 +319,13 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
 
   // Mapear atendimentos avulsos a partir de procedimentosFeitos (que NÃO pertencem a nenhum plano)
   const atendimentosAvulsosMap = new Map();
+  const procedimentoNomeByIdMap = new Map();
+  (procedimentosFeitos || []).forEach((p) => {
+    const id = String(p.id || p.procedimentoFeitoId || '').trim();
+    if (id) {
+      procedimentoNomeByIdMap.set(id, p.procedimentoNome || p.nome || 'Procedimento');
+    }
+  });
 
   (procedimentosFeitos || []).forEach((proc) => {
     const pfId = String(proc.id || '').trim();
@@ -325,14 +337,27 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
       const dataISO = diaDoInstante(proc.criadoEm, fuso) || (proc.criadoEm ? String(proc.criadoEm).slice(0, 10) : 'sem-data');
       const horaInicio = proc.criadoEm ? String(proc.criadoEm).slice(11, 16) : (proc.horaInicio ? String(proc.horaInicio).slice(11, 16) : null);
       const atId = proc.atendimentoId || proc.atendimento?.id || null;
-      const sessaoChave = atId ? `at_${atId}` : (horaInicio ? `sessao_${dataISO}_${horaInicio}` : null);
-      const chave = agId ? `ag_${agId}` : (sessaoChave || `pf_${pfId}`);
-      const nomeAtual = proc.procedimentoNome || proc.nome || 'Procedimento Avulso';
+      const sessaoChave = atId ? ('at_' + atId) : (horaInicio ? ('sessao_' + dataISO + '_' + horaInicio) : null);
+      const chave = atId ? ('at_' + atId) : (agId ? ('ag_' + agId) : (sessaoChave || ('pf_' + pfId)));
+
+      const isRetorno = Boolean(
+        proc.isRetoque ||
+        proc.procedimentoFeitoOrigemId ||
+        String(proc.tipoProcedimentoCodigo || '').toLowerCase() === 'retorno'
+      );
+      const paiId = proc.procedimentoFeitoOrigemId ? String(proc.procedimentoFeitoOrigemId).trim() : null;
+      const nomePai = paiId ? procedimentoNomeByIdMap.get(paiId) : null;
+      const nomeBase = proc.procedimentoNome || proc.nome || (nomePai ? nomePai : 'Procedimento Avulso');
+      const nomeAtual = isRetorno ? (nomePai ? ('Retorno · ' + nomePai) : ('Retorno · ' + nomeBase)) : nomeBase;
 
       if (atendimentosAvulsosMap.has(chave)) {
         const existente = atendimentosAvulsosMap.get(chave);
         if (atId && !existente.atendimentoId) {
           existente.atendimentoId = atId;
+        }
+        if (isRetorno) {
+          existente.isRetorno = true;
+          existente.statusNome = 'RETORNO';
         }
         if (!existente.procedimentosFeitosIds.includes(pfId)) {
           existente.procedimentosFeitosIds.push(pfId);
@@ -345,7 +370,12 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
             nome: nomeAtual,
             corHex: proc.corHex || proc.cor || null,
           });
-          existente.nomeProcedimento = existente.nomesProcedimentos.join(' + ');
+          if (existente.isRetorno) {
+            const limpos = existente.nomesProcedimentos.map((n) => n.replace(/^Retorno\s*·\s*/i, '').trim());
+            existente.nomeProcedimento = 'Retorno · ' + limpos.join(' + ');
+          } else {
+            existente.nomeProcedimento = existente.nomesProcedimentos.join(' + ');
+          }
         }
         if (!existente.procedimentoFeitoId) {
           existente.procedimentoFeitoId = pfId;
@@ -368,7 +398,10 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
           ],
           nomeProcedimento: nomeAtual,
           profissionalNome: proc.profissionalNome || '—',
-          statusNome: proc.statusNome || 'FINALIZADO',
+          statusNome: isRetorno ? 'RETORNO' : (proc.statusNome || 'FINALIZADO'),
+          isRetorno,
+          procedimentoFeitoOrigemId: paiId,
+          nomeProcedimentoPai: nomePai || null,
           observacao: proc.observacao || null,
           dataISO,
           horaInicio,
@@ -376,6 +409,27 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
           retornosCount: Array.isArray(proc.retornos) ? proc.retornos.length : 0,
           fotos: [],
         });
+      }
+    }
+  });
+
+  // Vincular contadores de retorno nos procedimentos pai avulsos
+  (procedimentosFeitos || []).forEach((proc) => {
+    const paiId = proc.procedimentoFeitoOrigemId ? String(proc.procedimentoFeitoOrigemId).trim() : null;
+    const pfId = String(proc.id || '').trim();
+    if (paiId && pfId) {
+      for (const at of atendimentosAvulsosMap.values()) {
+        if (at.procedimentosFeitosIds?.includes(paiId) || at.procedimentoFeitoId === paiId) {
+          if (!at.retornos.some((r) => String(r.id) === pfId)) {
+            at.retornos.push({
+              id: pfId,
+              procedimentoNome: proc.procedimentoNome || proc.nome || 'Retorno',
+              criadoEm: proc.criadoEm,
+            });
+            at.retornosCount = at.retornos.length;
+          }
+          break;
+        }
       }
     }
   });
@@ -461,7 +515,16 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
     if (!entry.horaInicio && foto.registradoEm) {
       entry.horaInicio = String(foto.registradoEm).slice(11, 16);
     }
-    entry.fotos.push(foto);
+    const fId = foto.id || foto.fotoId;
+    const fUrl = foto.url || foto.arquivoUrl;
+    const jaExiste = entry.fotos.some((f) => {
+      const existId = f.id || f.fotoId;
+      const existUrl = f.url || f.arquivoUrl;
+      return (fId && existId && String(fId) === String(existId)) || (fUrl && existUrl && fUrl === existUrl);
+    });
+    if (!jaExiste) {
+      entry.fotos.push(foto);
+    }
   });
 
   const atendimentosAvulsos = Array.from(atendimentosAvulsosMap.values()).sort((a, b) => {

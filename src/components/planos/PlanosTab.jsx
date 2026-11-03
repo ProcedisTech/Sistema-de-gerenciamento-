@@ -1897,18 +1897,23 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
       if (typeof onStartAttendance !== 'function') return;
       const catId = String(targetItem.catalogoProcedimentoSaudeId || targetItem.catalogoId || '').trim();
       const nome = resolveNomeProcedimento(targetItem, item);
-      const agendaId = targetItem.sessaoAtiva?.agendaId || null;
-      const data = targetItem.sessaoAtiva?.dataAgendamento || null;
-      const horaInicio = targetItem.sessaoAtiva?.horaInicio || null;
-      const rawItemId = targetItem.planejamentoItemId || targetItem.id || null;
-      const planoItemId = rawItemId ? String(rawItemId).replace(/_retorno$/, '').trim() : null;
-      const pacienteAlvo = paciente || { id: pacienteId, nome: pacienteNome };
-
       const isItemRetorno = Boolean(
         targetItem.isRetorno ||
         targetItem.tipoProcedimentoCodigo === 'retorno' ||
         targetItem.tipo === 'retorno'
       );
+      const agendaId = isItemRetorno
+        ? (targetItem.sessaoRetornoAtiva?.agendaId ?? targetItem.sessaoRetorno?.agendaId ?? targetItem.sessaoAtiva?.agendaId ?? null)
+        : (targetItem.sessaoAtiva?.agendaId || null);
+      const data = isItemRetorno
+        ? (targetItem.sessaoRetornoAtiva?.dataAgendamento ?? targetItem.sessaoRetorno?.dataAgendamento ?? targetItem.sessaoAtiva?.dataAgendamento ?? null)
+        : (targetItem.sessaoAtiva?.dataAgendamento || null);
+      const horaInicio = isItemRetorno
+        ? (targetItem.sessaoRetornoAtiva?.horaInicio ?? targetItem.sessaoRetorno?.horaInicio ?? targetItem.sessaoAtiva?.horaInicio ?? null)
+        : (targetItem.sessaoAtiva?.horaInicio || null);
+      const rawItemId = targetItem.planejamentoItemId || targetItem.id || null;
+      const planoItemId = rawItemId ? String(rawItemId).replace(/_retorno$/, '').trim() : null;
+      const pacienteAlvo = paciente || { id: pacienteId, nome: pacienteNome };
 
       const rawOrigemId =
         targetItem.procedimentoFeitoOrigemId ||
@@ -1969,9 +1974,21 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
       const primeiro = itens[0];
       const catId = String(primeiro.catalogoProcedimentoSaudeId || primeiro.catalogoId || '').trim();
       const nome = resolveNomeProcedimento(primeiro);
-      const agendaId = primeiro.sessaoAtiva?.agendaId || null;
-      const data = primeiro.sessaoAtiva?.dataAgendamento || null;
-      const horaInicio = primeiro.sessaoAtiva?.horaInicio || null;
+      const isVisitaRetorno = Boolean(
+        visita.isRetornoVisita ||
+        primeiro.isRetorno ||
+        primeiro.tipoProcedimentoCodigo === 'retorno' ||
+        primeiro.tipo === 'retorno'
+      );
+      const agendaId = isVisitaRetorno
+        ? (primeiro.sessaoRetornoAtiva?.agendaId ?? primeiro.sessaoRetorno?.agendaId ?? primeiro.sessaoAtiva?.agendaId ?? null)
+        : (primeiro.sessaoAtiva?.agendaId || null);
+      const data = isVisitaRetorno
+        ? (primeiro.sessaoRetornoAtiva?.dataAgendamento ?? primeiro.sessaoRetorno?.dataAgendamento ?? primeiro.sessaoAtiva?.dataAgendamento ?? null)
+        : (primeiro.sessaoAtiva?.dataAgendamento || null);
+      const horaInicio = isVisitaRetorno
+        ? (primeiro.sessaoRetornoAtiva?.horaInicio ?? primeiro.sessaoRetorno?.horaInicio ?? primeiro.sessaoAtiva?.horaInicio ?? null)
+        : (primeiro.sessaoAtiva?.horaInicio || null);
       const rawItemId = primeiro.planejamentoItemId || primeiro.id || null;
       const planoItemId = rawItemId ? String(rawItemId).replace(/_retorno$/, '').trim() : null;
       const pacienteAlvo = paciente || { id: pacienteId, nome: pacienteNome };
@@ -1979,19 +1996,14 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
       const lote = itens.map((it) => {
         const rId = it.planejamentoItemId || it.id || null;
         return {
-          agendaId: it.sessaoAtiva?.agendaId || null,
+          agendaId: isVisitaRetorno
+            ? (it.sessaoRetornoAtiva?.agendaId ?? it.sessaoRetorno?.agendaId ?? it.sessaoAtiva?.agendaId ?? null)
+            : (it.sessaoAtiva?.agendaId || null),
           procedimentoNome: resolveNomeProcedimento(it),
           catalogoProcedimentoSaudeId: String(it.catalogoProcedimentoSaudeId || it.catalogoId || '').trim(),
           planejamentoItemId: rId ? String(rId).replace(/_retorno$/, '').trim() : null,
         };
       });
-
-      const isVisitaRetorno = Boolean(
-        visita.isRetornoVisita ||
-        primeiro.isRetorno ||
-        primeiro.tipoProcedimentoCodigo === 'retorno' ||
-        primeiro.tipo === 'retorno'
-      );
 
       const rawOrigemId =
         primeiro.procedimentoFeitoOrigemId ||
@@ -2050,9 +2062,20 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
     const primeiro = itensParaIniciar[0];
     const catId = String(primeiro.catalogoProcedimentoSaudeId || primeiro.catalogoId || '').trim();
     const nome = resolveNomeProcedimento(primeiro);
-    const agendaId = primeiro.sessaoAtiva?.agendaId || null;
-    const data = primeiro.sessaoAtiva?.dataAgendamento || null;
-    const horaInicio = primeiro.sessaoAtiva?.horaInicio || null;
+    const isLoteRetorno = Boolean(
+      primeiro.isRetorno ||
+      primeiro.tipoProcedimentoCodigo === 'retorno' ||
+      primeiro.tipo === 'retorno'
+    );
+    const agendaId = isLoteRetorno
+      ? (primeiro.sessaoRetornoAtiva?.agendaId ?? primeiro.sessaoRetorno?.agendaId ?? primeiro.sessaoAtiva?.agendaId ?? null)
+      : (primeiro.sessaoAtiva?.agendaId || null);
+    const data = isLoteRetorno
+      ? (primeiro.sessaoRetornoAtiva?.dataAgendamento ?? primeiro.sessaoRetorno?.dataAgendamento ?? primeiro.sessaoAtiva?.dataAgendamento ?? null)
+      : (primeiro.sessaoAtiva?.dataAgendamento || null);
+    const horaInicio = isLoteRetorno
+      ? (primeiro.sessaoRetornoAtiva?.horaInicio ?? primeiro.sessaoRetorno?.horaInicio ?? primeiro.sessaoAtiva?.horaInicio ?? null)
+      : (primeiro.sessaoAtiva?.horaInicio || null);
     const rawItemId = primeiro.planejamentoItemId || primeiro.id || null;
     const planoItemId = rawItemId ? String(rawItemId).replace(/_retorno$/, '').trim() : null;
     const pacienteAlvo = paciente || { id: pacienteId, nome: pacienteNome };
@@ -2060,18 +2083,14 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
     const lote = itensParaIniciar.map((it) => {
       const rId = it.planejamentoItemId || it.id || null;
       return {
-        agendaId: it.sessaoAtiva?.agendaId || null,
+        agendaId: isLoteRetorno
+          ? (it.sessaoRetornoAtiva?.agendaId ?? it.sessaoRetorno?.agendaId ?? it.sessaoAtiva?.agendaId ?? null)
+          : (it.sessaoAtiva?.agendaId || null),
         procedimentoNome: resolveNomeProcedimento(it),
         catalogoProcedimentoSaudeId: String(it.catalogoProcedimentoSaudeId || it.catalogoId || '').trim(),
         planejamentoItemId: rId ? String(rId).replace(/_retorno$/, '').trim() : null,
       };
     });
-
-    const isLoteRetorno = Boolean(
-      primeiro.isRetorno ||
-      primeiro.tipoProcedimentoCodigo === 'retorno' ||
-      primeiro.tipo === 'retorno'
-    );
 
     const rawOrigemId =
       primeiro.procedimentoFeitoOrigemId ||

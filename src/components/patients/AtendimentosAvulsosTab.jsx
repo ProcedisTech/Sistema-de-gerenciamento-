@@ -21,9 +21,9 @@ export function AtendimentosAvulsosTab({
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center p-12 space-y-3">
-        <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#00a88e]" />
         <span className="text-xs font-medium text-slate-500">
-          Carregando atendimentos avulsos do paciente...
+          Carregando atendimentos sem plano do paciente...
         </span>
       </div>
     );
@@ -32,7 +32,7 @@ export function AtendimentosAvulsosTab({
   if (error) {
     return (
       <div className="rounded-2xl border border-rose-200 bg-rose-50/50 p-6 text-center space-y-2">
-        <p className="text-xs font-bold text-rose-700">Erro ao carregar atendimentos avulsos</p>
+        <p className="text-xs font-bold text-rose-700">Erro ao carregar atendimentos sem plano</p>
         <p className="text-xs text-slate-600">{error}</p>
         <button
           type="button"
@@ -49,11 +49,11 @@ export function AtendimentosAvulsosTab({
   if (totalRegistros === 0) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-2xs space-y-3">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-50 text-purple-600 border border-purple-100 shadow-2xs">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#e6f7f5] text-[#00a88e] border border-[#00a88e]/20 shadow-2xs">
           <Sparkles className="h-6 w-6" />
         </div>
         <div className="space-y-1">
-          <h4 className="text-sm font-bold text-slate-800">Nenhum atendimento avulso registrado</h4>
+          <h4 className="text-sm font-bold text-slate-800">Nenhum atendimento sem plano registrado</h4>
           <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
             Procedimentos, consultas pontuais e fotos registrados fora de um plano de tratamento estruturado aparecerão nesta aba.
           </p>
@@ -67,8 +67,8 @@ export function AtendimentosAvulsosTab({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="text-base font-bold text-slate-900">Atendimentos Avulsos</h3>
-            <span className="px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold">
+            <h3 className="text-base font-bold text-slate-900">Atendimentos Sem Plano</h3>
+            <span className="px-2.5 py-0.5 rounded-full bg-[#e6f7f5] text-[#00a88e] border border-[#00a88e]/30 text-xs font-bold shadow-2xs">
               {atendimentosAvulsos.length > 0
                 ? `${atendimentosAvulsos.length} ${atendimentosAvulsos.length === 1 ? 'atendimento' : 'atendimentos'}`
                 : `${fotosAvulsas.length} ${fotosAvulsas.length === 1 ? 'registro' : 'registros'}`}

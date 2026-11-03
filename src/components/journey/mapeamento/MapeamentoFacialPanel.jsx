@@ -679,7 +679,7 @@ export function MapeamentoFacialPanel({
 
 
       <MapeamentoFullscreenOverlay
-
+        scope="procedure"
         open={fullscreenOpen}
 
         toolbarWidthPx={sidebarInsetPx}

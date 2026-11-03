@@ -342,15 +342,19 @@ export function AnnotationCanvasAvaliacao({
   // Ações de manipulação de pontos
   const handleAddPonto = useCallback(
     (_vista, pontoData) => {
-      const catId = activeProc?.id || pontoData.catalogoProcedimentoSaudeId || pontoData.catalogoId;
+      const safeCatId = (activeProc?.catalogoProcedimentoSaudeId && isRealUuid(activeProc.catalogoProcedimentoSaudeId))
+        ? String(activeProc.catalogoProcedimentoSaudeId)
+        : ((pontoData.catalogoProcedimentoSaudeId && isRealUuid(pontoData.catalogoProcedimentoSaudeId))
+            ? String(pontoData.catalogoProcedimentoSaudeId)
+            : (pontoData.catalogoId && isRealUuid(pontoData.catalogoId) ? String(pontoData.catalogoId) : null));
       const novoPonto = {
         ...pontoData,
         localId: nextLocalId(),
         id: pontoData.id || nextLocalId(),
-        catalogoProcedimentoSaudeId: catId,
-        catalogoId: catId,
+        catalogoProcedimentoSaudeId: safeCatId,
+        catalogoId: safeCatId,
         nomeProcedimento: activeProc?.nome || pontoData.nomeProcedimento || 'Avaliação',
-        cor: pontoData?.cor || activeCor || (catId ? corParaProcedimento(catId) : COR_PADRAO_AVALIACAO),
+        cor: pontoData?.cor || activeCor || (safeCatId ? corParaProcedimento(safeCatId) : COR_PADRAO_AVALIACAO),
         tamanho: pontoData.tamanho || tamanhoMarcador,
       };
       setPontos((prev) => [...prev, novoPonto]);
@@ -518,8 +522,8 @@ export function AnnotationCanvasAvaliacao({
         });
 
         const procedimentosPayload = procedimentos.map((proc, idx) => ({
-          catalogoProcedimentoSaudeId: isRealUuid(proc.catalogoProcedimentoSaudeId || proc.id)
-            ? proc.catalogoProcedimentoSaudeId || proc.id
+          catalogoProcedimentoSaudeId: (proc.catalogoProcedimentoSaudeId && isRealUuid(proc.catalogoProcedimentoSaudeId))
+            ? String(proc.catalogoProcedimentoSaudeId)
             : null,
           catalogoNome: proc.nome,
           ordem: (idx + 1),
@@ -534,7 +538,9 @@ export function AnnotationCanvasAvaliacao({
           tipoGeometria: pt.tipoGeometria || (pt.vertices?.length > 1 ? 'traco' : 'ponto'),
           quantidade: pt.quantidade != null ? Number(pt.quantidade) : 1,
           tamanho: pt.tamanho != null ? Number(pt.tamanho) : 1,
-          catalogoProcedimentoSaudeId: pt.catalogoProcedimentoSaudeId || pt.catalogoId || null,
+          catalogoProcedimentoSaudeId: (pt.catalogoProcedimentoSaudeId && isRealUuid(pt.catalogoProcedimentoSaudeId))
+            ? String(pt.catalogoProcedimentoSaudeId)
+            : (pt.catalogoId && isRealUuid(pt.catalogoId) ? String(pt.catalogoId) : null),
           corHex: pt.corHex || pt.cor || (pt.catalogoId ? corParaProcedimento(pt.catalogoId) : COR_PADRAO_AVALIACAO),
           vertices: pt.vertices?.length
             ? pt.vertices.map((v, i) => ({ ordem: i + 1, posX: v.posX ?? v.x, posY: v.posY ?? v.y }))

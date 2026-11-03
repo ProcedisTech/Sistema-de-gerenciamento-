@@ -2404,7 +2404,7 @@ export function PatientProfileView({
             <div className="sticky top-0 z-10 flex w-full min-w-0 flex-nowrap items-stretch gap-0.5 overflow-x-auto no-scrollbar border-b border-[#e2e8f0] bg-white px-2 sm:gap-1 sm:px-3">
               {[
                 canSeeOrcamentos && { key: 'planos', label: 'Planos & Evolução', title: 'Planos de Tratamento & Evolução Fotográfica', icon: BookOpen },
-                { key: 'avulsos', label: 'Atendimentos Avulsos', title: 'Atendimentos e Procedimentos Avulsos', icon: Sparkles },
+                { key: 'avulsos', label: 'Atendimentos Sem Plano', title: 'Procedimentos e Atendimentos Sem Plano', icon: Sparkles },
                 canSeeProntuario && { key: 'prontuario', label: 'Prontuário', title: 'Prontuário Eletrônico', icon: ClipboardList },
                 (canStartAnamnese || canSeeRespostasAnamnese) && { key: 'anamnese', label: 'Anamnese', title: 'Anamnese', icon: Activity },
                 canSeeDocumentos && { key: 'documentos', label: 'Documentos', title: 'Documentos Assinados', icon: FileText },
