@@ -26,6 +26,8 @@ import {
 import { ProcedimentoSearchInput } from '../agenda/ProcedimentoSearchInput.jsx';
 import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions.js';
 import { useToast } from '../../contexts/useToast.js';
+import { useAviso } from '../../contexts/useAviso.js';
+import { PREFIXO_AVISO } from '../../services/avisos/tiposAviso.js';
 import { getApiErrorDetail, planejamentosApi, pacientesGaleriaApi, termosApi, pacientesApi, procedimentosApi } from '../../services/api.js';
 import { enriquecerPlanosComCatalogo } from '../../utils/planejamentoNormalize.js';
 import { calcResumoProtocolo, isRealUuid } from '../../utils/planejamentoDraftUtils.js';
@@ -1398,6 +1400,48 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
     };
   }, [displayPlanos, pacienteId]);
 
+  // Auto-hidratação dos planos carregados na consulta para usePlanoDraft
+  useEffect(() => {
+    if (!isConsulta || !Array.isArray(displayPlanos) || displayPlanos.length === 0) return;
+    for (const plano of displayPlanos) {
+      const pid = String(plano?.id ?? '').trim();
+      if (pid && !hydratedPlanIdsRef.current.has(pid)) {
+        hydrateFromPlano(plano, catalogoOptions);
+        hydratedPlanIdsRef.current.add(pid);
+      }
+    }
+  }, [isConsulta, displayPlanos, catalogoOptions, hydrateFromPlano]);
+
+  // Sincronização reativa via SSE quando dados do paciente/plano são alterados
+  const handleAvisoPaciente = useCallback(async () => {
+    const pid = String(pacienteId ?? '').trim();
+    if (!pid) return;
+
+    const updatedPlanos = await refresh({ silent: true });
+    if (Array.isArray(updatedPlanos)) {
+      for (const plano of updatedPlanos) {
+        const planId = String(plano?.id ?? '').trim();
+        if (!planId) continue;
+        applyDetalhe(planId, plano, catalogoOptions);
+        hydratedPlanIdsRef.current.add(planId);
+      }
+    }
+    carregarGaleria();
+    carregarProcedimentosFeitos();
+  }, [
+    pacienteId,
+    refresh,
+    applyDetalhe,
+    catalogoOptions,
+    carregarGaleria,
+    carregarProcedimentosFeitos,
+  ]);
+
+  useAviso(PREFIXO_AVISO.PACIENTE, handleAvisoPaciente, {
+    registroId: pacienteId ? String(pacienteId) : null,
+    debounceMs: 300,
+  });
+
   const toggleExpandido = useCallback(
     (id, plano) => {
       setExpandidos((prev) => {
@@ -2301,8 +2345,16 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
         const realId = item?.id || (isRealUuid(key) ? key : null);
         if (realId) {
           await editarItem(planoId, realId, patch);
+          const atualizados = await refresh({ silent: true });
+          const planoSalvo = (atualizados || []).find((p) => String(p.id) === String(planoId));
+          if (planoSalvo) {
+            applyDetalhe(planoId, planoSalvo, catalogoOptions);
+            hydratedPlanIdsRef.current.add(String(planoId));
+          }
         }
-        updateItem(planoId, key, patch, catalogoOptions);
+        if (!realId) {
+          updateItem(planoId, key, patch, catalogoOptions);
+        }
         toast.success('Procedimento atualizado.');
         onPlanoModificado?.();
       } catch (err) {
@@ -2312,7 +2364,7 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
         setEditItemState(null);
       }
     },
-    [catalogoOptions, editItemState, editarItem, onPlanoModificado, toast, updateItem],
+    [applyDetalhe, catalogoOptions, editItemState, editarItem, onPlanoModificado, refresh, toast, updateItem],
   );
 
 

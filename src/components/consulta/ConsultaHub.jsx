@@ -120,7 +120,9 @@ export function ConsultaHub({
   const iniciais = paciente ? initialsFn(paciente.nome || '') || '—' : '—';
   const cards = buildModuleCards(isRetorno);
   const chaveTermos = useChaveDeAviso(PREFIXO_AVISO.TERMOS);
-  const chavePlanos = useChaveDeAviso(PREFIXO_AVISO.ATENDIMENTO);
+  const chavePlanosAtendimento = useChaveDeAviso(PREFIXO_AVISO.ATENDIMENTO);
+  const chavePlanosPaciente = useChaveDeAviso(PREFIXO_AVISO.PACIENTE);
+  const chavePlanos = chavePlanosAtendimento + chavePlanosPaciente;
   const chaveAnamnese = useChaveDeAviso(PREFIXO_AVISO.ANAMNESE);
   const termosPendentes = useTermosPendentes(paciente?.id, {
     catalogoIds,
