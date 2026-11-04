@@ -107,3 +107,39 @@ describe('ConsultaHub — F3 faltantes filtrados pela consulta', () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 });
+
+describe('ConsultaHub — fluxo de retorno', () => {
+  it('exibe cards corretos no retorno: Anamnese, Avaliação, Planejamento, Termos e Retorno/Retoque (Procedimento ausente)', () => {
+    render(
+      <ConsultaHub
+        paciente={paciente}
+        isRetorno
+        onSelectModule={vi.fn()}
+      />
+    );
+    expect(screen.getByRole('button', { name: /Anamnese/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Avaliação/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Planejamento/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Termos/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Retorno \/ Retoque/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Procedimento/ })).not.toBeInTheDocument();
+  });
+
+  it('clique em Retorno / Retoque chama onSelectModule("retorno") sem disparar gate de termos mesmo com faltantes', async () => {
+    const onSelect = vi.fn();
+    const onBloqueio = vi.fn();
+    render(
+      <ConsultaHub
+        paciente={paciente}
+        isRetorno
+        catalogoIds={['cat-b']}
+        exigirFilaVinculo
+        onSelectModule={onSelect}
+        onTermosBloqueio={onBloqueio}
+      />
+    );
+    await userEvent.click(screen.getByRole('button', { name: /^Retorno \/ Retoque/ }));
+    expect(onBloqueio).not.toHaveBeenCalled();
+    expect(onSelect).toHaveBeenCalledWith('retorno');
+  });
+});

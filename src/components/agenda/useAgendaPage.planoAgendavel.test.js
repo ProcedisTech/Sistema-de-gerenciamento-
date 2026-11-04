@@ -110,7 +110,7 @@ describe('useAgendaPage — Regras de Vínculo entre Agenda e Plano de Tratament
 
     // Abre modal de criação
     act(() => {
-      result.current.openCreateModal('2026-10-25');
+      result.current.openCreateModal('2029-10-25');
     });
 
     // Seleciona paciente sem plano
@@ -178,7 +178,7 @@ describe('useAgendaPage — Regras de Vínculo entre Agenda e Plano de Tratament
     });
 
     act(() => {
-      result.current.openCreateModal('2026-10-25');
+      result.current.openCreateModal('2029-10-25');
     });
 
     await act(async () => {
@@ -241,7 +241,7 @@ describe('useAgendaPage — Regras de Vínculo entre Agenda e Plano de Tratament
     });
 
     act(() => {
-      result.current.openCreateModal('2026-10-25');
+      result.current.openCreateModal('2029-10-25');
     });
 
     await act(async () => {
@@ -321,7 +321,7 @@ describe('useAgendaPage — Regras de Vínculo entre Agenda e Plano de Tratament
     });
 
     act(() => {
-      result.current.openCreateModal('2026-10-25');
+      result.current.openCreateModal('2029-10-25');
     });
 
     await act(async () => {
@@ -364,7 +364,7 @@ describe('useAgendaPage — Regras de Vínculo entre Agenda e Plano de Tratament
     });
 
     act(() => {
-      result.current.openCreateModal('2026-10-25');
+      result.current.openCreateModal('2029-10-25');
     });
 
     // Seleciona paciente A (requisição lenta pendente)
@@ -416,7 +416,7 @@ describe('useAgendaPage — Regras de Vínculo entre Agenda e Plano de Tratament
         {
           planejamentoItemIdPorCatalogo: { 'cat-toxina': '11111111-1111-4111-8111-111111111111' },
           catalogoProcedimentoSaudeIds: ['cat-toxina'],
-          data: '2026-10-25',
+          data: '2029-10-25',
         },
       );
     });

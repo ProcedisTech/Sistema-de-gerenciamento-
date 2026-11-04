@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { corParaProcedimento } from '../../constants/mapeamentoPaletaCores.js';
+import { isRealUuid } from '../../utils/planejamentoDraftUtils.js';
 import { Camera, Copy, ImageIcon, Loader2, Lock, RotateCcw, Trash2, ZoomIn, X } from 'lucide-react';
 import { useToast } from '../../contexts/useToast.js';
 import { mapasApi, pacientesGaleriaApi, procedimentosApi } from '../../services/api.js';
@@ -51,6 +53,10 @@ export function ConsultaRetornoFlow({
   catalogoId = null,
   nomeProcedimento = '',
   onOrigemResolved,
+  procedimentosSessao = [],
+  setProcedimentosSessao = () => {},
+  activeProcedureIndex = 0,
+  _setActiveProcedureIndex = () => {},
   mapaRetornoState,
   _retornoAvaliacao = {},
   _setRetornoAvaliacao,
@@ -76,6 +82,9 @@ export function ConsultaRetornoFlow({
   const uploadPreRef = useRef(null);
   const uploadPosRef = useRef(null);
   const blobUrlsRef = useRef([]);
+  const onOrigemResolvedRef = useRef(onOrigemResolved);
+  onOrigemResolvedRef.current = onOrigemResolved;
+  const loadedPaiKeyRef = useRef(null);
   const photos = evaluationCapturedPhotos || [];
 
   const procedurePhotos = procedureCapturedPhotos || [];
@@ -114,6 +123,170 @@ export function ConsultaRetornoFlow({
     resolveNomeProcedimento(parentMeta) !== '—'
       ? resolveNomeProcedimento(parentMeta)
       : (nomeProcedimento || 'Procedimento Retocado');
+  const listaProcedimentosSessao = useMemo(() => {
+    const isPlaceholder = (nome) => !nome || /^Procedimento\s*\d*$/i.test(String(nome).trim());
+
+    if (Array.isArray(procedimentosSessao) && procedimentosSessao.length > 0) {
+      const vistos = new Set();
+      return procedimentosSessao
+        .map((p, idx) => {
+          let cid = p.catalogoProcedimentoSaudeId || p.nomeProcedimentoCatalogoId || p.catalogoId || null;
+          if (!cid && (p.procedimentoFeitoOrigemId || p.id)) {
+            const alvoId = String(p.procedimentoFeitoOrigemId || p.id);
+            if (parentMeta && String(parentMeta.id) === alvoId) {
+              cid = parentMeta.catalogoProcedimentoSaudeId || parentMeta.catalogoId || null;
+            }
+          }
+          if (!cid && idx === 0 && catalogoIdPai && isRealUuid(catalogoIdPai)) {
+            cid = String(catalogoIdPai);
+          }
+          const rawNome =
+            p.nomeProcedimento ||
+            p.procedimentoNome ||
+            p.nome ||
+            (idx === 0 ? nomeProcedimentoPai : `Procedimento ${idx + 1}`);
+          const safeCid = cid && isRealUuid(cid) ? String(cid) : null;
+          return {
+            id: String(safeCid || p.id || `proc_${idx}`),
+            catalogoProcedimentoSaudeId: safeCid,
+            catalogoId: safeCid,
+            nome: rawNome,
+            unidadeMedida: p.unidadeMedida || 'u',
+            corHex: p.corHex || (safeCid ? corParaProcedimento(safeCid) : null) || '#00a88e',
+            index: idx,
+            procedimentoIndex: idx,
+          };
+        })
+        .filter((item) => {
+          if (!item.nome || isPlaceholder(item.nome)) return false;
+          const k = String(item.catalogoProcedimentoSaudeId || item.id);
+          if (vistos.has(k)) return false;
+          vistos.add(k);
+          return true;
+        });
+    }
+    const catValido = catalogoIdPai && isRealUuid(catalogoIdPai) ? String(catalogoIdPai) : null;
+    return [{
+      id: catValido || 'proc_0',
+      catalogoProcedimentoSaudeId: catValido,
+      catalogoId: catValido,
+      nome: nomeProcedimentoPai,
+      unidadeMedida: 'u',
+      corHex: catValido ? corParaProcedimento(catValido) : '#00a88e',
+      index: 0,
+      procedimentoIndex: 0,
+    }];
+  }, [procedimentosSessao, catalogoIdPai, nomeProcedimentoPai, parentMeta]);
+
+  const [procedimentoArmadoId, setProcedimentoArmadoId] = useState(() => {
+    return (
+      listaProcedimentosSessao[activeProcedureIndex]?.id ||
+      listaProcedimentosSessao[0]?.id ||
+      null
+    );
+  });
+
+  useEffect(() => {
+    if (listaProcedimentosSessao.length > 0) {
+      const existe = listaProcedimentosSessao.some((p) => p.id === procedimentoArmadoId);
+      if (!existe) {
+        setProcedimentoArmadoId(listaProcedimentosSessao[0].id);
+      }
+    }
+  }, [listaProcedimentosSessao, procedimentoArmadoId]);
+
+  const procedimentoArmado = useMemo(() => {
+    const proc = listaProcedimentosSessao.find((p) => p.id === procedimentoArmadoId);
+    return proc || listaProcedimentosSessao[0] || null;
+  }, [listaProcedimentosSessao, procedimentoArmadoId]);
+
+  const handleAddPontoComProcedimento = useCallback(
+    (vista, pontoData) => {
+      const targetProc = procedimentoArmado || listaProcedimentosSessao[0];
+      const targetCatId = targetProc?.catalogoProcedimentoSaudeId || targetProc?.catalogoId || null;
+      const targetIndex = targetProc?.index ?? 0;
+      mapaRetornoState?.adicionarPonto(vista, {
+        ...pontoData,
+        catalogoProcedimentoSaudeId: targetCatId,
+        catalogoId: targetCatId,
+        procedimentoIndex: targetIndex,
+        index: targetIndex,
+        nomeProcedimento: targetProc?.nome || pontoData?.nomeProcedimento || nomeProcedimentoPai,
+        cor: targetProc?.corHex || pontoData?.cor || '#00a88e',
+        corHex: targetProc?.corHex || pontoData?.cor || '#00a88e',
+      });
+    },
+    [mapaRetornoState, procedimentoArmado, listaProcedimentosSessao, nomeProcedimentoPai],
+  );
+
+  const handleAdicionarProcedimentoRetorno = useCallback(
+    (novoProc) => {
+      if (!novoProc) return;
+      const catId = novoProc.catalogoProcedimentoSaudeId || novoProc.catalogoId || novoProc.id;
+      const catIdStr = String(catId || '').trim();
+      if (!catIdStr) return;
+
+      // Se for o mesmo catálogo do procedimento pai original do retorno, não duplica
+      if (catalogoIdPai && String(catalogoIdPai).trim() === catIdStr) {
+        setProcedimentoArmadoId(catIdStr);
+        return;
+      }
+
+      const nome = novoProc.nomeProcedimento || novoProc.nome || 'Procedimento';
+      if (typeof setProcedimentosSessao === 'function') {
+        setProcedimentosSessao((prev) => {
+          const listaAtual = Array.isArray(prev) ? prev : [];
+          const jaExiste = listaAtual.some((p, idx) => {
+            const cid = p.catalogoProcedimentoSaudeId || p.nomeProcedimentoCatalogoId || p.catalogoId;
+            if (cid && String(cid).trim() === catIdStr) return true;
+            if (p.id && String(p.id).trim() === catIdStr) return true;
+            if (idx === 0 && catalogoIdPai && String(catalogoIdPai).trim() === catIdStr) return true;
+            return false;
+          });
+          if (jaExiste) return listaAtual;
+          return [
+            ...listaAtual,
+            {
+              id: `item_retorno_${Date.now()}`,
+              catalogoProcedimentoSaudeId: catId,
+              catalogoId: catId,
+              nomeProcedimento: nome,
+              procedimentoNome: nome,
+              nome: nome,
+              unidadeMedida: novoProc.unidadeMedida || 'un',
+              corHex: novoProc.corHex || (catId ? corParaProcedimento(catId) : '#00a88e'),
+              isRetoque: false,
+            },
+          ];
+        });
+      }
+      setProcedimentoArmadoId(catIdStr);
+    },
+    [setProcedimentosSessao, catalogoIdPai],
+  );
+
+  const handleMudarCorProcedimento = useCallback(
+    (procId, novaCor, outroProcId, corAntiga) => {
+      mapaRetornoState?.atualizarCorProcedimento?.(procId, novaCor, outroProcId, corAntiga);
+      if (typeof setProcedimentosSessao === 'function') {
+        setProcedimentosSessao((prev) => {
+          if (!Array.isArray(prev)) return prev;
+          return prev.map((p) => {
+            const cid = p.catalogoProcedimentoSaudeId || p.nomeProcedimentoCatalogoId || p.catalogoId || p.id;
+            if (String(cid) === String(procId)) {
+              return { ...p, corHex: novaCor };
+            }
+            if (outroProcId && String(cid) === String(outroProcId)) {
+              return { ...p, corHex: corAntiga };
+            }
+            return p;
+          });
+        });
+      }
+    },
+    [mapaRetornoState, setProcedimentosSessao],
+  );
+
   const procedimentoArmadoPai = {
     id: String(catalogoIdPai),
     nome: nomeProcedimentoPai,
@@ -121,12 +294,20 @@ export function ConsultaRetornoFlow({
 
   useEffect(() => {
     if (!pacienteId) {
+      loadedPaiKeyRef.current = null;
       setParentMeta(null);
       setFotosPorTipo({});
       setParentFotosPorVista({});
       setParentPontosPorVista({});
       setParentSemMapa(false);
       setParentError(null);
+      return undefined;
+    }
+
+    if (
+      procedimentoFeitoOrigemId &&
+      loadedPaiKeyRef.current === `${pacienteId}:${procedimentoFeitoOrigemId}`
+    ) {
       return undefined;
     }
 
@@ -172,8 +353,11 @@ export function ConsultaRetornoFlow({
             ) || null;
         }
 
+        if (pai) {
+          loadedPaiKeyRef.current = `${pacienteId}:${pai.id}`;
+        }
         if (pai && (!procedimentoFeitoOrigemId || String(procedimentoFeitoOrigemId) !== String(pai.id))) {
-          onOrigemResolved?.(String(pai.id));
+          onOrigemResolvedRef.current?.(String(pai.id));
         }
 
         setParentMeta(pai);
@@ -271,7 +455,7 @@ export function ConsultaRetornoFlow({
     return () => {
       cancelled = true;
     };
-  }, [pacienteId, procedimentoFeitoOrigemId, planejamentoItemId, catalogoId, onOrigemResolved]);
+  }, [pacienteId, procedimentoFeitoOrigemId, planejamentoItemId, catalogoId]);
 
   useEffect(
     () => () => {
@@ -325,7 +509,53 @@ export function ConsultaRetornoFlow({
   const retornoVistaAtual = mapaRetornoState?.vistaAtual ?? VISTA_MAPA_APLICACAO_PADRAO;
   const retornoFotoAtual = mapaRetornoState?.getFotoVista?.(retornoVistaAtual) ?? null;
   const retornoGruposPontos =
-    mapaRetornoState?.getPontosVista?.(retornoVistaAtual, catalogoIdPai, nomeProcedimentoPai) ?? [];
+    mapaRetornoState?.getPontosVista?.(
+      retornoVistaAtual,
+      procedimentoArmado?.id || catalogoIdPai,
+      procedimentoArmado?.nome || nomeProcedimentoPai,
+      listaProcedimentosSessao,
+    ) ?? [];
+
+  const gruposSessao = useMemo(() => {
+    const pontosPorVista = mapaRetornoState?.pontosPorVista || {};
+    if (Object.keys(pontosPorVista).length === 0) return [];
+    const todosPontos = Object.values(pontosPorVista).flat();
+    if (todosPontos.length === 0) return [];
+
+    if (listaProcedimentosSessao.length > 0) {
+      return listaProcedimentosSessao.map((proc) => {
+        const procPontosPorVista = {};
+        Object.entries(pontosPorVista).forEach(([vista, pts]) => {
+          if (Array.isArray(pts)) {
+            const filtrados = pts.filter((p) => {
+              if (p.catalogoProcedimentoSaudeId || p.catalogoId) {
+                return String(p.catalogoProcedimentoSaudeId || p.catalogoId) === proc.id;
+              }
+              return proc.index === 0;
+            });
+            if (filtrados.length > 0) {
+              procPontosPorVista[vista] = filtrados;
+            }
+          }
+        });
+
+        return {
+          catalogoProcedimentoSaudeId: proc.id,
+          nomeProcedimento: proc.nome,
+          unidadeMedida: proc.unidadeMedida || 'u',
+          pontosPorVista: procPontosPorVista,
+        };
+      });
+    }
+
+    if (!catalogoIdPai) return [];
+    return [{
+      catalogoProcedimentoSaudeId: String(catalogoIdPai),
+      nomeProcedimento: String(nomeProcedimentoPai || ''),
+      unidadeMedida: 'u',
+      pontosPorVista,
+    }];
+  }, [mapaRetornoState?.pontosPorVista, listaProcedimentosSessao, catalogoIdPai, nomeProcedimentoPai]);
   const retornoVistasPreenchidas = mapaRetornoState?.getVistasPreenchidas?.() ?? [];
 
   const countPontosPai = (codigo) =>
@@ -752,14 +982,50 @@ export function ConsultaRetornoFlow({
                           </button>
                         ) : null}
                       </div>
+                      {listaProcedimentosSessao.length > 1 && (
+                        <div className="mb-3 flex flex-wrap items-center gap-2">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                            Procedimento:
+                          </span>
+                          {listaProcedimentosSessao.map((proc) => {
+                            const isArmado = proc.id === procedimentoArmado?.id;
+                            const cor = proc.corHex || corParaProcedimento(proc.id);
+                            return (
+                              <button
+                                key={`${proc.id}_${proc.index}`}
+                                type="button"
+                                onClick={() => setProcedimentoArmadoId(proc.id)}
+                                className={`inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1 text-xs font-bold transition-all shadow-xs cursor-pointer ${
+                                  isArmado
+                                    ? 'border-2 text-slate-900 bg-white ring-2 ring-teal-500/20 shadow-md'
+                                    : 'border border-slate-200 bg-slate-50 text-slate-600 hover:bg-white hover:text-slate-900'
+                                }`}
+                                style={isArmado ? { borderColor: cor } : {}}
+                              >
+                                <span
+                                  className="h-2 w-2 rounded-full shrink-0"
+                                  style={{ backgroundColor: cor }}
+                                  aria-hidden
+                                />
+                                <span>{proc.nome}</span>
+                                {isArmado && (
+                                  <span className="ml-1 text-[9px] font-black uppercase text-teal-600 bg-teal-50 px-1 py-0.2 rounded">
+                                    Ativo
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                       <FotoVistaCanvas
                         previewMode={false}
                         showToolbar={true}
                         vistaAtual={retornoVistaAtual}
                         foto={retornoFotoAtual}
-                        procedimentoArmado={procedimentoArmadoPai}
+                        procedimentoArmado={procedimentoArmado}
                         pontosVista={retornoGruposPontos}
-                        onAddPonto={mapaRetornoState.adicionarPonto}
+                        onAddPonto={handleAddPontoComProcedimento}
                         onEditarPonto={(_catId, vista, localId, patch) =>
                           mapaRetornoState.editarPonto(vista, localId, patch)
                         }
@@ -894,17 +1160,20 @@ export function ConsultaRetornoFlow({
       {/* Fullscreen Mapeamento de Retoque Overlay */}
       {retornoFullscreenOpen ? (
         <MapeamentoFullscreenOverlay
+          scope="retorno"
           open={retornoFullscreenOpen}
           vistaAtual={retornoVistaAtual}
           foto={retornoFotoAtual}
-          procedimentoArmado={procedimentoArmadoPai}
-          hideProcedimentoPicker={true}
-          onArmar={() => {}}
-          procedimentosUsados={[]}
+          procedimentoArmado={procedimentoArmado}
+          hideProcedimentoPicker={false}
+          pacienteId={pacienteId}
+          onArmar={(proc) => setProcedimentoArmadoId(proc?.id)}
+          onAdicionarProcedimento={handleAdicionarProcedimentoRetorno}
+          procedimentosUsados={listaProcedimentosSessao}
           pontosVista={retornoGruposPontos}
-          gruposSessao={[]}
+          gruposSessao={gruposSessao}
           countPontosVista={mapaRetornoState?.countPontosVista?.(retornoVistaAtual) ?? 0}
-          onAddPonto={mapaRetornoState?.adicionarPonto}
+          onAddPonto={handleAddPontoComProcedimento}
           onEditarPonto={(_catId, vista, localId, patch) =>
             mapaRetornoState?.editarPonto(vista, localId, patch)
           }
@@ -914,6 +1183,7 @@ export function ConsultaRetornoFlow({
           onDesfazerUltimo={() => mapaRetornoState?.desfazerUltimoPonto?.(retornoVistaAtual)}
           onClearVista={() => mapaRetornoState?.limparPontosVista?.(retornoVistaAtual)}
           onRemoverFotoVista={() => mapaRetornoState?.removerFotoVista?.(retornoVistaAtual)}
+          onMudarCorProcedimento={handleMudarCorProcedimento}
           onClose={() => setRetornoFullscreenOpen(false)}
         />
       ) : null}

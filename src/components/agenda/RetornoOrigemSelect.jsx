@@ -13,7 +13,7 @@ import { useFusoClinica } from '../hooks/useFusoClinica.js';
 const FOCUS_RING =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#14B8A6] focus-visible:ring-offset-1';
 
-function OrigemOptionButton({ r, isSelected, onSelect, active, fuso }) {
+function OrigemOptionButton({ r, isSelected, onSelect, active, fuso, multiSelect = false }) {
   const isPlano = r.tipoOrigem === 'plano';
   const nome = nomeProcedimentoRaiz(r);
   const dataFmt = isPlano && !r.jaRealizado
@@ -34,8 +34,9 @@ function OrigemOptionButton({ r, isSelected, onSelect, active, fuso }) {
   return (
     <button
       type="button"
-      role="option"
-      aria-selected={isSelected}
+      role={multiSelect ? 'checkbox' : 'option'}
+      aria-checked={multiSelect ? isSelected : undefined}
+      aria-selected={!multiSelect ? isSelected : undefined}
       aria-label={`${nome}, ${subtext}`}
       tabIndex={active ? 0 : -1}
       onClick={() => onSelect?.(r)}
@@ -89,7 +90,17 @@ function OrigemOptionButton({ r, isSelected, onSelect, active, fuso }) {
           <span>{subtext}</span>
         </p>
       </div>
-      {isSelected ? (
+      {multiSelect ? (
+        <div
+          className={`flex h-5 w-5 sm:h-6 sm:w-6 shrink-0 items-center justify-center rounded-lg border transition-all ${
+            isSelected
+              ? 'border-[#00a88e] bg-[#00a88e] text-white shadow-xs'
+              : 'border-slate-300 bg-white hover:border-slate-400'
+          }`}
+        >
+          {isSelected ? <Check className="h-3.5 w-3.5 sm:h-4 sm:w-4 stroke-[3]" aria-hidden /> : null}
+        </div>
+      ) : isSelected ? (
         <Check className="h-5 w-5 shrink-0 text-[#00a88e]" aria-hidden />
       ) : (
         <ChevronRight className="h-5 w-5 shrink-0 text-ink-400" aria-hidden />
@@ -117,6 +128,8 @@ export function RetornoOrigemSelect({
   fieldError = '',
   id = 'retorno-origem-select',
   flutuante = false,
+  multiSelect = false,
+  selectedIds = null,
   planoSectionTitle = '📌 Agendados no Plano (Visitas Futuras)',
   planoSectionBadge = 'Sem precisar ter concluído',
   historicoSectionTitle = '✅ Já Realizados no Histórico (Prontuário)',
@@ -170,6 +183,23 @@ export function RetornoOrigemSelect({
       ? 'Este paciente ainda não possui procedimentos no histórico ou no plano para vincular o retorno.'
       : 'Nenhum procedimento encontrado na busca.';
 
+  const isItemChecked = useCallback(
+    (itemId) => {
+      if (multiSelect) {
+        if (!selectedIds) return false;
+        if (selectedIds instanceof Set || typeof selectedIds.has === 'function') {
+          return selectedIds.has(String(itemId));
+        }
+        if (Array.isArray(selectedIds)) {
+          return selectedIds.map(String).includes(String(itemId));
+        }
+        return false;
+      }
+      return String(value) === String(itemId);
+    },
+    [multiSelect, selectedIds, value],
+  );
+
   const close = useCallback(() => {
     setOpen(false);
     setHighlight(0);
@@ -179,11 +209,13 @@ export function RetornoOrigemSelect({
     (item) => {
       onSelectOrigem?.(item);
       onChange?.(item.id, item.tipoOrigem, item);
-      setQuery('');
-      close();
-      inputRef.current?.focus();
+      if (!multiSelect) {
+        setQuery('');
+        close();
+        inputRef.current?.focus();
+      }
     },
-    [onSelectOrigem, onChange, close],
+    [onSelectOrigem, onChange, close, multiSelect],
   );
 
   const onKeyDown = (e) => {
@@ -236,9 +268,10 @@ export function RetornoOrigemSelect({
                   key={`plano-${r.id}`}
                   r={r}
                   fuso={fuso}
-                  isSelected={String(value) === String(r.id)}
+                  isSelected={isItemChecked(r.id)}
                   onSelect={selectItem}
                   active={flutuante && open && idx === highlight}
+                  multiSelect={multiSelect}
                 />
               ))}
             </div>
@@ -260,9 +293,10 @@ export function RetornoOrigemSelect({
                     key={`hist-${r.id}`}
                     r={r}
                     fuso={fuso}
-                    isSelected={String(value) === String(r.id)}
+                    isSelected={isItemChecked(r.id)}
                     onSelect={selectItem}
                     active={flutuante && open && globalIdx === highlight}
+                    multiSelect={multiSelect}
                   />
                 );
               })}

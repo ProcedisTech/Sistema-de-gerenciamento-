@@ -118,7 +118,7 @@ describe('useEnvioFotosConsulta (C3, B5, P5)', () => {
     ['depois', '[depois]'],
     ['mapa', '[mapa]'],
     ['outro', '[outro]'],
-    ['pos_imediato', '[antes]'],
+    ['pos_imediato', '[pos_imediato]'],
     [undefined, '[depois]'],
   ])('P2: a foto do procedimento com categoria %s sobe só com o prefixo %s', async (categoria, legenda) => {
     pacientesGaleriaApi.upload.mockResolvedValue({ id: 'f-l2' });

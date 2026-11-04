@@ -18,19 +18,24 @@ function mensagemDoErro(err) {
   return MSG_FALHA;
 }
 
-function marcacoesDo(pontosPorVista) {
+function marcacoesDo(pontosPorVista, invalidCatIds = []) {
+  const invalidSet = new Set(Array.isArray(invalidCatIds) ? invalidCatIds.map(String) : []);
   const marcacoes = [];
   for (const [vista, lista] of Object.entries(pontosPorVista || {})) {
     const vistaCodigo = String(vista || '').trim();
     if (!vistaCodigo || !Array.isArray(lista)) continue;
     for (const p of lista) {
       const pt = mapLocalPontoToApi(p);
+      let catId = pt.catalogoProcedimentoSaudeId || pt.catalogoId || null;
+      if (catId && invalidSet.has(String(catId))) {
+        catId = null;
+      }
       marcacoes.push({
         anguloFotoCodigo: vistaCodigo,
         tipoGeometria: pt.tipoGeometria || 'ponto',
         quantidade: pt.quantidade,
         tamanho: pt.tamanho,
-        catalogoProcedimentoSaudeId: pt.catalogoProcedimentoSaudeId || pt.catalogoId || null,
+        catalogoProcedimentoSaudeId: catId,
         procedimentoIndex: pt.procedimentoIndex != null ? pt.procedimentoIndex : null,
         corHex: pt.cor || pt.corHex || null,
         vertices: pt.vertices?.length ? pt.vertices : [{ ordem: 1, posX: pt.posX, posY: pt.posY }],
@@ -43,8 +48,6 @@ function marcacoesDo(pontosPorVista) {
 /** P2: a mesma legenda que a foto da vista ganha hoje no encerrar (persistirMapaAplicacao.js, uploadModeloFoto). */
 export const legendaDaFotoDaVista = (vista) =>
   formatGaleriaLegendaForUpload(GALERIA_CATEGORIA.MAPA, getVistaLabel(vista) || vista);
-
-const ehRetorno = (consulta) => String(consulta?.tipoProcedimentoCodigo || '').toLowerCase() === 'retorno';
 
 /**
  * C4: rascunho do mapa de cada item da consulta no servidor, sem procedimento feito. Salva 700 ms depois da última
@@ -71,8 +74,9 @@ export function useMapaRascunhoAutosave({
   avisarErro,
   debounceMs = DEBOUNCE_MS,
   esperasMs,
+  invalidCatIds = [],
 }) {
-  const consultaId = consulta && !ehRetorno(consulta) ? consulta.id : null;
+  const consultaId = consulta?.id ?? null;
   const pacienteId = consulta?.pacienteId ?? null;
   const { pontosPorVista, fotosPorVista, fotoGaleriaIdPorVista } = mapaState;
   const sujas = mapaState.getDirtyVistas();
@@ -85,11 +89,11 @@ export function useMapaRascunhoAutosave({
   const fotoIdPorBlobRef = useRef(new WeakMap());
   const salvoNoServidorRef = useRef(new Set());
   const hidratadosRef = useRef(new Set());
-  const opcoesRef = useRef({ roleUserId, avisarErro, esperasMs, mapaState });
+  const opcoesRef = useRef({ roleUserId, avisarErro, esperasMs, mapaState, invalidCatIds });
 
   useEffect(() => {
     atualRef.current = { consultaId, itemId, pontosPorVista, fotosPorVista, fotoGaleriaIdPorVista, sujas };
-    opcoesRef.current = { roleUserId, avisarErro, esperasMs, mapaState };
+    opcoesRef.current = { roleUserId, avisarErro, esperasMs, mapaState, invalidCatIds };
   });
 
   const fotoDaVista = useCallback(async (tarefa, vista, foto) => {
@@ -122,7 +126,7 @@ export function useMapaRascunhoAutosave({
         const id = await fotoDaVista(tarefa, vista, tarefa.fotosPorVista?.[vista]);
         if (id) fotos[vista] = id;
       }
-      const marcacoes = marcacoesDo(tarefa.pontosPorVista);
+      const marcacoes = marcacoesDo(tarefa.pontosPorVista, opcoesRef.current.invalidCatIds);
       const chave = `${tarefa.consultaId}:${tarefa.itemId}`;
       if (!marcacoes.length && !Object.keys(fotos).length && !salvoNoServidorRef.current.has(chave)) return;
       await comTentativas(

@@ -196,12 +196,35 @@ describe('useMapaRascunhoAutosave (C4)', () => {
     expect(atendimentosApi.salvarMapa.mock.calls[0][1]).toBe('item-1');
   });
 
-  it('consulta de retorno não tem rascunho', async () => {
-    const { result } = montar({ consulta: { ...CONSULTA, tipoProcedimentoCodigo: 'RETORNO' } });
-    act(() => result.current.mapa.adicionarPonto('FRONTAL', ponto(0.1)));
+  it('consulta de retorno tem rascunho ativo e neutraliza invalidCatIds', async () => {
+    const invalidPid = '267cdd51-06d8-4852-8e10-ee3aa07a1d02';
+    const avisarErro = vi.fn();
+    const { result } = renderHook(() => {
+      const mapa = useMapaAplicacaoState();
+      const autosave = useMapaRascunhoAutosave({
+        consulta: { ...CONSULTA, tipoProcedimentoCodigo: 'RETORNO' },
+        itemId: 'item-1',
+        mapaState: mapa,
+        roleUserId: 'ru-1',
+        avisarErro,
+        debounceMs: DEBOUNCE,
+        esperasMs: ESPERAS,
+        invalidCatIds: [invalidPid],
+      });
+      return { mapa, autosave };
+    });
+
+    act(() => result.current.mapa.adicionarPonto('FRONTAL', {
+      ...ponto(0.1),
+      catalogoProcedimentoSaudeId: invalidPid,
+      procedimentoIndex: 0,
+    }));
     await assentar();
-    expect(atendimentosApi.buscarMapa).not.toHaveBeenCalled();
-    expect(atendimentosApi.salvarMapa).not.toHaveBeenCalled();
+
+    expect(atendimentosApi.salvarMapa).toHaveBeenCalledTimes(1);
+    const payload = atendimentosApi.salvarMapa.mock.calls[0][2];
+    expect(payload.marcacoes[0].catalogoProcedimentoSaudeId).toBeNull();
+    expect(payload.marcacoes[0].procedimentoIndex).toBe(0);
   });
 
   it('aguardarMapa salva o pendente sem esperar o debounce', async () => {

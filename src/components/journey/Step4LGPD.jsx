@@ -2290,13 +2290,16 @@ export function Step4Procedimento({
         return !jaConcluido && !idsNaSessao.has(cid);
       })
       .map((it) => {
-        const cid = String(it.catalogoProcedimentoSaudeId || it.catalogoId || it.id);
+        const catIdReal = it.catalogoProcedimentoSaudeId || it.catalogoId || it.nomeProcedimentoCatalogoId || null;
+        const cid = String(catIdReal || it.id);
         const matched = procedimentoSearchOptions.find((o) => String(o.id) === cid);
         const rawNome = it.nomeProcedimento || it.catalogoNome || it.nome;
         const nomeFinal = !isGeneric(rawNome) ? rawNome : (matched?.nome || rawNome || 'Procedimento do Plano');
 
         return {
-          id: cid,
+          id: String(it.id || it.planejamentoItemId),
+          catalogoProcedimentoSaudeId: catIdReal,
+          catalogoId: catIdReal,
           planejamentoItemId: it.planejamentoItemId || it.id,
           nome: nomeFinal,
           planoTitulo: it.planoTitulo || it.planoNome || journeyPlanejamentoCtx?.titulo || 'Plano de Tratamento',
@@ -2305,15 +2308,19 @@ export function Step4Procedimento({
   }, [journeyPlanejamentoCtx, procedimentosSessao, procedimentoSearchOptions]);
 
   const handleAdicionarItemDoPlano = React.useCallback(async (itemPlano) => {
-    const procId = String(itemPlano.id);
+    const safeCatId = itemPlano.catalogoProcedimentoSaudeId
+      ? String(itemPlano.catalogoProcedimentoSaudeId)
+      : null;
     const jaExiste = (procedimentosSessao || []).some(
-      (p) => String(p.catalogoProcedimentoSaudeId || p.catalogoId || p.id) === procId,
+      (p) => (safeCatId && String(p.catalogoProcedimentoSaudeId || p.catalogoId) === safeCatId) ||
+             (itemPlano.planejamentoItemId && String(p.planejamentoItemId) === String(itemPlano.planejamentoItemId)) ||
+             String(p.id) === String(itemPlano.id),
     );
     if (jaExiste) return;
     const novoItem = criarItemProcedimentoSessao(
       {
-        catalogoProcedimentoSaudeId: procId,
-        catalogoId: procId,
+        catalogoProcedimentoSaudeId: safeCatId,
+        catalogoId: safeCatId,
         nomeProcedimento: itemPlano.nome,
         nome: itemPlano.nome,
         planejamentoItemId: itemPlano.planejamentoItemId || null,
@@ -2335,7 +2342,7 @@ export function Step4Procedimento({
       setProcedimentosSessao(novaLista);
     }
     if (novaLista.length === 1) {
-      gravarProcedimentoCatalogo(novoItem.nomeProcedimento, procId);
+      gravarProcedimentoCatalogo(novoItem.nomeProcedimento, safeCatId);
     }
     setStep4Errors((prev) => ({
       ...prev,
@@ -2392,7 +2399,9 @@ export function Step4Procedimento({
     }
 
     // Interceptor: se o item está pendente no plano de tratamento ativo, abrir modal de decisão
-    const itemNoPlano = itensPlanoPendentes.find((it) => String(it.id) === procId);
+    const itemNoPlano = itensPlanoPendentes.find(
+      (it) => String(it.catalogoProcedimentoSaudeId || it.catalogoId || it.id) === procId,
+    );
     if (itemNoPlano) {
       setModalDecisaoPlano({
         open: true,
