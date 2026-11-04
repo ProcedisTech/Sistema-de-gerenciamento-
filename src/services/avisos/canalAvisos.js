@@ -25,9 +25,15 @@ export const TEMPOS_PADRAO = Object.freeze({
   backoffMs: Object.freeze([1000, 2000, 5000, 10000, 30000]),
   jitter: 0.2,
   silencioMs: 45_000,
-  ocultaMs: 5 * 60_000,
+  ocultaMs: 60_000,
   retryAfterPadraoMs: 5000,
+  ociosoMs: 10 * 60_000,
+  interacaoThrottleMs: 5000,
+  reconectarMaxMs: 2000,
+  teto503Ms: 5 * 60_000,
 });
+
+const EVENTOS_INTERACAO = ['pointerdown', 'keydown', 'touchstart', 'wheel', 'scroll'];
 
 export const LIMITE_IDS_VISTOS = 1000;
 
@@ -37,6 +43,7 @@ export const STATUS_LEITOR = Object.freeze({
   ERRO: 'erro',
   SUBSTITUIDA: 'substituida',
   OCULTA: 'oculta',
+  OCIOSO: 'ocioso',
   BLOQUEADO: 'bloqueado',
   PARADO: 'parado',
 });
@@ -126,6 +133,7 @@ export function criarLeitorAvisos({
   onSubstituida,
   onStatus,
   obterIdDaAba = idDaAba,
+  obterOciosoMs,
 } = {}) {
   const tempos = { ...TEMPOS_PADRAO, ...temposParciais };
 
@@ -142,6 +150,8 @@ export function criarLeitorAvisos({
   let timerReconexao = null;
   let timerSilencio = null;
   let timerOculta = null;
+  let timerOcioso = null;
+  let ultimaInteracao = 0;
   const idsVistos = new Set();
   const filaIds = [];
 
@@ -251,6 +261,12 @@ export function criarLeitorAvisos({
         });
         break;
       }
+      case 'reconectar':
+        // Servidor pediu troca de conexão: o abort zera `atual`, então o fim do stream não cai em falhar().
+        abortarAtual();
+        setStatus(STATUS_LEITOR.CONECTANDO);
+        agendar(aleatorio() * tempos.reconectarMaxMs);
+        break;
       case 'substituida':
         abortarAtual();
         timerReconexao = limpar(timerReconexao);
@@ -299,6 +315,7 @@ export function criarLeitorAvisos({
     if (parado) return;
     const ctrl = new AbortController();
     atual = ctrl;
+    if (!timerOcioso) armarOcioso();
     setStatus(STATUS_LEITOR.CONECTANDO);
 
     let headers;
@@ -365,7 +382,13 @@ export function criarLeitorAvisos({
       res.body?.cancel?.().catch?.(() => {});
       abortarAtual();
       setStatus(STATUS_LEITOR.ERRO);
-      agendar(parseRetryAfterMs(res.headers?.get?.('Retry-After'), tempos.retryAfterPadraoMs));
+      agendar(
+        Math.min(
+          tempos.teto503Ms,
+          parseRetryAfterMs(res.headers?.get?.('Retry-After'), tempos.retryAfterPadraoMs) * 2 ** tentativa,
+        ),
+      );
+      tentativa += 1;
       return;
     }
     if (!res.ok) {
@@ -381,6 +404,7 @@ export function criarLeitorAvisos({
 
   const aoFocar = () => {
     if (!podeReconectarPorEvento() || !aguardandoFoco) return;
+    armarOcioso();
     aguardandoFoco = false;
     conectar();
   };
@@ -393,6 +417,28 @@ export function criarLeitorAvisos({
     setStatus(STATUS_LEITOR.OCULTA);
   };
 
+  const armarOcioso = () => {
+    timerOcioso = limpar(timerOcioso);
+    timerOcioso = setTimeout(fecharPorOcioso, obterOciosoMs ? obterOciosoMs() : tempos.ociosoMs);
+  };
+
+  function fecharPorOcioso() {
+    timerOcioso = null;
+    if (!podeReconectarPorEvento() || status === STATUS_LEITOR.SUBSTITUIDA) return;
+    abortarAtual();
+    timerReconexao = limpar(timerReconexao);
+    setStatus(STATUS_LEITOR.OCIOSO);
+  }
+
+  const aoInteragir = () => {
+    if (parado) return;
+    const agora = Date.now();
+    if (agora - ultimaInteracao < tempos.interacaoThrottleMs) return;
+    ultimaInteracao = agora;
+    armarOcioso();
+    if (status === STATUS_LEITOR.OCIOSO && podeReconectarPorEvento()) conectar();
+  };
+
   const aoMudarVisibilidade = () => {
     if (typeof document === 'undefined') return;
     if (document.visibilityState === 'hidden') {
@@ -402,7 +448,8 @@ export function criarLeitorAvisos({
     }
     timerOculta = limpar(timerOculta);
     if (!podeReconectarPorEvento()) return;
-    if (status === STATUS_LEITOR.OCULTA || aguardandoFoco) {
+    armarOcioso();
+    if (status === STATUS_LEITOR.OCULTA || status === STATUS_LEITOR.OCIOSO || aguardandoFoco) {
       aguardandoFoco = false;
       conectar();
     }
@@ -410,7 +457,7 @@ export function criarLeitorAvisos({
 
   const aoFicarOnline = () => {
     if (!podeReconectarPorEvento() || aguardandoFoco) return;
-    if (status === STATUS_LEITOR.OCULTA || status === STATUS_LEITOR.CONECTADO) return;
+    if (status === STATUS_LEITOR.OCULTA || status === STATUS_LEITOR.CONECTADO || status === STATUS_LEITOR.OCIOSO) return;
     tentativa = 0;
     conectar();
   };
@@ -422,7 +469,9 @@ export function criarLeitorAvisos({
     if (typeof window !== 'undefined') {
       window.addEventListener('online', aoFicarOnline);
       window.addEventListener('focus', aoFocar);
+      EVENTOS_INTERACAO.forEach((e) => window.addEventListener(e, aoInteragir, { passive: true }));
     }
+    ultimaInteracao = 0;
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', aoMudarVisibilidade);
       if (document.visibilityState === 'hidden') {
@@ -438,9 +487,11 @@ export function criarLeitorAvisos({
     abortarAtual();
     timerReconexao = limpar(timerReconexao);
     timerOculta = limpar(timerOculta);
+    timerOcioso = limpar(timerOcioso);
     if (typeof window !== 'undefined') {
       window.removeEventListener('online', aoFicarOnline);
       window.removeEventListener('focus', aoFocar);
+      EVENTOS_INTERACAO.forEach((e) => window.removeEventListener(e, aoInteragir));
     }
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', aoMudarVisibilidade);

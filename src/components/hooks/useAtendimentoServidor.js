@@ -55,7 +55,7 @@ export const CODIGO_ESPERA_CANCELADA = 'ESPERA_CANCELADA';
 export const ESPERA_OUTRA_ABA_MS = 10000;
 const MENSAGEM_AVISO_OUTRA_ABA = 'Há envios pendentes em outro aparelho';
 /** F6b: ao sair do campo só focado (sem mexer), o remoto em espera venceu. */
-const MENSAGEM_ALTERADO_OUTRO_APARELHO = 'Alterado em outro aparelho';
+export const MENSAGEM_ALTERADO_OUTRO_APARELHO = 'Alterado em outro aparelho';
 /** F2: ao sair do campo em que a pessoa mexeu, o local venceu o remoto em espera (PATCH do local saiu). */
 const MENSAGEM_SOBRESCREVEU_OUTRO_APARELHO = 'Sua alteração sobrescreveu a de outro aparelho';
 const MENSAGEM_NAO_ENTROU_ALTERACAO = 'Sua alteração não foi salva: a consulta foi atualizada. Confira e digite novamente.';

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AvisosProvider } from './AvisosProvider.jsx';
 import { AvisosContext } from './avisosContext.js';
 import { useAviso } from './useAviso.js';
-import { criarLeitorAvisos } from '../services/avisos/canalAvisos.js';
+import { criarLeitorAvisos, STATUS_LEITOR } from '../services/avisos/canalAvisos.js';
 import {
   criarServidorFalso,
   definirVisibilidade,
@@ -243,7 +243,7 @@ describe('AvisosProvider', () => {
     definirVisibilidade('hidden');
     await passar();
     const buscas = onBusca.mock.calls.length;
-    await passar(6 * 60_000);
+    await passar(61_000);
     expect(onBusca).toHaveBeenCalledTimes(buscas);
 
     const chamadas = servidor.fetchImpl.mock.calls.length;
@@ -310,6 +310,61 @@ describe('AvisosProvider', () => {
     await passar();
     servidor.ultima().enviar(sse.conectado('1') + sse.aviso('2', 'AGENDA.CRIADO', 'a') + sse.recarregar('2'));
     await passar(1000);
+    expect(localStorage.getItem('procedi_last_activity')).toBe('123');
+    expect(sessionStorage.getItem('procedi_last_activity')).toBe('123');
+  });
+
+  /** Leitor falso: guarda as opções recebidas e permite empurrar status. */
+  function leitorFalso() {
+    const criados = [];
+    const criarLeitor = vi.fn((opts) => {
+      const leitor = { opts, iniciar: vi.fn(), parar: vi.fn() };
+      criados.push(leitor);
+      return leitor;
+    });
+    return { criarLeitor, criados };
+  }
+
+  it('leitor OCIOSO com a aba visível por 2 min não rebusca (ocioso não é degradável)', async () => {
+    const { criarLeitor, criados } = leitorFalso();
+    const servidor = criarServidorFalso();
+    const { onBusca } = montar({ servidor, criarLeitor });
+    await passar();
+    act(() => criados[0].opts.onStatus(STATUS_LEITOR.OCIOSO));
+    const buscas = onBusca.mock.calls.length;
+    await passar(120_000);
+    expect(onBusca).toHaveBeenCalledTimes(buscas);
+  });
+
+  it('obterOciosoMs: 30 min em consulta, 10 min fora, troca de prop sem recriar o leitor', async () => {
+    const { criarLeitor, criados } = leitorFalso();
+    const arvore = (emConsulta) => (
+      <AvisosProvider orgId="org-1" ativo criarLeitor={criarLeitor} emConsulta={emConsulta}>
+        <div />
+      </AvisosProvider>
+    );
+    const { rerender } = render(arvore(false));
+    await passar();
+    const { obterOciosoMs } = criados[0].opts;
+    expect(obterOciosoMs()).toBe(10 * 60_000);
+    rerender(arvore(true));
+    await passar();
+    expect(obterOciosoMs()).toBe(30 * 60_000);
+    rerender(arvore(false));
+    await passar();
+    expect(obterOciosoMs()).toBe(10 * 60_000);
+    expect(criarLeitor).toHaveBeenCalledTimes(1);
+    expect(criados[0].parar).not.toHaveBeenCalled();
+  });
+
+  it('leitor OCIOSO não altera procedi_last_activity', async () => {
+    localStorage.setItem('procedi_last_activity', '123');
+    sessionStorage.setItem('procedi_last_activity', '123');
+    const { criarLeitor, criados } = leitorFalso();
+    montar({ servidor: criarServidorFalso(), criarLeitor });
+    await passar();
+    act(() => criados[0].opts.onStatus(STATUS_LEITOR.OCIOSO));
+    await passar(120_000);
     expect(localStorage.getItem('procedi_last_activity')).toBe('123');
     expect(sessionStorage.getItem('procedi_last_activity')).toBe('123');
   });

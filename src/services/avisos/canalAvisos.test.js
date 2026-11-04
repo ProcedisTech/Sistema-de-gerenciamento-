@@ -447,7 +447,7 @@ describe('criarLeitorAvisos', () => {
     leitor.parar();
   });
 
-  it('aba oculta por 5 min fecha o stream; visível reconecta com Last-Event-ID', async () => {
+  it('aba oculta por 60 s fecha o stream; visível reconecta com Last-Event-ID', async () => {
     const servidor = criarServidorFalso();
     const { leitor } = montar(servidor);
     leitor.iniciar();
@@ -455,7 +455,7 @@ describe('criarLeitorAvisos', () => {
     servidor.ultima().enviar(sse.conectado('8'));
     await passar();
     definirVisibilidade('hidden');
-    for (let t = 0; t < 14; t += 1) {
+    for (let t = 0; t < 2; t += 1) {
       servidor.ultima().enviar(sse.batida());
       await passar(20_000);
     }
@@ -475,7 +475,7 @@ describe('criarLeitorAvisos', () => {
     leitor.parar();
   });
 
-  it('aba oculta por menos de 5 min mantém o stream', async () => {
+  it('aba oculta por menos de 60 s mantém o stream', async () => {
     const servidor = criarServidorFalso();
     const { leitor } = montar(servidor);
     leitor.iniciar();
@@ -484,7 +484,8 @@ describe('criarLeitorAvisos', () => {
     definirVisibilidade('hidden');
     await passar(30_000);
     servidor.ultima().enviar(sse.batida());
-    await passar(30_000);
+    await passar(29_000);
+    expect(servidor.ultima().aberta).toBe(true);
     definirVisibilidade('visible');
     await passar(10 * 60_000 - 60_000);
     expect(servidor.fetchImpl.mock.calls.length).toBeGreaterThanOrEqual(1);
@@ -528,6 +529,305 @@ describe('criarLeitorAvisos', () => {
     await passar(120_000);
     expect(servidor.fetchImpl).toHaveBeenCalledTimes(1);
     expect(eventos.status.at(-1)).toBe(STATUS_LEITOR.PARADO);
+  });
+
+  describe('reconectar, ociosidade e 503', () => {
+    const batidas = async (servidor, ms) => {
+      for (let t = 0; t < ms; t += 20_000) {
+        servidor.ultima().enviar(sse.batida());
+        await passar(20_000);
+      }
+    };
+    const interagir = (tipo = 'pointerdown') => window.dispatchEvent(new Event(tipo));
+
+    it('evento reconectar nunca passa por ERRO e abre nova conexão em até 2 s com o último Last-Event-ID', async () => {
+      const servidor = criarServidorFalso();
+      const { leitor, eventos } = montar(servidor);
+      leitor.iniciar();
+      await passar();
+      servidor.ultima().enviar(sse.conectado('7') + sse.aviso('9', 'AGENDA.CRIADO', 'a'));
+      await passar();
+      servidor.ultima().enviar('event: reconectar\ndata: {"v":1}\n\n');
+      await passar();
+      expect(leitor.status).toBe(STATUS_LEITOR.CONECTANDO);
+      expect(servidor.conexoes[0].aberta).toBe(false);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(1);
+      await passar(TEMPOS_PADRAO.reconectarMaxMs);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(2);
+      expect(servidor.ultima().headers['Last-Event-ID']).toBe('9');
+      expect(eventos.status).not.toContain(STATUS_LEITOR.ERRO);
+      leitor.parar();
+    });
+
+    it('leitor bloqueado (403) não reage a 10 min sem interação nem à interação seguinte', async () => {
+      const servidor = criarServidorFalso();
+      servidor.responder({ status: 403 });
+      const { leitor } = montar(servidor);
+      leitor.iniciar();
+      await passar();
+      expect(leitor.status).toBe(STATUS_LEITOR.BLOQUEADO);
+      await passar(TEMPOS_PADRAO.ociosoMs + 1000);
+      expect(leitor.status).toBe(STATUS_LEITOR.BLOQUEADO);
+      interagir();
+      await passar(5000);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(1);
+      expect(leitor.status).toBe(STATUS_LEITOR.BLOQUEADO);
+      leitor.parar();
+    });
+
+    it('10 min sem interação aborta a conexão (OCIOSO); interação reabre com Last-Event-ID', async () => {
+      const servidor = criarServidorFalso();
+      const { leitor } = montar(servidor);
+      leitor.iniciar();
+      await passar();
+      servidor.ultima().enviar(sse.conectado('4'));
+      await passar();
+      await batidas(servidor, TEMPOS_PADRAO.ociosoMs - 20_000);
+      expect(leitor.status).toBe(STATUS_LEITOR.CONECTADO);
+      servidor.ultima().enviar(sse.batida());
+      await passar(20_000);
+      expect(leitor.status).toBe(STATUS_LEITOR.OCIOSO);
+      expect(servidor.conexoes[0].aberta).toBe(false);
+      await passar(120_000);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(1);
+
+      interagir('keydown');
+      await passar();
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(2);
+      expect(servidor.ultima().headers['Last-Event-ID']).toBe('4');
+      leitor.parar();
+    });
+
+    it('em OCIOSO, a aba voltar a ficar visível reabre o stream com Last-Event-ID', async () => {
+      const servidor = criarServidorFalso();
+      const { leitor } = montar(servidor);
+      leitor.iniciar();
+      await passar();
+      servidor.ultima().enviar(sse.conectado('4'));
+      await passar();
+      await batidas(servidor, TEMPOS_PADRAO.ociosoMs);
+      expect(leitor.status).toBe(STATUS_LEITOR.OCIOSO);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(1);
+      definirVisibilidade('hidden');
+      definirVisibilidade('visible');
+      await passar();
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(2);
+      expect(servidor.ultima().headers['Last-Event-ID']).toBe('4');
+      leitor.parar();
+    });
+
+    it('reconectado após OCIOSO, 10 min sem interação voltam a OCIOSO e abortam a nova conexão', async () => {
+      const servidor = criarServidorFalso();
+      const { leitor } = montar(servidor);
+      leitor.iniciar();
+      await passar();
+      servidor.ultima().enviar(sse.conectado('4'));
+      await passar();
+      await batidas(servidor, TEMPOS_PADRAO.ociosoMs);
+      expect(leitor.status).toBe(STATUS_LEITOR.OCIOSO);
+      definirVisibilidade('hidden');
+      definirVisibilidade('visible');
+      await passar();
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(2);
+      servidor.ultima().enviar(sse.conectado('5'));
+      await passar();
+      expect(leitor.status).toBe(STATUS_LEITOR.CONECTADO);
+      await batidas(servidor, TEMPOS_PADRAO.ociosoMs);
+      expect(leitor.status).toBe(STATUS_LEITOR.OCIOSO);
+      expect(servidor.conexoes[1].aberta).toBe(false);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(2);
+      leitor.parar();
+    });
+
+    it('substituida: 10 min depois o timer de ociosidade não muda o status; wheel não reconecta, focus sim', async () => {
+      const servidor = criarServidorFalso();
+      const { leitor } = montar(servidor);
+      leitor.iniciar();
+      await passar();
+      servidor.ultima().enviar(sse.conectado('1') + sse.substituida());
+      await passar(TEMPOS_PADRAO.ociosoMs + 1000);
+      expect(leitor.status).toBe(STATUS_LEITOR.SUBSTITUIDA);
+      interagir('wheel');
+      await passar(5000);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(1);
+      expect(leitor.status).toBe(STATUS_LEITOR.SUBSTITUIDA);
+      window.dispatchEvent(new Event('focus'));
+      await passar();
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(2);
+      leitor.parar();
+    });
+
+    it('parar remove os ouvintes de interação (nem fetch nem timer depois)', async () => {
+      const servidor = criarServidorFalso();
+      const { leitor } = montar(servidor);
+      const espiao = vi.spyOn(window, 'removeEventListener');
+      leitor.iniciar();
+      await passar();
+      leitor.parar();
+      for (const tipo of ['pointerdown', 'keydown', 'touchstart', 'wheel', 'scroll']) {
+        expect(espiao.mock.calls.some(([t]) => t === tipo)).toBe(true);
+      }
+      espiao.mockRestore();
+      const antes = vi.getTimerCount();
+      ['pointerdown', 'keydown', 'touchstart', 'wheel', 'scroll'].forEach((t) => interagir(t));
+      await passar(TEMPOS_PADRAO.ociosoMs + 1000);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(antes);
+      expect(leitor.status).toBe(STATUS_LEITOR.PARADO);
+    });
+
+    it('503 seguidos com Retry-After 30 esperam 30 s, 60 s, 120 s, 240 s e o teto de 300 s', async () => {
+      const servidor = criarServidorFalso();
+      for (let i = 0; i < 5; i += 1) servidor.responder({ status: 503, headers: { 'Retry-After': '30' } });
+      const { leitor } = montar(servidor, { obterOciosoMs: () => 60 * 60_000 });
+      leitor.iniciar();
+      await passar();
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(1);
+      await passar(30_000 - 1);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(1);
+      await passar(1);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(2);
+      await passar(60_000 - 1);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(2);
+      await passar(1);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(3);
+      await passar(120_000 - 1);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(3);
+      await passar(1);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(4);
+      await passar(240_000 - 1);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(4);
+      await passar(1);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(5);
+      await passar(300_000 - 1);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(5);
+      await passar(1);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(6);
+      leitor.parar();
+    });
+
+    it('F-q: consulta (ocioso 30 min): reconectar aos 20 min não adia o prazo; OCIOSO aos 30 min desde a interação', async () => {
+      const servidor = criarServidorFalso();
+      const { leitor } = montar(servidor, { obterOciosoMs: () => 30 * 60_000 });
+      leitor.iniciar();
+      await passar();
+      interagir();
+      servidor.ultima().enviar(sse.conectado('1'));
+      await passar();
+      await batidas(servidor, 20 * 60_000);
+      expect(leitor.status).toBe(STATUS_LEITOR.CONECTADO);
+      servidor.ultima().enviar('event: reconectar\ndata: {"v":1}\n\n');
+      await passar(TEMPOS_PADRAO.reconectarMaxMs);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(2);
+      servidor.ultima().enviar(sse.conectado('2'));
+      await passar();
+      expect(leitor.status).toBe(STATUS_LEITOR.CONECTADO);
+      await batidas(servidor, 9 * 60_000);
+      expect(leitor.status).toBe(STATUS_LEITOR.CONECTADO);
+      servidor.ultima().enviar(sse.batida());
+      await passar(30_000);
+      servidor.ultima().enviar(sse.batida());
+      await passar(30_000 - TEMPOS_PADRAO.reconectarMaxMs);
+      expect(leitor.status).toBe(STATUS_LEITOR.OCIOSO);
+      expect(servidor.ultima().aberta).toBe(false);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(2);
+      leitor.parar();
+    });
+
+    it('F-r: servidor com erro e aba parada: backoff retenta, aos 10 min OCIOSO e depois nenhum fetch novo', async () => {
+      const servidor = criarServidorFalso({ responder: () => ({ erro: true }) });
+      const { leitor } = montar(servidor);
+      leitor.iniciar();
+      await passar(TEMPOS_PADRAO.ociosoMs - 1000);
+      expect(servidor.fetchImpl.mock.calls.length).toBeGreaterThan(5);
+      expect(leitor.status).not.toBe(STATUS_LEITOR.OCIOSO);
+      await passar(1000);
+      expect(leitor.status).toBe(STATUS_LEITOR.OCIOSO);
+      const antes = servidor.fetchImpl.mock.calls.length;
+      await passar(5 * 60_000);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(antes);
+      expect(leitor.status).toBe(STATUS_LEITOR.OCIOSO);
+      leitor.parar();
+    });
+
+    it('F-s: em OCIOSO o evento online não reconecta; a interação seguinte reconecta', async () => {
+      const servidor = criarServidorFalso();
+      const { leitor } = montar(servidor);
+      leitor.iniciar();
+      await passar();
+      servidor.ultima().enviar(sse.conectado('4'));
+      await passar();
+      await batidas(servidor, TEMPOS_PADRAO.ociosoMs);
+      expect(leitor.status).toBe(STATUS_LEITOR.OCIOSO);
+      window.dispatchEvent(new Event('online'));
+      await passar(5000);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(1);
+      expect(leitor.status).toBe(STATUS_LEITOR.OCIOSO);
+      interagir();
+      await passar();
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(2);
+      leitor.parar();
+    });
+
+    it('F-u: voltar à aba visível conta como interação: prazo de ociosidade recomeça na volta (9 min + 10 min)', async () => {
+      const servidor = criarServidorFalso();
+      const { leitor } = montar(servidor);
+      leitor.iniciar();
+      await passar();
+      servidor.ultima().enviar(sse.conectado('1'));
+      await passar();
+      definirVisibilidade('hidden');
+      await batidas(servidor, TEMPOS_PADRAO.ocultaMs);
+      expect(leitor.status).toBe(STATUS_LEITOR.OCULTA);
+      expect(servidor.conexoes[0].aberta).toBe(false);
+      await passar(8 * 60_000);
+      definirVisibilidade('visible');
+      await passar();
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(2);
+      servidor.ultima().enviar(sse.conectado('2'));
+      await passar();
+      expect(leitor.status).toBe(STATUS_LEITOR.CONECTADO);
+      await batidas(servidor, 60_000);
+      expect(leitor.status).toBe(STATUS_LEITOR.CONECTADO);
+      await batidas(servidor, 8 * 60_000 + 40_000);
+      expect(leitor.status).toBe(STATUS_LEITOR.CONECTADO);
+      servidor.ultima().enviar(sse.batida());
+      await passar(20_000);
+      expect(leitor.status).toBe(STATUS_LEITOR.OCIOSO);
+      expect(servidor.ultima().aberta).toBe(false);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(2);
+      leitor.parar();
+    });
+
+    it('F-v: focus que reconecta de SUBSTITUIDA conta como interação: prazo recomeça no focus (9min30 + 10 min)', async () => {
+      const servidor = criarServidorFalso();
+      const { leitor } = montar(servidor);
+      leitor.iniciar();
+      await passar();
+      servidor.ultima().enviar(sse.conectado('1'));
+      await passar();
+      await batidas(servidor, 9 * 60_000);
+      servidor.ultima().enviar(sse.substituida());
+      await passar();
+      expect(leitor.status).toBe(STATUS_LEITOR.SUBSTITUIDA);
+      await passar(30_000);
+      window.dispatchEvent(new Event('focus'));
+      await passar();
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(2);
+      servidor.ultima().enviar(sse.conectado('2'));
+      await passar();
+      expect(leitor.status).toBe(STATUS_LEITOR.CONECTADO);
+      await batidas(servidor, 60_000);
+      expect(leitor.status).toBe(STATUS_LEITOR.CONECTADO);
+      await batidas(servidor, 8 * 60_000 + 40_000);
+      expect(leitor.status).toBe(STATUS_LEITOR.CONECTADO);
+      servidor.ultima().enviar(sse.batida());
+      await passar(20_000);
+      expect(leitor.status).toBe(STATUS_LEITOR.OCIOSO);
+      expect(servidor.ultima().aberta).toBe(false);
+      expect(servidor.fetchImpl).toHaveBeenCalledTimes(2);
+      leitor.parar();
+    });
   });
 
   it('sem pingue-pongue com 6 abas contra servidor com limite 5', async () => {

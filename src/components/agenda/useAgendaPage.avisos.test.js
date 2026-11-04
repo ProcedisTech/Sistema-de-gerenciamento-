@@ -103,6 +103,16 @@ describe('agenda ao vivo pelo canal de avisos', () => {
     expect(state.apiResult).toHaveBeenCalled();
   });
 
+  it('aviso AGENDA.DISPONIBILIDADE_ALTERADA recarrega o mes uma vez', async () => {
+    const { canal } = await montarEstavel();
+    state.buscarFaixa.mockClear();
+    canal.emitirAviso(AVISO.AGENDA.DISPONIBILIDADE_ALTERADA, 'ru-1');
+    await passar(399);
+    expect(state.buscarFaixa).not.toHaveBeenCalled();
+    await passar(1);
+    expect(state.buscarFaixa).toHaveBeenCalledTimes(1);
+  });
+
   describe('recarga silenciosa', () => {
     /** Mês fora de hoje (contagem de hoje vem da busca própria) e grade semanal aberta, tudo com dados. */
     async function montarComDados() {

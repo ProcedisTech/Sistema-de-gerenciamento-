@@ -256,10 +256,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
   const canalAvisosAtivo = authSessionReady && !!orgId && contextStatus === 'ready';
 
   React.useEffect(() => {
-    onCanalAvisos?.({ orgId: orgId || null, ativo: canalAvisosAtivo });
-  }, [onCanalAvisos, orgId, canalAvisosAtivo]);
-
-  React.useEffect(() => {
     if (!authState.isLoggedIn) {
       if (typeof setRoleNome === 'function') setRoleNome('');
     }
@@ -2531,6 +2527,9 @@ function AppRefactoredInner({ onCanalAvisos }) {
   ]);
 
   const emConsultaNaTela = activeView === 'consulta' && consultaModule != null;
+  React.useEffect(() => {
+    onCanalAvisos?.({ orgId: orgId || null, ativo: canalAvisosAtivo, emConsulta: emConsultaNaTela });
+  }, [onCanalAvisos, orgId, canalAvisosAtivo, emConsultaNaTela]);
   // F7: saiu da consulta com o encerrar esperando outro aparelho: cancela a espera (idempotente com o do hook).
   React.useEffect(() => {
     if (!emConsultaNaTela) cancelarEsperaEncerrar();
@@ -6070,10 +6069,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
 export default function App() {
   // O provider fica acima do Inner porque hooks do próprio Inner (useAgendaPage) assinam avisos;
   // o Inner, dono da sessão, informa a clínica e se o canal pode abrir.
-  const [canalAvisos, setCanalAvisos] = React.useState({ orgId: null, ativo: false });
+  const [canalAvisos, setCanalAvisos] = React.useState({ orgId: null, ativo: false, emConsulta: false });
   return (
     <DisponibilidadeRevisionProvider>
-      <AvisosProvider orgId={canalAvisos.orgId} ativo={canalAvisos.ativo}>
+      <AvisosProvider orgId={canalAvisos.orgId} ativo={canalAvisos.ativo} emConsulta={canalAvisos.emConsulta}>
         <AppRefactoredInner onCanalAvisos={setCanalAvisos} />
       </AvisosProvider>
     </DisponibilidadeRevisionProvider>

@@ -150,7 +150,7 @@ export function calcResumoProtocolo(itens) {
 }
 
 
-function normalizeDraftItemForCompare(item) {
+export function normalizeDraftItemForCompare(item) {
   return {
     id: item.id ?? null,
     catalogoProcedimentoSaudeId: String(item.catalogoProcedimentoSaudeId ?? item.catalogoId ?? '').trim(),
