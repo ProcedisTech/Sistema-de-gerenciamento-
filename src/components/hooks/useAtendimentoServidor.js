@@ -55,7 +55,7 @@ export const CODIGO_ESPERA_CANCELADA = 'ESPERA_CANCELADA';
 export const ESPERA_OUTRA_ABA_MS = 10000;
 const MENSAGEM_AVISO_OUTRA_ABA = 'Há envios pendentes em outro aparelho';
 /** F6b: ao sair do campo só focado (sem mexer), o remoto em espera venceu. */
-const MENSAGEM_ALTERADO_OUTRO_APARELHO = 'Alterado em outro aparelho';
+export const MENSAGEM_ALTERADO_OUTRO_APARELHO = 'Alterado em outro aparelho';
 /** F2: ao sair do campo em que a pessoa mexeu, o local venceu o remoto em espera (PATCH do local saiu). */
 const MENSAGEM_SOBRESCREVEU_OUTRO_APARELHO = 'Sua alteração sobrescreveu a de outro aparelho';
 const MENSAGEM_NAO_ENTROU_ALTERACAO = 'Sua alteração não foi salva: a consulta foi atualizada. Confira e digite novamente.';
@@ -238,6 +238,8 @@ export function useAtendimentoServidor({
   esperaOutraAbaMsRef.current = esperaOutraAbaMs;
   /** F7: alterações recusadas por consulta encerrada: `atendimentoId -> Array<{ chave, tipo, rotulo, texto }>`. */
   const naoEntraramRef = useRef(new Map());
+  /** Envios recusados com 409 CONSULTA_ABANDONADA enquanto a releitura não volta: `atendimentoId -> n` (contam no aviso). */
+  const recusadasNoAbandonoRef = useRef(new Map());
   const [consultaNaoEntraram, setConsultaNaoEntraram] = useState(null);
   const [versaoNaoEntraram, setVersaoNaoEntraram] = useState(0);
   /** Onda 0: dependências injetáveis da aba (storage da fila, id da aba e raiz de foco), sempre as da última renderização. */
@@ -362,11 +364,16 @@ export function useAtendimentoServidor({
   /** Clínica e pessoa donas do que está na tela; resposta de `minhas` de outro dono é descartada. */
   const donoRef = useRef({ orgId, userId: userId ?? null });
 
+  /** Número do último pedido de `minhas`: resposta de pedido mais velho que o último é ignorada (lista velha descartaria texto novo). */
+  const pedidoMinhasRef = useRef(0);
+
   const recarregarMinhas = useCallback(async () => {
     const dono = donoRef.current;
+    pedidoMinhasRef.current += 1;
+    const pedido = pedidoMinhasRef.current;
     try {
       const lista = await atendimentosApi.minhas();
-      if (donoRef.current !== dono) return;
+      if (donoRef.current !== dono || pedido !== pedidoMinhasRef.current) return;
       setMinhas(Array.isArray(lista) ? lista : []);
     } catch (err) {
       console.warn('[consulta] Falha ao carregar minhas consultas:', err?.message || err);
@@ -639,27 +646,46 @@ export function useAtendimentoServidor({
     removerFilaGuardada({ userId: userIdRef.current, atendimentoId: id, storage: st });
   }, [gravarNaoEntraram, rotuloDaEntrada]);
 
+  /**
+   * Abandono: o que não chegou ao servidor se perde (memória e storage) e a pendência declarada é desmarcada, senão o
+   * encerrar trava por "envios pendentes". A fila limpa está parada para sempre: sai do mapa para a retomada criar outra.
+   * Limite: outra aba ou aparelho com fila própria não é alcançado daqui.
+   */
+  const descartarFila = useCallback((id, fila = filasRef.current.get(id) ?? null) => {
+    const { storage: st } = abaRef.current;
+    const havia = fila ? false : temFilaGuardada({ userId: userIdRef.current, atendimentoId: id, storage: st });
+    if (fila) {
+      fila.limpar();
+      if (filasRef.current.get(id) === fila) filasRef.current.delete(id);
+      if (filaRef.current === fila) filaRef.current = null;
+    }
+    removerFilaGuardada({ userId: userIdRef.current, atendimentoId: id, storage: st });
+    recusadasNoAbandonoRef.current.delete(id);
+    if (atualRef.current?.id === id) sobrescreveuRef.current.clear();
+    // Com fila, `limpar` já desmarcou a pendência; só um envio em voo (que `limpar` não anuncia) precisa do PUT aqui.
+    if (fila ? fila.tamanho() > 0 : havia) declararPendencia(id, false);
+  }, [declararPendencia]);
+
   const tratarFechada = useCallback((dto) => {
     // O encerrar pedido por este aparelho cuida da saída (perguntas, plano concluído e navegação).
     if (dto?.status === 'encerrado' && encerradasAquiRef.current.has(dto.id)) return;
     // Abandonada: conta o que este aparelho ainda não enviou ANTES de esquecer (inclui o que está em retentativa).
-    // Nada é apagado aqui: quem recebe decide (a tela apaga só depois de avisar a pessoa).
+    // Nada é apagado aqui: quem recebe chama `descartarPendentes` (o que não chegou ao servidor se perde, também fora da tela).
     let abandonada = null;
     if (dto?.status === 'abandonado') {
       const id = dto.id;
       const dono = userIdRef.current;
       const fila = filasRef.current.get(id) ?? null;
       const { storage: st } = abaRef.current;
-      const pendentes = fila ? fila.tamanho() : contarFilaGuardada({ userId: dono, atendimentoId: id, storage: st });
-      const descartarPendentes = () => {
-        if (fila) fila.limpar();
-        else removerFilaGuardada({ userId: dono, atendimentoId: id, storage: st });
-      };
+      const pendentes = (fila ? fila.tamanho() : contarFilaGuardada({ userId: dono, atendimentoId: id, storage: st }))
+        + (recusadasNoAbandonoRef.current.get(id) ?? 0);
+      recusadasNoAbandonoRef.current.delete(id);
+      const descartarPendentes = () => descartarFila(id, fila);
       abandonada = { pendentes, descartarPendentes };
     }
     // Encerrada por outro aparelho com envio ainda pendente aqui (ex.: esta aba ficou sem internet): o que a pessoa
     // digitou não pode ficar órfão no storage. Vai para "não entraram" ANTES de parar a fila e esquecer a consulta.
-    // 'cancelado'/'abandonado' mantêm o comportamento antigo.
+    // 'cancelado' mantém o comportamento antigo; 'abandonado' descarta por `descartarPendentes`.
     if (dto?.status === 'encerrado') moverPendentesParaNaoEntraram(dto.id);
     esquecer();
     recarregarMinhas();
@@ -673,7 +699,7 @@ export function useAtendimentoServidor({
     } else if (dto?.status === 'encerrado') {
       onEncerradaRef.current?.({ pacienteId: dto.pacienteId ?? null, pacienteCpf: String(dto.pacienteCpf || '') });
     }
-  }, [esquecer, moverPendentesParaNaoEntraram, recarregarMinhas]);
+  }, [descartarFila, esquecer, moverPendentesParaNaoEntraram, recarregarMinhas]);
 
   /**
    * Relê o detalhe da consulta acompanhada e aplica (R8). F6a:
@@ -745,10 +771,18 @@ export function useAtendimentoServidor({
 
   // A1: o debounce do useAviso entrega só a última mensagem da janela; um CANCELADO/ENCERRADO da consulta atual
   // pode vir antes de um aviso de outra. Por isso a saída é decidida pelo status da rebusca, nunca pelo tipo.
-  const aoAviso = useCallback(() => {
-    recarregarMinhas();
-    if (atualRef.current) recarregarAtual();
-  }, [recarregarAtual, recarregarMinhas]);
+  const aoAviso = useCallback(() => Promise.all([
+    recarregarMinhas(),
+    atualRef.current ? recarregarAtual() : null,
+  ]), [recarregarAtual, recarregarMinhas]);
+
+  // O novo prazo entra em minhas e invalida uma resposta velha de minhas ainda em voo.
+  const confirmarPresenca = useCallback(async (id) => {
+    const r = await atendimentosApi.presenca(id);
+    pedidoMinhasRef.current += 1;
+    setMinhas((lista) => lista.map((c) => (c?.id === id ? { ...c, presencaAte: r?.presencaAte } : c)));
+    return r;
+  }, []);
 
   useAviso(PREFIXO_AVISO.ATENDIMENTO, aoAviso);
   // Fotos (C3/B5) de outro aparelho com o mesmo login: a rebusca traz as fotos (Y11). O mapa se rebusca no
@@ -1005,10 +1039,13 @@ export function useAtendimentoServidor({
         const recarga = err?.status === 403 || err?.status === 409;
         const itemSumiu = err?.status === 404 || err?.status === 410;
         const textoDeConsulta = entrada.tipo === 'avaliacao' || entrada.tipo === 'item' || entrada.tipo === 'itemNovo';
+        const porAbandono = err?.body?.error === 'CONSULTA_ABANDONADA';
+        if (porAbandono) recusadasNoAbandonoRef.current.set(id, (recusadasNoAbandonoRef.current.get(id) ?? 0) + 1);
         if (recarga && acompanhada()) {
           recarregarAtualRef.current();
           // B4: 403/409 (consulta não encerrada): recarrega E avisa que o texto NÃO entrou (um toast por descarte).
-          if (textoDeConsulta && !haMaisNova) avisarRef.current?.('error', MENSAGEM_NAO_ENTROU_ALTERACAO);
+          // Abandono: o aviso sai pela releitura (conta certa).
+          if (textoDeConsulta && !haMaisNova && !porAbandono) avisarRef.current?.('error', MENSAGEM_NAO_ENTROU_ALTERACAO);
         }
         // F2: o local que ia vencer o remoto foi recusado (4xx definitivo). A base volta ao remoto (o servidor ainda o
         // tem), o campo fica "não salvo" (protegido da mescla, sem reenvio em loop) e a pessoa é avisada.
@@ -1076,10 +1113,17 @@ export function useAtendimentoServidor({
   useEffect(() => {
     if (!habilitado || !orgId || !userId || !minhasCarregadas) return;
     for (const c of minhas) {
-      if (!c?.id || c.status !== 'aberto' || filasRef.current.has(c.id)) continue;
+      if (!c?.id) continue;
+      // Abandonada sem Iniciar: o que ficou guardado se perde (a acompanhada passa por tratarFechada, que conta antes).
+      if (c.status === 'abandonado') {
+        if (c.id !== atualRef.current?.id && (filasRef.current.has(c.id)
+          || temFilaGuardada({ userId, atendimentoId: c.id, storage: abaRef.current.storage }))) descartarFila(c.id);
+        continue;
+      }
+      if (c.status !== 'aberto' || filasRef.current.has(c.id)) continue;
       if (temFilaGuardada({ userId, atendimentoId: c.id, storage: abaRef.current.storage })) obterFila(c.id);
     }
-  }, [habilitado, orgId, userId, minhas, minhasCarregadas, obterFila]);
+  }, [habilitado, orgId, userId, minhas, minhasCarregadas, obterFila, descartarFila]);
 
   // C2: hidrata uma vez por consulta (e de novo ao voltar a ela ou trocar o paciente da tela).
   useEffect(() => {
@@ -1149,6 +1193,7 @@ export function useAtendimentoServidor({
   }, [emConsulta, atualId, versaoBase, procedimentosSessao, enfileirarAlteracoes]);
 
   /** Passa a acompanhar `dto` como a consulta da tela (hidrata ao entrar). */
+  // shortcut: fila no storage de consulta vencida fica órfã (a regra 7 manda perder), limpar se virar volume.
   const adotar = useCallback((dto) => {
     if (atualRef.current?.id !== dto.id) esquecer();
     hidratadoRef.current = null;
@@ -1643,6 +1688,8 @@ export function useAtendimentoServidor({
     minhasCarregadas,
     abrir,
     adotar,
+    confirmarPresenca,
+    reler: aoAviso,
     detalhe,
     trocarModulo,
     onCampoAvaliacaoBlur,

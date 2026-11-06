@@ -85,6 +85,8 @@ vi.mock('../../utils/agendaDashboardMapping', async (importOriginal) => {
 
 describe('useAgendaPage — Regras de Vínculo entre Agenda e Plano de Tratamento', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-25T09:00:00-03:00'));
     vi.clearAllMocks();
     mockState.agendasCreate.mockImplementation(async (body) => ({
       id: `agenda-${Math.random().toString(36).substring(2, 7)}`,
@@ -95,6 +97,7 @@ describe('useAgendaPage — Regras de Vínculo entre Agenda e Plano de Tratament
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 

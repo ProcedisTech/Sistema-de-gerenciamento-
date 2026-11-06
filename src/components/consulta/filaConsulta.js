@@ -162,11 +162,13 @@ export function criarFilaConsulta({
   let concluidos = 0;
   /** Último valor entregue a `aoMudarPendencia` (só a virada dispara). */
   let pendenciaAvisada = false;
+  /** `limpar` foi chamado: um envio em voo que termina depois não mexe no storage nem na pendência (outra fila pode ser a dona). */
+  let esquecida = false;
 
   const temPendencia = () => entradas.length > 0 || emEnvio != null;
 
   const avisarPendencia = () => {
-    if (!aoMudarPendencia) return;
+    if (!aoMudarPendencia || esquecida) return;
     const agoraTem = temPendencia();
     if (agoraTem === pendenciaAvisada) return;
     pendenciaAvisada = agoraTem;
@@ -178,7 +180,7 @@ export function criarFilaConsulta({
   };
 
   const guardar = () => {
-    if (!storage) return;
+    if (!storage || esquecida) return;
     try {
       const pendentes = entradas.map(({ chave, grupo, tipo, dados }) => ({ chave, grupo, tipo, dados }));
       if (pendentes.length === 0) storage.removeItem(chaveStorage);
@@ -360,6 +362,7 @@ export function criarFilaConsulta({
       this.parar();
       // O envio em curso (se houver) termina sozinho; a pendência que se conta aqui é a da fila esquecida.
       if (!emEnvio) avisarPendencia();
+      esquecida = true;
     },
   };
 

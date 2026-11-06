@@ -35,6 +35,17 @@
  *        assinatura (com `atendimentoId`) devolvem 409 na forma real do AtendimentoGuard:
  *        `{ error: 'Esta consulta já foi fechada.', status: 409 }`.
  *      Os handlers de `rotas` recebem também `ctx.headers` (nomes em minúsculas).
+ *   6. Planejamento ao vivo entre abas, só com `estado.planos` (array de planos; sem ele nada muda). Rotas
+ *      /api/v1/planejamentos sobre `estado.planos`; o teste muda o array na mão para "a outra aba gravou":
+ *      - GET ?pacienteId=... devolve todos os planos; GET /{id} devolve o plano (404 se não existe);
+ *      - POST / cria plano ativo (id UUID); POST /{id}/itens; PATCH /{id}/itens/{itemId} (catálogo, valor, data e
+ *        `statusCodigo: 'finalizado'`); DELETE /{id}/itens/{itemId}; PATCH /{id}/status ({ codigo });
+ *      - PUT /{id} segue a regra de `removidos` do servidor real: item que NÃO veio no corpo FICA; só sai o id listado em
+ *        `removidos` (null ou ausente não apaga nada); item com `id` existente é atualizado (catálogo, valor, data), item
+ *        sem `id` nasce com id novo; a observação é gravada;
+ *      - cada escrita entra em `estado.chamadasPlano` ({ method, path, body }); `estado.nomesCatalogo` ({ catId: nome })
+ *        dá o `catalogoNome` dos itens novos; `estado.falhasPlano.detalhe = n` faz os próximos n GET /{id} devolverem 500.
+ *      Os handlers de `rotas` do teste continuam testados antes.
  * Sem `estado`, o comportamento é idêntico ao de antes (os testes do roteiro do encerrar não passam `estado`).
  */
 import { vi } from 'vitest';
@@ -131,6 +142,125 @@ export function arquivoAtualizadoEmDaVersao(versao) {
 export const PREENCHIMENTO_ANAMNESE_FALSO_ID = '00000000-0000-0000-0000-0000000000a1';
 const CAMPOS_AVALIACAO_FALSO = ['queixa', 'expectativas', 'observacoesAvaliacao'];
 
+/** Rotas de /api/v1/planejamentos sobre `estado.planos` (ver o topo do arquivo, item 6). Vazio sem `estado.planos`. */
+function rotasPlanejamento(estado) {
+  if (!Array.isArray(estado.planos)) return [];
+  estado.chamadasPlano = estado.chamadasPlano || [];
+  estado.falhasPlano = estado.falhasPlano || { detalhe: 0 };
+  // As rotas são remontadas a cada requisição: o contador de ids mora no `estado`.
+  estado.seqPlano = estado.seqPlano || 0;
+  const novoId = () => {
+    estado.seqPlano += 1;
+    return `d0000000-0000-4000-8000-${String(estado.seqPlano).padStart(12, '0')}`;
+  };
+  const copia = (v) => JSON.parse(JSON.stringify(v));
+  const registrar = (method, path, body) => estado.chamadasPlano.push({ method, path, body: copia(body ?? null) });
+  const idDoPlano = (path) => decodeURIComponent(path.split('/')[4] || '');
+  const idDoItem = (path) => decodeURIComponent(path.split('/')[6] || '');
+  const planoDe = (path) => estado.planos.find((p) => String(p.id) === idDoPlano(path));
+  const nome = (cat) => estado.nomesCatalogo?.[cat] ?? cat;
+  const totalizar = (p) => {
+    p.valorTotal = p.itens.reduce((acc, i) => acc + (Number(i.valorOrcado) || 0), 0);
+  };
+  const novoItem = (p, campos) => ({
+    id: novoId(),
+    planejamentoId: p.id,
+    catalogoProcedimentoSaudeId: campos.catalogoProcedimentoSaudeId,
+    catalogoNome: nome(campos.catalogoProcedimentoSaudeId),
+    dataPlanejada: campos.dataPlanejada ?? null,
+    statusItem: 'PLANEJADO',
+    statusItemNome: 'Planejado',
+    valorOrcado: campos.valorOrcado ?? null,
+    sessaoAtiva: null,
+    sessaoRealizada: null,
+    sessaoRetornoAtiva: null,
+  });
+  const naoAchou = { status: 404, corpo: { error: 'Planejamento não encontrado', status: 404 } };
+  return [
+    ['GET', /^\/api\/v1\/planejamentos$/, () => copia(estado.planos)],
+    ['GET', /^\/api\/v1\/planejamentos\/[^/]+$/, ({ path }) => {
+      if (estado.falhasPlano.detalhe > 0) {
+        estado.falhasPlano.detalhe -= 1;
+        return { status: 500, corpo: { error: 'Erro interno', status: 500 } };
+      }
+      const p = planoDe(path);
+      return p ? copia(p) : naoAchou;
+    }],
+    ['POST', /^\/api\/v1\/planejamentos$/, ({ path, body }) => {
+      registrar('POST', path, body);
+      const p = { id: novoId(), observacao: body?.observacao ?? '', statusCodigo: 'ativo', valorTotal: 0, itens: [] };
+      estado.planos.push(p);
+      return copia(p);
+    }],
+    ['PUT', /^\/api\/v1\/planejamentos\/[^/]+$/, ({ path, body }) => {
+      registrar('PUT', path, body);
+      const p = planoDe(path);
+      if (!p) return naoAchou;
+      const corpo = body && typeof body === 'object' ? body : {};
+      if (corpo.observacao != null) p.observacao = corpo.observacao;
+      for (const it of Array.isArray(corpo.itens) ? corpo.itens : []) {
+        const atual = it.id ? p.itens.find((x) => x.id === it.id) : null;
+        if (atual) {
+          atual.catalogoProcedimentoSaudeId = it.catalogoProcedimentoSaudeId;
+          atual.catalogoNome = nome(it.catalogoProcedimentoSaudeId);
+          atual.valorOrcado = it.valorOrcado ?? null;
+          atual.dataPlanejada = it.dataPlanejada ?? null;
+        } else {
+          p.itens.push(novoItem(p, it));
+        }
+      }
+      // Regra de removidos: o item que não veio FICA; só sai o id listado.
+      const removidos = new Set(Array.isArray(corpo.removidos) ? corpo.removidos.map(String) : []);
+      p.itens = p.itens.filter((x) => !removidos.has(String(x.id)));
+      totalizar(p);
+      return copia(p);
+    }],
+    ['POST', /^\/api\/v1\/planejamentos\/[^/]+\/itens$/, ({ path, body }) => {
+      registrar('POST', path, body);
+      const p = planoDe(path);
+      if (!p) return naoAchou;
+      const item = novoItem(p, body ?? {});
+      p.itens.push(item);
+      totalizar(p);
+      return copia(item);
+    }],
+    ['PATCH', /^\/api\/v1\/planejamentos\/[^/]+\/itens\/[^/]+$/, ({ path, body }) => {
+      registrar('PATCH', path, body);
+      const p = planoDe(path);
+      const item = p?.itens.find((x) => x.id === idDoItem(path));
+      if (!item) return naoAchou;
+      const corpo = body && typeof body === 'object' ? body : {};
+      if (corpo.catalogoProcedimentoSaudeId != null) {
+        item.catalogoProcedimentoSaudeId = corpo.catalogoProcedimentoSaudeId;
+        item.catalogoNome = nome(corpo.catalogoProcedimentoSaudeId);
+      }
+      if ('valorOrcado' in corpo) item.valorOrcado = corpo.valorOrcado;
+      if ('dataPlanejada' in corpo) item.dataPlanejada = corpo.dataPlanejada;
+      if (corpo.statusCodigo === 'finalizado') {
+        item.statusItem = 'FINALIZADO';
+        item.statusItemNome = 'Finalizado';
+      }
+      totalizar(p);
+      return copia(item);
+    }],
+    ['DELETE', /^\/api\/v1\/planejamentos\/[^/]+\/itens\/[^/]+$/, ({ path }) => {
+      registrar('DELETE', path, null);
+      const p = planoDe(path);
+      if (!p) return naoAchou;
+      p.itens = p.itens.filter((x) => x.id !== idDoItem(path));
+      totalizar(p);
+      return { status: 204, corpo: null };
+    }],
+    ['PATCH', /^\/api\/v1\/planejamentos\/[^/]+\/status$/, ({ path, body }) => {
+      registrar('PATCH', path, body);
+      const p = planoDe(path);
+      if (!p) return naoAchou;
+      p.statusCodigo = String(body?.codigo ?? p.statusCodigo).toLowerCase();
+      return copia(p);
+    }],
+  ];
+}
+
 /** Rotas que leem e escrevem no `estado` compartilhado (molde de duas abas). Só entram quando `estado` é passado. */
 function rotasComEstado(estado) {
   const itemDoCaminho = (path) => decodeURIComponent(path.split('/')[6] || '');
@@ -158,6 +288,7 @@ function rotasComEstado(estado) {
   estado.seqPendencias = estado.seqPendencias || {};
   estado.chamadasPendencia = estado.chamadasPendencia || [];
   return [
+    ...rotasPlanejamento(estado),
     ['GET', /^\/api\/v1\/atendimentos\/[^/]+$/, detalhe],
     ['PUT', /^\/api\/v1\/atendimentos\/[^/]+\/pendencia$/, ({ body, headers }) => {
       const abaId = headers['x-aba-id'];

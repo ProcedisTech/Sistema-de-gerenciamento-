@@ -1,15 +1,21 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { planejamentosApi, getApiErrorDetail } from '../../services/api.js';
 import { normalizeListaPlanos } from '../../utils/planejamentoNormalize.js';
+import { useAviso } from '../../contexts/useAviso.js';
+import { PREFIXO_AVISO } from '../../services/avisos/tiposAviso.js';
 
-export function usePlanosPaciente({ pacienteId, roleUserId, enabled = true, chaveRebusca = 0 }) {
+export function usePlanosPaciente({ pacienteId, roleUserId, enabled = true, chaveRebusca }) {
   const [planos, setPlanos] = useState([]);
   const [loading, setLoading] = useState(Boolean(enabled && String(pacienteId ?? '').trim()));
   const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState('');
   const [mutating, setMutating] = useState(false);
 
+  // Guarda de ordem: só o último pedido aplica resultado (troca de paciente também descarta).
+  const pedidoRef = useRef(0);
+
   const refresh = useCallback(async (opts = {}) => {
+    const meu = ++pedidoRef.current;
     const pid = String(pacienteId ?? '').trim();
     if (!enabled || !pid) {
       setPlanos([]);
@@ -20,28 +26,45 @@ export function usePlanosPaciente({ pacienteId, roleUserId, enabled = true, chav
     const isSilent = Boolean(opts?.silent);
     if (!isSilent) {
       setLoading(true);
+      setError('');
     }
-    setError('');
     try {
       const data = await planejamentosApi.listarPorPaciente(pid);
       const normalized = normalizeListaPlanos(data);
-      setPlanos(normalized);
+      if (meu === pedidoRef.current) setPlanos(normalized);
       return normalized;
     } catch (e) {
-      setPlanos([]);
-      setError(getApiErrorDetail(e) || e?.message || 'Não foi possível carregar os planos.');
+      // Releitura silenciosa que falha deixa a lista atual na tela.
+      if (!isSilent && meu === pedidoRef.current) {
+        setPlanos([]);
+        setError(getApiErrorDetail(e) || e?.message || 'Não foi possível carregar os planos.');
+      }
       return [];
     } finally {
-      if (!isSilent) {
+      if (meu === pedidoRef.current) {
         setLoading(false);
+        setHasLoaded(true);
       }
-      setHasLoaded(true);
     }
   }, [pacienteId, enabled]);
 
+  const chave = chaveRebusca ?? 0;
   useEffect(() => {
     refresh();
-  }, [refresh, chaveRebusca]);
+  }, [refresh, chave]);
+
+  // Quem passa chaveRebusca já relê no "recarregar" por conta própria.
+  const temChave = chaveRebusca !== undefined;
+  const reler = useCallback((msg) => {
+    if (msg?.tipo === 'recarregar' && temChave) return;
+    refresh({ silent: true });
+  }, [refresh, temChave]);
+  const relerPorAgenda = useCallback((msg) => {
+    if (msg?.tipo === 'recarregar') return; // o de PLANEJAMENTO já relê no "recarregar"
+    refresh({ silent: true });
+  }, [refresh]);
+  useAviso(PREFIXO_AVISO.PLANEJAMENTO, reler, { registroId: pacienteId });
+  useAviso(PREFIXO_AVISO.AGENDA, relerPorAgenda); // aviso de agenda leva agendaId: sem filtro por paciente
 
   const runMutation = useCallback(async (fn) => {
     setMutating(true);

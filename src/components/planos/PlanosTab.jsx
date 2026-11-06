@@ -26,9 +26,12 @@ import {
 import { ProcedimentoSearchInput } from '../agenda/ProcedimentoSearchInput.jsx';
 import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions.js';
 import { useToast } from '../../contexts/useToast.js';
+import { useAviso } from '../../contexts/useAviso.js';
+import { PREFIXO_AVISO } from '../../services/avisos/tiposAviso.js';
+import { MENSAGEM_ALTERADO_OUTRO_APARELHO } from '../hooks/useAtendimentoServidor.js';
 import { getApiErrorDetail, planejamentosApi, pacientesGaleriaApi, termosApi, pacientesApi, procedimentosApi } from '../../services/api.js';
 import { enriquecerPlanosComCatalogo } from '../../utils/planejamentoNormalize.js';
-import { calcResumoProtocolo, isRealUuid } from '../../utils/planejamentoDraftUtils.js';
+import { calcResumoProtocolo, isRealUuid, normalizeDraftItemForCompare } from '../../utils/planejamentoDraftUtils.js';
 import {
   canDarBaixaItem,
   canReagendarItem,
@@ -1364,12 +1367,25 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
 
   const consultaSemPlanoAtivo = isConsulta && planosEnriquecidos.length > 0 && displayPlanos.length === 0;
 
+  // Chave estável: releitura com a mesma lista não refaz o GET de termos.
+  const chaveTermos = useMemo(() => {
+    const p = displayPlanos[0];
+    const itens = (p?.itens || [])
+      .map((it) => `${it.id ?? ''}:${it.catalogoProcedimentoSaudeId || it.catalogoId || ''}:${it.statusItem ?? ''}`)
+      .join('|');
+    return `${p?.id ?? ''}#${itens}`;
+  }, [displayPlanos]);
+  const displayPlanosRef = useRef(displayPlanos);
+  useEffect(() => {
+    displayPlanosRef.current = displayPlanos;
+  }, [displayPlanos]);
+
   // Resolução contínua de termos do plano ativo
   useEffect(() => {
     let cancel = false;
     const checarTermos = async () => {
       const pid = String(pacienteId ?? '').trim();
-      const planoAtivo = displayPlanos[0];
+      const planoAtivo = displayPlanosRef.current[0];
       const itens = planoAtivo?.itens || [];
       const catIds = itens
         .map((it) => it.catalogoProcedimentoSaudeId || it.catalogoId)
@@ -1396,7 +1412,7 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
     return () => {
       cancel = true;
     };
-  }, [displayPlanos, pacienteId]);
+  }, [chaveTermos, pacienteId]);
 
   const toggleExpandido = useCallback(
     (id, plano) => {
@@ -1588,11 +1604,19 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
       setSavingPlanoId(id);
       setActionError('');
 
+      // Itens locais (sem id real) que vão neste Salvar: a releitura por aviso, em paralelo,
+      // não deve reincluí-los (preservarLocais) para não duplicar quando a resposta chegar.
+      const locaisEnviados = (getDraft(id)?.itens ?? [])
+        .filter((i) => !isRealUuid(i.id))
+        .map((i) => String(i.id ?? i.tempId ?? ''));
+      idsEmVooRef.current[id] = new Set(locaisEnviados);
+
       try {
         const body = buildPutPayload(id);
         await salvarPlano(id, body);
+        const meu = (pedidoDetalheRef.current[id] = (pedidoDetalheRef.current[id] || 0) + 1);
         const detalhe = await planejamentosApi.detalhe(id);
-        applyDetalhe(id, detalhe, catalogoOptions);
+        if (meu === pedidoDetalheRef.current[id]) applyDetalhe(id, detalhe, catalogoOptions);
         hydratedPlanIdsRef.current.add(id);
         // refresh atualiza só planos (header); draft já veio do GET detalhe — não re-hidratar
         await refresh();
@@ -1612,9 +1636,10 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
         toast.error(detail);
       } finally {
         setSavingPlanoId('');
+        delete idsEmVooRef.current[id];
       }
     },
-    [applyDetalhe, buildPutPayload, carregarGaleria, carregarProcedimentosFeitos, catalogoOptions, getRemovedSinceBaseline, refresh, rollbackRemoved, salvarPlano, toast],
+    [applyDetalhe, buildPutPayload, carregarGaleria, carregarProcedimentosFeitos, catalogoOptions, getDraft, getRemovedSinceBaseline, refresh, rollbackRemoved, salvarPlano, toast],
   );
 
   const handleAdicionarProcedimento = useCallback(
@@ -1667,18 +1692,19 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
       if (obsDebounceRef.current) clearTimeout(obsDebounceRef.current);
       obsDebounceRef.current = setTimeout(async () => {
         try {
-          const body = buildPutPayload(planoId);
-          body.observacao = String(text ?? '').trim();
-          await salvarPlano(planoId, body);
+          // Só a observação: nunca apaga item (PUT por diferença).
+          await salvarPlano(planoId, { observacao: String(text ?? '').trim(), itens: [], removidos: [] });
           setObsStatus('salvo');
           pendingObsRef.current = null;
+          // O texto local acabou de vencer no servidor: não há mais remoto pendente a reaplicar no blur.
+          if (obsRemotoRef.current?.planoId === planoId) obsRemotoRef.current = null;
         } catch (err) {
           console.warn('Erro no auto-save de observações do plano:', err);
           setObsStatus('erro');
         }
       }, 800);
     },
-    [buildPutPayload, salvarPlano, setObservacao],
+    [salvarPlano, setObservacao],
   );
 
   const flushPendingObservacoes = useCallback(async () => {
@@ -1690,15 +1716,13 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
       const { planoId, text } = pendingObsRef.current;
       pendingObsRef.current = null;
       try {
-        const body = buildPutPayload(planoId);
-        body.observacao = String(text ?? '').trim();
-        await salvarPlano(planoId, body);
+        await salvarPlano(planoId, { observacao: String(text ?? '').trim(), itens: [], removidos: [] });
         setObsStatus('salvo');
       } catch (err) {
         console.warn('Erro ao descarregar observação pendente:', err);
       }
     }
-  }, [buildPutPayload, salvarPlano]);
+  }, [salvarPlano]);
 
   useImperativeHandle(ref, () => ({
     flushPendingObservacoes,
@@ -1711,6 +1735,73 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
       }
     };
   }, [flushPendingObservacoes]);
+
+  // Releitura do rascunho por aviso (só consulta). Observação em foco ou com autosave pendente não é sobrescrita.
+  const obsFocoRef = useRef(null);
+  const obsRemotoRef = useRef(null);
+  const pedidoDetalheRef = useRef({});
+  // tempIds de itens locais em voo num Salvar, por planoId: a releitura por aviso não os reinclui (evita duplicar).
+  const idsEmVooRef = useRef({});
+
+  const relerRascunho = useCallback(
+    () => {
+      if (!isConsulta) return;
+      return Promise.all(
+        [...hydratedPlanIdsRef.current].map(async (id) => {
+          const meu = (pedidoDetalheRef.current[id] = (pedidoDetalheRef.current[id] || 0) + 1);
+          try {
+            const detalhe = await planejamentosApi.detalhe(id);
+            if (meu !== pedidoDetalheRef.current[id]) return;
+            const emFoco = obsFocoRef.current === id;
+            const protegida = emFoco || pendingObsRef.current?.planoId === id;
+            // só o campo em foco guarda o remoto; com só autosave pendente a gravação local vence no servidor
+            if (emFoco) {
+              obsRemotoRef.current = {
+                planoId: id,
+                valor: String(detalhe?.observacao ?? '').trim(),
+                detalhe,
+              };
+            } else if (!protegida && obsRemotoRef.current?.planoId === id) {
+              obsRemotoRef.current = null;
+            }
+            applyDetalhe(id, detalhe, catalogoOptions, {
+              manterObservacao: protegida,
+              preservarLocais: true,
+              idsEmVoo: idsEmVooRef.current[id],
+            });
+          } catch {
+            // releitura por aviso falhou: o rascunho fica como está
+          }
+        }),
+      );
+    },
+    [applyDetalhe, catalogoOptions, isConsulta],
+  );
+  const relerRascunhoPorAgenda = useCallback(
+    (msg) => {
+      if (msg?.tipo === 'recarregar') return; // o de PLANEJAMENTO já relê no "recarregar"
+      relerRascunho();
+    },
+    [relerRascunho],
+  );
+  useAviso(PREFIXO_AVISO.PLANEJAMENTO, relerRascunho, { registroId: pacienteId });
+  useAviso(PREFIXO_AVISO.AGENDA, relerRascunhoPorAgenda);
+
+  // Saiu do campo: se chegou texto remoto enquanto estava em foco e o local não venceu, aplica o remoto.
+  const handleObservacaoBlur = useCallback(
+    (planoId) => {
+      if (obsFocoRef.current === planoId) obsFocoRef.current = null;
+      const remoto = obsRemotoRef.current;
+      if (!remoto || remoto.planoId !== planoId) return;
+      obsRemotoRef.current = null;
+      if (pendingObsRef.current?.planoId === planoId) return;
+      const local = String(getDraft(planoId)?.observacao ?? '').trim();
+      if (local === remoto.valor) return;
+      applyDetalhe(planoId, remoto.detalhe, catalogoOptions, { manterObservacao: false, preservarLocais: true });
+      toast.info(MENSAGEM_ALTERADO_OUTRO_APARELHO);
+    },
+    [applyDetalhe, catalogoOptions, getDraft, toast],
+  );
 
   const handleEncerrar = useCallback(
     async (planoId) => {
@@ -2294,9 +2385,23 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
   }, [concluirRetornoModal, handleConcluirComRetorno]);
 
   const handleEditItemSave = useCallback(
-    async (patch) => {
+    async (patchCompleto) => {
       if (!editItemState) return;
       const { planoId, itemKey: key, item } = editItemState;
+      // Só o que o usuário mudou: não apaga a edição remota de outro campo do mesmo item.
+      const antes = normalizeDraftItemForCompare(item);
+      const depois = normalizeDraftItemForCompare(patchCompleto);
+      const patch = {};
+      if (depois.catalogoProcedimentoSaudeId !== antes.catalogoProcedimentoSaudeId) {
+        patch.catalogoProcedimentoSaudeId = patchCompleto.catalogoProcedimentoSaudeId;
+        patch.catalogoNome = patchCompleto.catalogoNome;
+      }
+      if (depois.valorOrcado !== antes.valorOrcado) patch.valorOrcado = patchCompleto.valorOrcado;
+      if (depois.dataPlanejada !== antes.dataPlanejada) patch.dataPlanejada = patchCompleto.dataPlanejada;
+      if (Object.keys(patch).length === 0) {
+        setEditItemState(null);
+        return;
+      }
       try {
         const realId = item?.id || (isRealUuid(key) ? key : null);
         if (realId) {
@@ -2440,6 +2545,10 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
             <textarea
               rows={2}
               value={planoDraft?.observacao ?? planoAtivo?.observacao ?? ''}
+              onFocus={() => {
+                obsFocoRef.current = planoAtivo.id;
+              }}
+              onBlur={() => handleObservacaoBlur(planoAtivo.id)}
               onChange={(e) => handleObservacaoChange(planoAtivo.id, e.target.value)}
               placeholder="Ex: Paciente sensível na região dos lábios, aplicar anestésico tópico 20 min antes…"
               className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-2 text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-[#00a88e] focus:bg-white transition-all resize-none"
@@ -3044,7 +3153,21 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
         catalogoLoading={catalogoLoading}
         mutating={mutating || Boolean(savingPlanoId)}
         canEditPreco={canEditPrecosOrcados}
-        onClose={() => setEditItemState(null)}
+        onClose={() => {
+          if (editItemState) {
+            const atual = getDraft(editItemState.planoId)?.itens?.find(
+              (i) => itemReactKey(i) === editItemState.itemKey,
+            );
+            if (
+              atual &&
+              JSON.stringify(normalizeDraftItemForCompare(atual)) !==
+                JSON.stringify(normalizeDraftItemForCompare(editItemState.item))
+            ) {
+              toast.info(MENSAGEM_ALTERADO_OUTRO_APARELHO);
+            }
+          }
+          setEditItemState(null);
+        }}
         onSave={handleEditItemSave}
       />
 
