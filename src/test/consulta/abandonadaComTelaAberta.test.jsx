@@ -1,7 +1,8 @@
 /**
  * B-42 rodada 3, item 2: a consulta aberta na tela vira "abandonado" no servidor. A tela volta ao perfil do paciente,
- * o toast diz que a consulta foi encerrada por falta de atividade e quantas alterações deste aparelho não chegaram ao
- * servidor; só depois do toast essas alterações são apagadas do aparelho. "Consulta não encontrada" não aparece e
+ * o toast diz que a consulta foi encerrada porque ninguém respondeu ao aviso de 4 h e quantas alterações deste aparelho não chegaram ao
+ * servidor; o que não chegou ao servidor se perde (é apagado do aparelho, com a tela aberta ou fora dela) e a contagem do
+ * toast é feita antes do descarte. "Consulta não encontrada" não aparece e
  * nenhum POST /encerrar sai. (Antes, este teste caracterizava a tela presa na consulta.)
  */
 import { act, screen } from '@testing-library/react';
@@ -29,7 +30,7 @@ const ENCERRAR = new RegExp(`^/api/v1/atendimentos/${ATENDIMENTO_ID}/encerrar$`)
 const MODULO = new RegExp(`^/api/v1/atendimentos/${ATENDIMENTO_ID}/modulo$`);
 const ITENS = new RegExp(`^/api/v1/atendimentos/${ATENDIMENTO_ID}/itens$`);
 const TOAST_NAO_ENCONTRADA = 'Consulta não encontrada no servidor. Recarregue a página.';
-const BASE = 'Esta consulta foi encerrada por falta de atividade.';
+const BASE = 'Esta consulta foi encerrada porque ninguém respondeu ao aviso de 4 h. O que não tinha sido salvo se perdeu.';
 const FORA = () => ({ status: 503, corpo: { message: 'Fora do ar' } });
 
 async function esperar(ms) {

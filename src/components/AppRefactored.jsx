@@ -159,6 +159,7 @@ import {
   opcoesParaEntrar,
   orientacoesPorItemParaPadrao,
   textoDaConsultaAbandonada,
+  TEXTO_ABANDONADA_USE_INICIAR,
   textoDasFotosNaoEnviadas,
   textoDoApenasSair,
   textoRetornoSemEncerrar,
@@ -168,6 +169,7 @@ import { cardDoAtalho, loteDasLinhas } from '../utils/loteAgendasDoPaciente.js';
 import { nowComparableDateTimeClinica } from '../utils/patientProfileDerivedDates.js';
 import { AtalhoConsulta } from './layout/AtalhoConsulta.jsx';
 import SessionTimeoutWarningModal from './session/SessionTimeoutWarningModal';
+import PresencaConsultaModal from './consulta/PresencaConsultaModal';
 
 function toLocalISODate(d = new Date()) {
   const year = d.getFullYear();
@@ -2503,6 +2505,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
    * `options.consultaDoServidor` (barra do topo e "Voltar à consulta") entra numa consulta que já existe, sem gravar.
    * `options.loteDaAgenda` só vale depois que o servidor aceitou.
    */
+  const abrindoConsultaRef = React.useRef(false);
   const handleStartAttendance = async (patient, options = {}) => {
     if (!patient) return;
     if (options.consultaDoServidor) {
@@ -2510,6 +2513,12 @@ function AppRefactoredInner({ onCanalAvisos }) {
       entrarNaConsulta(patient, options);
       return;
     }
+    // Clique duplo em Iniciar: um segundo abrir duplicaria o pedido do primeiro.
+    if (abrindoConsultaRef.current) {
+      toast.info('Aguarde: ainda estamos abrindo o atendimento anterior.');
+      return;
+    }
+    abrindoConsultaRef.current = true;
     const wantsRetorno =
       options.isAgendaRetorno === true ||
       String(options.tipoProcedimentoCodigo || '').toLowerCase() === 'retorno';
@@ -2537,6 +2546,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
     } catch (err) {
       toast.error(getApiErrorToastMessage(err, 'Não foi possível iniciar o atendimento.'));
       return;
+    } finally {
+      abrindoConsultaRef.current = false;
     }
     const { loteDaAgenda, ...resto } = options;
     if (Array.isArray(loteDaAgenda)) {
@@ -2646,26 +2657,29 @@ function AppRefactoredInner({ onCanalAvisos }) {
       );
     };
   }, [emConsultaNaTela, onSairConsulta, toast]);
-  // Abandonada (12 h sem atividade) com a tela na consulta: volta ao perfil, avisa quantas alterações deste aparelho
-  // não chegaram e só então as apaga. Fora da tela nada muda (o que estiver guardado fica).
+  // Encerrada por abandono (sem resposta ao aviso de 4 h): o que não chegou ao servidor se perde, na tela ou fora dela. Com a tela na consulta,
+  // volta ao perfil e avisa quantas alterações deste aparelho não chegaram; fora da tela, descarta sem aviso.
   React.useEffect(() => {
     aoConsultaAbandonadaRef.current = ({ pendentes, descartarPendentes }) => {
-      if (!emConsultaNaTela) return;
-      onSairConsulta();
-      toast.warning(textoDaConsultaAbandonada(pendentes));
+      if (emConsultaNaTela) {
+        onSairConsulta();
+        toast.warning(textoDaConsultaAbandonada(pendentes));
+      }
       descartarPendentes();
     };
   }, [emConsultaNaTela, onSairConsulta, toast]);
 
   /**
    * Entra numa consulta que já existe no servidor (atalho e "Voltar à consulta"): detalhe, paciente e a mesma entrada
-   * de sempre. Abandonada conta como fechada: recarrega a barra e não entra ("Iniciar" retoma a própria abandonada).
+   * de sempre. Abandonada conta como fechada: recarrega a barra e não entra ("Iniciar" começa uma nova).
    */
   const entrarNaConsultaDoServidor = async (resumo) => {
     const dto = await consultaServidor.detalhe(resumo.id);
     if (!dto?.id || consultaFechada(dto)) {
       consultaServidor.recarregarMinhas();
-      toast.error('Não foi possível abrir a consulta. Ela pode ter sido encerrada.');
+      toast.error(dto?.status === 'abandonado'
+        ? TEXTO_ABANDONADA_USE_INICIAR
+        : 'Não foi possível abrir a consulta. Ela pode ter sido encerrada.');
       return false;
     }
     const cpf = String(dto.pacienteCpf || '').trim();
@@ -6200,6 +6214,15 @@ function AppRefactoredInner({ onCanalAvisos }) {
           deadlineTs={sessionTimeout.deadlineTs}
           onStay={sessionTimeout.handleStay}
           onLogout={sessionTimeout.handleLogoutNow}
+        />
+      )}
+
+      {minhasConsultas.length > 0 && (
+        <PresencaConsultaModal
+          minhas={minhasConsultas}
+          confirmarPresenca={consultaServidor.confirmarPresenca}
+          reler={consultaServidor.reler}
+          onErro={(mensagem) => toast.error(mensagem)}
         />
       )}
 

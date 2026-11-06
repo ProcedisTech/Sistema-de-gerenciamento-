@@ -536,7 +536,10 @@ export function textoRetornoSemEncerrar(err, mensagemDoServidor) {
   return msg ? `${RETORNO_SEM_ENCERRAR}: ${msg}` : `${RETORNO_SEM_ENCERRAR}. Clique em Concluir Retorno de novo.`;
 }
 
-const TEXTO_ABANDONADA ='Esta consulta foi encerrada por falta de atividade.';
+const TEXTO_ABANDONADA = 'Esta consulta foi encerrada porque ninguém respondeu ao aviso de 4 h. O que não tinha sido salvo se perdeu.';
+
+/** Quem tenta entrar (ou enviar foto) numa consulta já encerrada por abandono: o caminho é "Iniciar", que começa uma nova. */
+export const TEXTO_ABANDONADA_USE_INICIAR = `${TEXTO_ABANDONADA} Use Iniciar para começar uma nova.`;
 
 /**
  * Toast da consulta abandonada com a tela aberta. Com `n` alterações deste aparelho que não chegaram ao servidor:

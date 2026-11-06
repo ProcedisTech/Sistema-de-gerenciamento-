@@ -108,11 +108,18 @@ describe('useAtendimentoServidor: abandonada com a tela aberta (item 3)', () => 
     expect(typeof onAbandonada.mock.calls[0][0].descartarPendentes).toBe('function');
   });
 
-  it('envio da fila recusado com 409 rebusca e acha abandonada: esquece, recarrega "minhas", só o callback de abandonada (0 pendentes)', async () => {
+  it('envio da fila recusado com 409 rebusca e acha abandonada: esquece, recarrega "minhas", só o callback de abandonada (1 pendente: a recusada conta)', async () => {
     const { result, onCanceladaPorOutra, onEncerradaEmOutroAparelho, onAbandonada } = await montarComConsultaAberta();
     const minhasAntes = vi.mocked(atendimentosApi.minhas).mock.calls.length;
 
-    vi.mocked(atendimentosApi.trocarModulo).mockRejectedValue(Object.assign(new Error('abandonada'), { status: 409 }));
+    vi.mocked(atendimentosApi.trocarModulo).mockRejectedValue(Object.assign(new Error('Esta consulta foi abandonada após 4 h sem atividade. Use Iniciar para retomar.'), {
+        status: 409,
+        body: {
+          error: 'CONSULTA_ABANDONADA',
+          message: 'Esta consulta foi abandonada após 4 h sem atividade. Use Iniciar para retomar.',
+          status: 409,
+        },
+      }));
     vi.mocked(atendimentosApi.detalhe).mockResolvedValue(dto({ status: 'abandonado' }));
     act(() => result.current.trocarModulo('procedimento'));
     await esperar(50);
@@ -124,9 +131,9 @@ describe('useAtendimentoServidor: abandonada com a tela aberta (item 3)', () => 
     expect(vi.mocked(atendimentosApi.minhas).mock.calls.length).toBe(minhasAntes + 1);
     expect(onCanceladaPorOutra).not.toHaveBeenCalled();
     expect(onEncerradaEmOutroAparelho).not.toHaveBeenCalled();
-    // O 409 já tirou a entrada da fila: nada pendente.
+    // O 409 tirou a entrada da fila, mas a recusa por abandono entra na contagem do aviso.
     expect(onAbandonada).toHaveBeenCalledTimes(1);
-    expect(onAbandonada.mock.calls[0][0].pendentes).toBe(0);
+    expect(onAbandonada.mock.calls[0][0].pendentes).toBe(1);
   });
 
   it.each([

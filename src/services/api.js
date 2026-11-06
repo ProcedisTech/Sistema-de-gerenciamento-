@@ -1217,6 +1217,7 @@ const atendimentoPath = (id, resto = '') => `${ATENDIMENTOS}/${encodeURIComponen
 export const atendimentosApi = {
   abrir: (data) => request(ATENDIMENTOS, { method: 'POST', body: JSON.stringify(data) }),
   minhas: () => request(`${ATENDIMENTOS}/minhas`),
+  presenca: (id) => request(atendimentoPath(id, '/presenca'), { method: 'POST' }),
   detalhe: (id) => request(atendimentoPath(id)),
   trocarModulo: (id, modulo) =>
     request(atendimentoPath(id, '/modulo'), { method: 'PATCH', body: JSON.stringify({ modulo }) }),
