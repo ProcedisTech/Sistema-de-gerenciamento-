@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
+  ArrowLeftRight,
   CalendarClock,
   CalendarX2,
   CheckCircle2,
@@ -19,6 +20,7 @@ import {
   formatarMensagemNotificacao,
   formatarTempoRelativo,
   groupNotificacoes,
+  lerPayload,
 } from '../../utils/notificacaoFormat.js';
 import { ConfigCardStackSkeleton } from '../shared/ConfigPanelSkeletons';
 import { useFusoClinica } from '../hooks/useFusoClinica.js';
@@ -50,6 +52,10 @@ const TIPO_META = {
     Icon: CalendarClock,
     iconClass: 'text-blue-600 bg-blue-50',
   },
+  agenda_profissional_transferido: {
+    Icon: ArrowLeftRight,
+    iconClass: 'text-amber-700 bg-amber-50',
+  },
 };
 
 function getTipoMeta(tipo) {
@@ -64,6 +70,8 @@ function getTipoMeta(tipo) {
 function NotificacaoCard({ notificacao, onAction, onDelete, deletando }) {
   const { Icon, iconClass } = getTipoMeta(notificacao.tipo);
   const unread = !notificacao.lida;
+  const payload = lerPayload(notificacao.payload);
+  const motivo = payload?.motivo;
 
   const handleDeleteClick = (e) => {
     e.stopPropagation();
@@ -97,6 +105,13 @@ function NotificacaoCard({ notificacao, onAction, onDelete, deletando }) {
         <p className="text-[14px] font-medium leading-snug text-[#0f172a]">
           {formatarMensagemNotificacao(notificacao)}
         </p>
+        {motivo && notificacao.tipo === 'agenda_profissional_transferido' ? (
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 rounded-md border border-amber-200/70 bg-amber-50 px-2 py-0.5 text-[11.5px] font-medium text-amber-800">
+              Motivo: {motivo}
+            </span>
+          </div>
+        ) : null}
         <p className="mt-1 text-[12px] text-[#64748b]">{formatarTempoRelativo(notificacao.criadoEm)}</p>
       </div>
       <span

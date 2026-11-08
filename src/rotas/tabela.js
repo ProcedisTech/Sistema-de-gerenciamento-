@@ -45,6 +45,7 @@ export const ROTAS = [
   { id: 'equipePerfis', path: '/equipe/perfis' },
   { id: 'equipeAuditoria', path: '/equipe/auditoria' },
   { id: 'membro', path: '/equipe/:membroId' },
+  { id: 'auditoria', path: '/auditoria' },
   { id: 'configuracoes', path: '/configuracoes' },
   { id: 'termoNovo', path: '/configuracoes/termos/novo' },
   { id: 'termo', path: '/configuracoes/termos/:termoId' },

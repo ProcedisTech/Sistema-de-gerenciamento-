@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CalendarDays, ChevronLeft, LogOut, Menu, Settings, Users, UserCog } from 'lucide-react';
+import { CalendarDays, ChevronLeft, History, LogOut, Menu, Settings, Users, UserCog } from 'lucide-react';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { usePapel } from '../../hooks/usePapel';
 import { ClinicaIdentityBlock } from './ClinicaIdentityBlock.jsx';
@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { view: 'pacientes', label: 'Pacientes', icon: Users },
   { view: 'agenda', label: 'Agenda', icon: CalendarDays },
   { view: 'gestao-equipe', label: 'Gestão de Equipe', icon: UserCog },
+  { view: 'auditoria', label: 'Auditoria', icon: History },
   { view: 'configuracoes', label: 'Configurações', icon: Settings },
 ];
 
@@ -70,10 +71,11 @@ export function Sidebar({
   const isDesktop = useMediaQuery('(min-width: 1024px)');
   const [tabletExpanded, setTabletExpanded] = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useState(readDesktopCollapsed);
-  const { canSeeConfigEquipe, canSeeConfig } = usePapel();
+  const { canSeeConfigEquipe, canSeeConfig, canSeeConfigAuditoria } = usePapel();
   const visibleNavItems = NAV_ITEMS.filter((item) => {
     if (item.view === 'configuracoes') return canSeeConfig;
     if (item.view === 'gestao-equipe') return canSeeConfigEquipe;
+    if (item.view === 'auditoria') return canSeeConfigAuditoria;
     return true;
   });
 

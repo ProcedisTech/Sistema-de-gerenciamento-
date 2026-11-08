@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { getConsultaEmAndamento, getRailCardActions } from '../../utils/agendaCardActions.js';
 import { formatCountdown } from '../../utils/agendaRailHelpers.js';
 import { AgendaAvatarInitials } from './AgendaAvatarInitials.jsx';
-import { AgendaRailCardActions, ConsultaEmAndamentoChip } from './AgendaRailCardActions.jsx';
+import { AgendaRailCardActions, ConsultaEmAndamentoChip, ProfissionalSubstituidoBadge } from './AgendaRailCardActions.jsx';
 import { usePapel } from '../../hooks/usePapel.js';
 
 function formatHmDisplay(hm) {
@@ -23,7 +23,7 @@ export function AgendaNextUpCard({
   onCancelar,
   onOpenSlotDetail,
 }) {
-  const { canStartAnamnese, canDeleteAgenda, roleUserId } = usePapel();
+  const { canStartAnamnese, canDeleteAgenda, roleUserId, isDono } = usePapel();
   const atendimentoId = appointment?.atendimentoId;
   const atendimentoStatusCodigo = appointment?.atendimentoStatusCodigo;
   const atendimentoAnfitriaoRoleUserId = appointment?.atendimentoAnfitriaoRoleUserId;
@@ -39,7 +39,18 @@ export function AgendaNextUpCard({
 
   const countdown = formatCountdown(appointment.horaInicio, nowMinutes);
   const canCancelar = Boolean(canDeleteAgenda && onCancelar);
-  const actions = getRailCardActions(appointment.status, canStartAnamnese, canCancelar, andamento);
+  const isTitular =
+    !appointment.profissionalRoleUserId ||
+    !roleUserId ||
+    String(appointment.profissionalRoleUserId) === String(roleUserId);
+  const actions = getRailCardActions(appointment.status, canStartAnamnese, canCancelar, andamento, {
+    isTitular,
+    isDono,
+  });
+  const foiSubstituido = Boolean(
+    appointment.profissionalOriginalNome &&
+      appointment.profissionalOriginalNome !== appointment.profissionalNome,
+  );
 
   return (
     <article
@@ -64,10 +75,18 @@ export function AgendaNextUpCard({
           </p>
           <p className="truncate text-[12.5px] text-ink-600">
             {appointment.procedimentoNome || 'Sem procedimento'}
-            {showProfissional && appointment.profissionalNome ? (
+            {(showProfissional || foiSubstituido) && appointment.profissionalNome ? (
               <span className="text-ink-500"> · {appointment.profissionalNome}</span>
             ) : null}
           </p>
+          {foiSubstituido ? (
+            <div className="mt-1">
+              <ProfissionalSubstituidoBadge
+                profissionalOriginalNome={appointment.profissionalOriginalNome}
+                motivoTrocaProfissional={appointment.motivoTrocaProfissional}
+              />
+            </div>
+          ) : null}
         </div>
         <div className="shrink-0 text-right">
           <p className="font-mono text-[10px] font-medium uppercase text-ink-500">Em</p>

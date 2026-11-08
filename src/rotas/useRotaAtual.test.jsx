@@ -14,7 +14,7 @@ describe('lerRota', () => {
       pacienteAnamnese: '/pacientes/1/anamnese/2', pacienteAnamneseEditar: '/pacientes/1/anamnese/2/editar',
       pacientePlano: '/pacientes/1/planos/3', agenda: '/agenda', agendaItem: '/agenda/9',
       notificacoes: '/notificacoes', equipe: '/equipe', equipePerfis: '/equipe/perfis',
-      equipeAuditoria: '/equipe/auditoria', membro: '/equipe/5', configuracoes: '/configuracoes',
+      equipeAuditoria: '/equipe/auditoria', membro: '/equipe/5', auditoria: '/auditoria', configuracoes: '/configuracoes',
       termoNovo: '/configuracoes/termos/novo', termo: '/configuracoes/termos/7',
       ficha: '/configuracoes/fichas/8', secao: '/configuracoes/meu-perfil',
     };
@@ -34,6 +34,7 @@ describe('lerRota', () => {
     expect(L('/pacientes/1').patientView).toBe('profile');
     expect(L('/agenda/9').activeView).toBe('agenda');
     expect(L('/equipe/5').activeView).toBe('gestao-equipe');
+    expect(L('/auditoria').activeView).toBe('auditoria');
     expect(L('/configuracoes/termos/novo').activeView).toBe('configuracoes');
     expect(L('/entrar').activeView).toBe('pacientes');
     expect(L('/entrar').entrar).toBe(true);

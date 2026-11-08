@@ -61,14 +61,15 @@ describe('caminhos', () => {
     expect(caminhos.tela('pacientes')).toBe('/pacientes');
     expect(caminhos.tela('agenda')).toBe('/agenda');
     expect(caminhos.tela('gestao-equipe')).toBe('/equipe');
+    expect(caminhos.tela('auditoria')).toBe('/auditoria');
     expect(caminhos.tela('configuracoes')).toBe('/configuracoes');
     expect(caminhos.tela('notificacoes')).toBe('/notificacoes');
     expect(caminhos.tela('consulta')).toBe('/consulta');
   });
 
   it('ROTAS sem id repetido', () => {
-    expect(ROTAS).toHaveLength(21);
-    expect(new Set(ROTAS.map((r) => r.id)).size).toBe(21);
+    expect(ROTAS).toHaveLength(22);
+    expect(new Set(ROTAS.map((r) => r.id)).size).toBe(22);
   });
 });
 

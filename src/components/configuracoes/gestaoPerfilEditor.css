@@ -326,6 +326,14 @@
 .prototype-perfil-editor .lc {
   color: var(--app-gold-ink);
 }
+.prototype-perfil-editor .sum-membros-bloco {
+  margin: 12px 0 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-soft, #f1f5f9);
+}
+.prototype-perfil-editor .sum-membros-bloco .who-uses {
+  margin-top: 0;
+}
 .prototype-perfil-editor .who-uses {
   display: flex;
   gap: 8px;

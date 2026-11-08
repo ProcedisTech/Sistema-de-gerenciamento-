@@ -47,6 +47,7 @@ const TELAS = {
   pacientes: '/pacientes',
   agenda: '/agenda',
   'gestao-equipe': '/equipe',
+  auditoria: '/auditoria',
   configuracoes: '/configuracoes',
   notificacoes: '/notificacoes',
   consulta: '/consulta',
@@ -65,6 +66,7 @@ export const caminhos = {
   notificacoes: () => '/notificacoes',
   equipe: (aba) => (aba && aba !== 'membros' ? `/equipe/${e(aba)}` : '/equipe'),
   membro: (id) => `/equipe/${e(id)}`,
+  auditoria: () => '/auditoria',
   configuracoes: (secaoInterna) =>
     secaoInterna ? `/configuracoes/${SLUG_DA_SECAO[secaoInterna] ?? e(secaoInterna)}` : '/configuracoes',
   termoNovo: () => '/configuracoes/termos/novo',

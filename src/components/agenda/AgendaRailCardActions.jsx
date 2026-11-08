@@ -1,4 +1,4 @@
-import { Calendar, Check, MessageCircle, Play, XCircle, ClipboardList } from 'lucide-react';
+import { Calendar, Check, MessageCircle, Play, XCircle, ClipboardList, ArrowLeftRight } from 'lucide-react';
 import { getRailPrimaryLabel } from '../../utils/agendaCardActions.js';
 
 const BTN_FOCUS =
@@ -14,7 +14,10 @@ const BTN_CANCEL = `${BTN_SECONDARY} text-status-danger-ink hover:bg-status-dang
 
 const BTN_CANCEL_COMPACT = `${BTN_SECONDARY_COMPACT} text-status-danger-ink hover:bg-status-danger-bg`;
 
-function primaryButtonClass(heightClass) {
+function primaryButtonClass(heightClass, disabled = false) {
+  if (disabled) {
+    return `inline-flex ${heightClass} w-full cursor-not-allowed items-center justify-center gap-1.5 rounded-xl border border-ink-200 bg-ink-100 px-3 text-[13px] font-medium text-ink-400 opacity-80 ${BTN_FOCUS}`;
+  }
   return `inline-flex ${heightClass} w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-br from-vivid-teal-500 to-vivid-teal-600 px-3 text-[13px] font-medium text-white shadow-agenda-glow transition-all duration-150 ease-out motion-reduce:transition-none hover:-translate-y-px hover:brightness-[1.06] ${BTN_FOCUS}`;
 }
 
@@ -29,6 +32,25 @@ export function ConsultaEmAndamentoChip({ className = '' }) {
     >
       <span className="h-1.5 w-1.5 rounded-full bg-status-ok" aria-hidden />
       Em andamento
+    </span>
+  );
+}
+
+/**
+ * Selo discreto de substituição de profissional no card da Agenda.
+ */
+export function ProfissionalSubstituidoBadge({ profissionalOriginalNome, motivoTrocaProfissional, className = '' }) {
+  if (!profissionalOriginalNome) return null;
+  const titleText = motivoTrocaProfissional
+    ? `Substituído (agendado originalmente com ${profissionalOriginalNome}) · Motivo: ${motivoTrocaProfissional}`
+    : `Substituído (agendado originalmente com ${profissionalOriginalNome})`;
+  return (
+    <span
+      title={titleText}
+      className={`inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10.5px] font-semibold text-amber-800 ${className}`}
+    >
+      <ArrowLeftRight className="h-2.5 w-2.5 shrink-0 text-amber-700" aria-hidden />
+      <span>Substituído · era {profissionalOriginalNome}</span>
     </span>
   );
 }
@@ -55,10 +77,11 @@ export function AgendaRailCardActions({
   onReagendar,
   onCancelar,
 }) {
-  const { primary, secondary } = actions;
+  const { primary, primaryDisabled = false, primaryDisabledReason = null, secondary } = actions;
   const primaryLabel = getRailPrimaryLabel(primary);
 
   function handlePrimary() {
+    if (primaryDisabled) return;
     if (primary === 'voltar' && typeof onVoltarConsulta === 'function') {
       onVoltarConsulta(actions.atendimentoId);
       return;
@@ -75,7 +98,13 @@ export function AgendaRailCardActions({
     <div className={className}>
       {actions.emAndamento ? <ConsultaEmAndamentoChip className="self-start" /> : null}
       {primary ? (
-        <button type="button" onClick={handlePrimary} className={primaryButtonClass(primaryHeightClass)}>
+        <button
+          type="button"
+          onClick={handlePrimary}
+          disabled={primaryDisabled}
+          title={primaryDisabled && primaryDisabledReason ? primaryDisabledReason : undefined}
+          className={primaryButtonClass(primaryHeightClass, primaryDisabled)}
+        >
           {primary === 'confirmar' ? (
             <Check className={`${primaryIconClass} shrink-0`} aria-hidden />
           ) : (

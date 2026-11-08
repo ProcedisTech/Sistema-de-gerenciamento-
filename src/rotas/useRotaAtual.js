@@ -23,6 +23,7 @@ const VIEW = {
   equipePerfis: 'gestao-equipe',
   equipeAuditoria: 'gestao-equipe',
   membro: 'gestao-equipe',
+  auditoria: 'auditoria',
   configuracoes: 'configuracoes',
   termoNovo: 'configuracoes',
   termo: 'configuracoes',

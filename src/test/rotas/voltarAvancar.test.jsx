@@ -38,7 +38,7 @@ describe('Voltar e Avançar entre telas do menu', () => {
 
     await clicarMenu(/^Equipe$/);
     expect(caminho()).toBe(caminhos.equipe());
-    expect(screen.getByText('Quem trabalha na clínica, o que cada um faz e o que pode acessar.')).toBeTruthy();
+    expect(await screen.findByLabelText('Filtros rápidos de status')).toBeTruthy();
 
     await clicarMenu(/^Configurações$/);
     expect(caminho()).toBe(caminhos.configuracoes());
@@ -46,7 +46,7 @@ describe('Voltar e Avançar entre telas do menu', () => {
 
     await irPara(-1);
     expect(caminho()).toBe(caminhos.equipe());
-    expect(screen.getByText('Quem trabalha na clínica, o que cada um faz e o que pode acessar.')).toBeTruthy();
+    expect(await screen.findByLabelText('Filtros rápidos de status')).toBeTruthy();
 
     await irPara(-1);
     expect(caminho()).toBe(caminhos.agenda());

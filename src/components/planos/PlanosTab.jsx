@@ -1121,10 +1121,11 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
 }, ref) {
   const { fuso } = useAgoraDaClinica();
   const isConsulta = variant === 'consulta';
-  const canCrud = isConsulta;
-  const canBaixa = true;
-  const canReagendar = true;
-  const canAgendar = true;
+  const isPacienteInativo = paciente?.ativo === false || paciente?.status === 'inativo';
+  const canCrud = isConsulta && !isPacienteInativo;
+  const canBaixa = !isPacienteInativo;
+  const canReagendar = !isPacienteInativo;
+  const canAgendar = !isPacienteInativo;
   const _canConcluirRetorno = isConsulta;
 
   const {
@@ -1435,6 +1436,7 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
   );
 
   const handleCriarPlano = useCallback(async () => {
+    if (isPacienteInativo) return;
     setActionError('');
     try {
       const created = await criarPlano('');
@@ -1456,7 +1458,7 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
       }
       setActionError(detail);
     }
-  }, [clearError, criarPlano, initEmptyDraft, isConsulta, toast]);
+  }, [clearError, criarPlano, initEmptyDraft, isConsulta, isPacienteInativo, toast]);
 
   // ── SINCRONIZADOR DE AVALIAÇÃO CLÍNICA -> PLANO DE TRATAMENTO ──
   const autoSyncProcessingRef = useRef(false);
@@ -1950,6 +1952,7 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
 
   const handleIniciarAtendimentoItem = useCallback(
     async (item, _plano) => {
+      if (isPacienteInativo) return;
       let targetItem = item;
       let targetPlano = _plano || displayPlanos.find((p) => String(p.id) === String(item?.planejamentoId)) || displayPlanos[0];
       const pid = targetPlano?.id;
@@ -2040,11 +2043,12 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
         ],
       });
     },
-    [displayPlanos, handleSalvarPlano, isConsulta, onSelectProcedimentoParaConsulta, onStartAttendance, paciente, pacienteId, pacienteNome, resolveNomeProcedimento, resolveOrigemIdParaRetorno],
+    [displayPlanos, handleSalvarPlano, isConsulta, isPacienteInativo, onSelectProcedimentoParaConsulta, onStartAttendance, paciente, pacienteId, pacienteNome, resolveNomeProcedimento, resolveOrigemIdParaRetorno],
   );
 
   const handleIniciarAtendimentoVisita = useCallback(
     async (visita, _plano) => {
+      if (isPacienteInativo) return;
       let targetPlano = _plano || displayPlanos[0];
       const pid = targetPlano?.id;
       if (pid && targetPlano?.statusCodigo === 'rascunho') {
@@ -2123,10 +2127,11 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
         lote,
       });
     },
-    [displayPlanos, handleSalvarPlano, isConsulta, onSelectProcedimentoParaConsulta, onStartAttendance, paciente, pacienteId, pacienteNome, resolveNomeProcedimento, resolveOrigemIdParaRetorno],
+    [displayPlanos, handleSalvarPlano, isConsulta, isPacienteInativo, onSelectProcedimentoParaConsulta, onStartAttendance, paciente, pacienteId, pacienteNome, resolveNomeProcedimento, resolveOrigemIdParaRetorno],
   );
 
   const handleBatchIniciarAtendimento = useCallback(async () => {
+    if (isPacienteInativo) return;
     if (selecionados.size === 0) return;
     let planoAtivo = displayPlanos[0];
     if (!planoAtivo) return;
@@ -2210,11 +2215,12 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
       lote,
     });
     limparSelecao();
-  }, [displayPlanos, handleSalvarPlano, isConsulta, limparSelecao, onSelectProcedimentoParaConsulta, onStartAttendance, paciente, pacienteId, pacienteNome, resolveNomeProcedimento, resolveOrigemIdParaRetorno, selecionados]);
+  }, [displayPlanos, handleSalvarPlano, isConsulta, isPacienteInativo, limparSelecao, onSelectProcedimentoParaConsulta, onStartAttendance, paciente, pacienteId, pacienteNome, resolveNomeProcedimento, resolveOrigemIdParaRetorno, selecionados]);
 
   // Handler de Agendamento em Lote (+0, +1, +7, +15, +30 dias)
   const handleBatchAgendar = useCallback(
     async (diasOffset = 0) => {
+      if (isPacienteInativo) return;
       const planoAtivo = displayPlanos[0];
       if (!planoAtivo || selecionados.size === 0) return;
 
@@ -2240,7 +2246,7 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
         setActionError(getApiErrorDetail(e) || e?.message || 'Erro ao agendar em lote.');
       }
     },
-    [catalogoOptions, displayPlanos, fuso, handleSalvarPlano, limparSelecao, selecionados, toast, updateItem],
+    [catalogoOptions, displayPlanos, fuso, handleSalvarPlano, isPacienteInativo, limparSelecao, selecionados, toast, updateItem],
   );
 
   // Handler de Remoção em Lote

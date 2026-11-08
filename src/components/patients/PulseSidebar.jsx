@@ -153,9 +153,10 @@ function AgendaRow({
   const isPast = isEntradaHojePassada(entrada, fuso);
   const podeCancelar = Boolean(canDeleteAgenda && onSlotCancelar);
   const andamento = getConsultaEmAndamento(linhas, roleUserId);
+  const isTitular = !roleUserId || !slot?.profissionalRoleUserId || String(slot.profissionalRoleUserId) === String(roleUserId);
   const actions = isGrupo
-    ? getGroupedRailCardActions(linhas.map((l) => l.status), canStartAnamnese, podeCancelar, andamento)
-    : getRailCardActions(slot?.status, canStartAnamnese, podeCancelar, andamento);
+    ? getGroupedRailCardActions(linhas.map((l) => l.status), canStartAnamnese, podeCancelar, andamento, { isTitular })
+    : getRailCardActions(slot?.status, canStartAnamnese, podeCancelar, andamento, { isTitular });
 
   const confirmar = async () => {
     const pendentes = linhas.filter((l) => isPendente(l.status));

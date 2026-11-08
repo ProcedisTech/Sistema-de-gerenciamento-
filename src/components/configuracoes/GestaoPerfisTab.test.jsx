@@ -35,20 +35,18 @@ describe('Editor de perfil do protótipo', () => {
     ];
     render(<GestaoPerfisTab {...props} permissoes={permissoes} canEdit criarNovoNonce={1} />);
     const button = (modulo, nivel) => within(screen.getByRole('group', { name: `Nível em ${modulo}` })).getByRole('button', { name: nivel });
-    for (const modulo of ['Documentos', 'Catálogo']) {
-      expect(button(modulo, 'Ver e editar')).toBeDisabled();
-      expect(button(modulo, 'Ver e editar')).toHaveAttribute('title', `O módulo ${modulo} não possui nível intermediário de edição`);
+    const queryButton = (modulo, nivel) => within(screen.getByRole('group', { name: `Nível em ${modulo}` })).queryByRole('button', { name: nivel });
+
+    // Documentos, Catálogo, Agenda e Pacientes possuem 'Ver e editar' ativo
+    for (const modulo of ['Documentos', 'Catálogo', 'Agenda', 'Pacientes']) {
+      expect(button(modulo, 'Ver e editar')).toBeEnabled();
+      expect(button(modulo, 'Ver e editar')).not.toHaveAttribute('title');
     }
-    for (const modulo of ['Atendimento', 'Clínica']) {
-      expect(button(modulo, 'Só ver')).toBeDisabled();
-      expect(button(modulo, 'Só ver')).toHaveAttribute('title', `O módulo ${modulo} não possui nível somente visualização`);
-    }
-    for (const nivel of ['Só ver', 'Ver e editar']) {
-      expect(button('Agenda', nivel)).toBeEnabled();
-      expect(button('Agenda', nivel)).not.toHaveAttribute('title');
-      expect(button('Pacientes', nivel)).toBeEnabled();
-      expect(button('Pacientes', nivel)).not.toHaveAttribute('title');
-    }
+
+    // Atendimento adapta botões e não exibe o nível redundante 'Ver e editar'
+    expect(queryButton('Atendimento', 'Ver e editar')).not.toBeInTheDocument();
+    expect(button('Atendimento', 'Tudo')).toBeEnabled();
+    expect(button('Atendimento', 'Sem acesso')).toBeEnabled();
   });
 
   it('seleciona níveis reais sem liberar função destrutiva no intermediário', () => {
@@ -211,4 +209,189 @@ it('renderiza as funções individuais na ordem de hierarquia com Ver no topo e 
   const labels = checkboxes.map(c => c.closest('label')?.textContent.trim() || c.getAttribute('aria-label'));
   expect(labels).toEqual(['Ver agenda', 'Criar agendamentos', 'Excluir agendamentos']);
 });
+
+it('permite selecionar preset canônico como modelo (Profissional Clínico) ativando permissões e atendimento na agenda', async () => {
+  const permissoesCatalogo = [
+    { permissaoId: 1, codigo: 'AGENDA_VER', modulo: 'Agenda', nome: 'Ver agenda' },
+    { permissaoId: 2, codigo: 'AGENDA_APARECER', modulo: 'Agenda', nome: 'Aparecer na agenda' },
+    { permissaoId: 3, codigo: 'PACIENTE_VER', modulo: 'Pacientes', nome: 'Ver pacientes' },
+    { permissaoId: 4, codigo: 'AGENDA_PROPRIA_VER', modulo: 'Agenda', nome: 'Ver agenda própria' },
+  ];
+  setupFetch();
+  render(<GestaoPerfisTab {...props} permissoes={permissoesCatalogo} canEdit criarNovoNonce={1} />);
+
+  const btnProfissional = screen.getByRole('button', { name: /Profissional/i });
+  expect(btnProfissional).toBeInTheDocument();
+  fireEvent.click(btnProfissional);
+
+  expect(screen.getByRole('radio', { name: /Sim, atende na agenda/ })).toHaveAttribute('aria-checked', 'true');
+
+  fireEvent.click(screen.getAllByRole('button', { name: /Escolher funções uma a uma/ })[0]);
+  await waitFor(() => {
+    expect(screen.getByRole('checkbox', { name: 'Ver agenda' })).toBeChecked();
+  });
+});
+
+it('renderiza as permissões de forma limpa sem badges ou ícones extras', () => {
+  const permissoesComBadges = [
+    { permissaoId: 1, codigo: 'PACIENTE_INATIVAR', modulo: 'Pacientes', nome: 'Inativar paciente' },
+    { permissaoId: 2, codigo: 'PACIENTE_VER', modulo: 'Pacientes', nome: 'Ver pacientes' },
+    { permissaoId: 3, codigo: 'AGENDA_PROPRIA_VER', modulo: 'Agenda', nome: 'Ver agenda própria' },
+  ];
+  render(<GestaoPerfisTab {...props} permissoes={permissoesComBadges} canEdit criarNovoNonce={1} />);
+
+  const expandButtons = screen.getAllByRole('button', { name: /Escolher funções uma a uma/ });
+  expandButtons.forEach(btn => fireEvent.click(btn));
+
+  expect(screen.queryByText('🔒 Senha')).not.toBeInTheDocument();
+  expect(screen.queryByText('📜 LGPD')).not.toBeInTheDocument();
+  expect(screen.queryByText('👤 Próprio')).not.toBeInTheDocument();
+  expect(screen.getByText('Inativar paciente')).toBeInTheDocument();
+  expect(screen.getByText('Ver pacientes')).toBeInTheDocument();
+  expect(screen.getByText('Ver agenda própria')).toBeInTheDocument();
+});
+
+it('renderiza o rótulo canônico Recepção / Secretária em Começar a partir de mesmo se o perfil vier renomeado como secretaria 2', () => {
+  const perfisComNomeMutado = [
+    { id: 101, codigo: 'SECRETARIA', nome: 'secretaria 2', organizacaoSaudeId: 'org-1' },
+    { id: 102, codigo: 'PROFISSIONAL_CLINICO', nome: 'Dr Clinico', organizacaoSaudeId: 'org-1' },
+    { id: 103, codigo: 'ADMINISTRADOR', nome: 'Admin Chefe', organizacaoSaudeId: 'org-1' },
+  ];
+  render(<GestaoPerfisTab {...props} perfisAcesso={perfisComNomeMutado} canEdit criarNovoNonce={1} />);
+
+  expect(screen.getByRole('button', { name: 'Recepção / Secretária' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'secretaria 2' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Profissional Clínico' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Administrador' })).toBeInTheDocument();
+});
+
+it('desabilita o campo de Nome ao editar um perfil padrão e exibe aviso de nome fixo', async () => {
+  setupFetch();
+  const perfisPadrao = [
+    { id: 50, codigo: 'SECRETARIA', nome: 'secretaria 2', organizacaoSaudeId: 'org-1' },
+  ];
+  render(<GestaoPerfisTab {...props} perfisAcesso={perfisPadrao} canEdit perfilParaAbrir={50} />);
+
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Só ver' })).toBeEnabled());
+  const inputNome = screen.getByLabelText('Nome do perfil');
+  expect(inputNome).toBeDisabled();
+  expect(inputNome).toHaveValue('Recepção / Secretária');
+  expect(screen.getByText(/Perfis padrão do sistema possuem nome fixo/i)).toBeInTheDocument();
+});
+
+it('mantém o campo de Nome habilitado ao editar um perfil customizado CST_', async () => {
+  setupFetch();
+  const perfisCustom = [
+    { id: 60, codigo: 'CST_abc123', nome: 'Secretária da Noite', organizacaoSaudeId: 'org-1' },
+  ];
+  render(<GestaoPerfisTab {...props} perfisAcesso={perfisCustom} canEdit perfilParaAbrir={60} />);
+
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Só ver' })).toBeEnabled());
+  const inputNome = screen.getByLabelText('Nome do perfil');
+  expect(inputNome).not.toBeDisabled();
+  expect(inputNome).toHaveValue('Secretária da Noite');
+  expect(screen.queryByText(/Perfis padrão do sistema possuem nome fixo/i)).not.toBeInTheDocument();
+});
+
+it('exibe banner contextual ao editar perfil existente detalhando colaboradores vinculados', async () => {
+  setupFetch();
+  const perfisCustom = [
+    { id: 60, codigo: 'CST_abc123', nome: 'Secretária da Noite', organizacaoSaudeId: 'org-1' },
+  ];
+  const usuarios = [
+    { id: 'u1', nomeCompleto: 'Mariana Lima', perfilAcessoId: 60, ativo: true },
+    { id: 'u2', nomeCompleto: 'Beatriz Silva', perfilAcessoId: 60, ativo: true },
+  ];
+  render(
+    <GestaoPerfisTab
+      {...props}
+      perfisAcesso={perfisCustom}
+      usuarios={usuarios}
+      canEdit
+      perfilParaAbrir={60}
+    />,
+  );
+
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Só ver' })).toBeEnabled());
+  const banner = document.querySelector('.perfil-custom-banner');
+  expect(banner).toBeInTheDocument();
+  expect(banner).toHaveTextContent(/Você está editando o perfil Secretária da Noite/i);
+  expect(banner).toHaveTextContent(/Este perfil é utilizado por 2 colaboradores \(Mariana, Beatriz\)/i);
+
+  // Bloco de colaboradores na coluna de resumo lateral deve estar no topo (antes da lista de módulos)
+  const sumMembros = document.querySelector('.sum-membros-bloco');
+  expect(sumMembros).toBeInTheDocument();
+  expect(sumMembros).toHaveTextContent(/2 pessoas usam este perfil/i);
+  expect(sumMembros).toHaveTextContent(/Mariana, Beatriz/i);
+  const sumCard = document.querySelector('.card.sum');
+  const modulosList = sumCard.querySelector('ul');
+  expect(sumCard.contains(sumMembros)).toBe(true);
+  expect(sumMembros.compareDocumentPosition(modulosList) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+it('ao editar perfil existente e clicar em Salvar perfil, abre modal de governança com colaboradores e permite criar novo perfil', async () => {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce({ ok: true, json: async () => [1, 2] }) // GET permissoes perfil 60
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 77, nome: 'Secretária Avançada' }) }) // POST novo perfil
+    .mockResolvedValueOnce({ ok: true, json: async () => [] }); // PUT permissoes novo perfil
+  vi.stubGlobal('fetch', fetchMock);
+
+  const perfisCustom = [
+    { id: 60, codigo: 'CST_abc123', nome: 'Secretária da Noite', organizacaoSaudeId: 'org-1' },
+  ];
+  const usuarios = [
+    { id: 'u1', nomeCompleto: 'Mariana Lima', perfilAcessoId: 60, ativo: true },
+  ];
+  render(
+    <GestaoPerfisTab
+      {...props}
+      perfisAcesso={perfisCustom}
+      usuarios={usuarios}
+      canEdit
+      perfilParaAbrir={60}
+    />,
+  );
+
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Só ver' })).toBeEnabled());
+
+  // Clica em 'Salvar perfil' (topo)
+  const btnSalvar = screen.getAllByRole('button', { name: 'Salvar perfil' })[0];
+  fireEvent.click(btnSalvar);
+
+  // Modal de governança deve abrir
+  const dialog = screen.getByRole('dialog');
+  expect(dialog).toBeInTheDocument();
+  expect(within(dialog).getByRole('heading', { name: /Salvar Alterações do Perfil/i })).toBeInTheDocument();
+  expect(within(dialog).getByText(/Utilizado por 1 colaborador/i)).toBeInTheDocument();
+  expect(within(dialog).getByText(/Mariana/i)).toBeInTheDocument();
+
+  // Seleciona Opção B: Criar um novo perfil
+  const optNovo = within(dialog).getByText(/Criar um novo perfil com as edições feitas/i);
+  fireEvent.click(optNovo);
+
+  const inputNovoNome = within(dialog).getByLabelText(/Nome do novo perfil/i);
+  // Deve ter sugerido automaticamente com sufixo (Personalizado)
+  expect(inputNovoNome.value).toBe('Secretária da Noite (Personalizado)');
+
+  // Se o usuário digitar o nome de um perfil que já existe (ex: 'Secretária da Noite')
+  fireEvent.change(inputNovoNome, { target: { value: 'Secretária da Noite' } });
+  expect(within(dialog).getByText(/Já existe um perfil com este nome nesta clínica/i)).toBeInTheDocument();
+  const btnConfirmar = within(dialog).getByRole('button', { name: 'Confirmar e salvar' });
+  expect(btnConfirmar).toBeDisabled();
+
+  // Ao alterar para um nome inédito, o erro desaparece e o botão é habilitado
+  fireEvent.change(inputNovoNome, { target: { value: 'Secretária Avançada' } });
+  expect(within(dialog).queryByText(/Já existe um perfil com este nome nesta clínica/i)).not.toBeInTheDocument();
+  expect(btnConfirmar).toBeEnabled();
+
+  // Confirma e salva
+  fireEvent.click(btnConfirmar);
+
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+  expect(fetchMock.mock.calls[1][0]).toBe('/api/v1/perfis-acesso');
+  expect(fetchMock.mock.calls[1][1].method).toBe('POST');
+  expect(JSON.parse(fetchMock.mock.calls[1][1].body).nome).toBe('Secretária Avançada');
+});
+
+
 

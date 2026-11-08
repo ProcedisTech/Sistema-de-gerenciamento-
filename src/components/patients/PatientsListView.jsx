@@ -702,6 +702,12 @@ export function PatientPreviewPanel({
               canStartAnamnese,
               Boolean(canDeleteAgenda && onSlotCancelar),
               getConsultaEmAndamento([previewAgendaSlot], roleUserId),
+              {
+                isTitular:
+                  !roleUserId ||
+                  !previewAgendaSlot?.profissionalRoleUserId ||
+                  String(previewAgendaSlot.profissionalRoleUserId) === String(roleUserId),
+              },
             )}
             compact={false}
             onVoltarConsulta={onVoltarConsulta}
@@ -765,6 +771,8 @@ export function PatientPreviewPanel({
                         timeLabel={timeLabel}
                         procedureName={nomeProc}
                         professionalName={root.profissionalNome || root.profissional || '—'}
+                        profissionalAgendadoNome={root.profissionalAgendadoNome || null}
+                        motivoTrocaProfissional={root.motivoTrocaProfissional || null}
                         depth={0}
                         retornoCount={retornoCount}
                         isRetoque={Boolean(root.isRetoque)}
@@ -809,6 +817,8 @@ export function PatientPreviewPanel({
                               timeLabel={childHora}
                               procedureName={childNome}
                               professionalName={child.profissionalNome || child.profissional || '—'}
+                              profissionalAgendadoNome={child.profissionalAgendadoNome || null}
+                              motivoTrocaProfissional={child.motivoTrocaProfissional || null}
                               depth={1}
                               retornoCount={0}
                               isRetoque={Boolean(child.isRetoque)}

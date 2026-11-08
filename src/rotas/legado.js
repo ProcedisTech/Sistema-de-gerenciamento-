@@ -15,6 +15,7 @@ const MAPA = {
   anamnese: '/configuracoes',
   termos: '/configuracoes',
   'gestao-equipe': '/equipe',
+  auditoria: '/auditoria',
   pacientes: '/pacientes',
   agenda: '/agenda',
   notificacoes: '/notificacoes',

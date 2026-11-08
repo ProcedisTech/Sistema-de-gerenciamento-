@@ -20,6 +20,7 @@ describe("consumirChavesAntigas", () => {
     ["anamnese", "/configuracoes"],
     ["termos", "/configuracoes"],
     ["gestao-equipe", "/equipe"],
+    ["auditoria", "/auditoria"],
     ["pacientes", "/pacientes"],
     ["notificacoes", "/notificacoes"],
     ["configuracoes", "/configuracoes"],

@@ -100,7 +100,7 @@ vi.mock("./EquipePessoaView", () => ({
         </button>
       )}
       <button onClick={onBack}>Voltar da pessoa</button>
-      {canSeeConfigAuditoria && <button onClick={() => {}}>Histórico</button>}
+      {canSeeConfigAuditoria && <button onClick={() => { }}>Histórico</button>}
       {canSeeConfigAuditoria && <span>Auditoria: {pessoa.id}</span>}
       {canSeeConfigPerfil && (
         <>
@@ -176,9 +176,9 @@ beforeEach(() => {
             ? [{ id: "dentista", nome: "DENTISTA" }]
             : String(url).endsWith("/perfis-acesso")
               ? [
-                  { id: "dono", codigo: "DONO", nome: "Dono" },
-                  { id: "clinico", nome: "Clínico" },
-                ]
+                { id: "dono", codigo: "DONO", nome: "Dono" },
+                { id: "clinico", nome: "Clínico" },
+              ]
               : [],
     })),
   );
@@ -206,7 +206,7 @@ it("busca por e-mail, filtra quem atende por campo real e distingue convites ind
     target: { value: "não existe" },
   });
   expect(screen.getByText("Nenhuma pessoa encontrada")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: /Convites pendentes/ }));
+  fireEvent.click(screen.getByRole("button", { name: /convites pendentes/i }));
   expect(mocks.toast.info).toHaveBeenCalled();
 });
 it("abre histórico individual e protege dono de desativação", async () => {
@@ -238,17 +238,35 @@ it("mantém navegação novo perfil/convite e não cria contas nos testes", asyn
     ),
   ).toBe(true);
 });
-it("posiciona os botões de ação do cabeçalho sem duplicidade e promove Criar perfil de acesso na lateral", async () => {
+it("despolui o cabeçalho removendo .phd e histórico/auditoria avulso, promovendo Convidar pessoa para a toolbar e Criar perfil na lateral", async () => {
   const { container } = montar();
   await screen.findByRole("button", { name: "Ver Bruno Silva" });
-  const acts = container.querySelector(".phd .acts");
-  expect(acts).toBeTruthy();
-  const buttons = Array.from(acts.querySelectorAll("button"));
-  const labels = buttons.map((b) => b.textContent.trim());
-  expect(labels).toEqual(["Histórico / Auditoria", "Convidar pessoa"]);
+  expect(container.querySelector(".phd")).toBeNull();
+  expect(
+    screen.queryByRole("button", { name: "Histórico / Auditoria" }),
+  ).not.toBeInTheDocument();
+  const inviteBtn = container.querySelector(".tool .tool-action-btn");
+  expect(inviteBtn).toBeTruthy();
+  expect(inviteBtn).toHaveTextContent("Convidar pessoa");
   expect(
     screen.getByRole("button", { name: "Criar perfil de acesso" }),
   ).toBeInTheDocument();
+
+  // Verifica cards de KPI limpos e alinhados idênticos a Pacientes (sem subtexto descritivo .kpi-sub, com spacer)
+  const kpiCards = container.querySelectorAll(".kpis .kpi");
+  expect(kpiCards.length).toBe(5);
+  expect(kpiCards[0].classList.contains("on")).toBe(false);
+  expect(kpiCards[0].querySelector(".kpi-top .kpi-label")).toHaveTextContent("ATIVOS");
+  expect(kpiCards[0].querySelector(".kpi-top .kpi-badge")).toBeTruthy();
+  expect(kpiCards[0].querySelector(".kpi-sub-spacer")).toBeTruthy();
+  expect(kpiCards[0].querySelector(".kpi-sub")).toBeNull();
+
+  // Ao clicar no card de ATIVOS, ele ativa o filtro e ganha a classe .on
+  fireEvent.click(kpiCards[0]);
+  expect(kpiCards[0].classList.contains("on")).toBe(true);
+
+  // Verifica que o rail não possui divisores obsoletos de modelos prontos
+  expect(container.querySelectorAll(".rail .rgl")).toHaveLength(0);
 });
 it("mostra falha de carregamento com retry, e não confunde falha com equipe vazia", async () => {
   fetch.mockResolvedValue({
@@ -285,28 +303,28 @@ it("exibe permissões efetivas do Dono sem inventar concessões configuráveis d
   fetch.mockImplementation(async (url, options) =>
     String(url).endsWith("/api/v1/permissoes")
       ? {
-          ok: true,
-          json: async () => [
-            {
-              permissaoId: "view",
-              codigo: "PACIENTE_VER",
-              modulo: "PACIENTES",
-              nome: "Ver pacientes",
-            },
-            {
-              permissaoId: "appear",
-              codigo: "AGENDA_APARECER",
-              modulo: "AGENDA",
-              nome: "Aparecer",
-            },
-            {
-              permissaoId: "multi",
-              codigo: "AGENDA_MULTI_VER",
-              modulo: "AGENDA",
-              nome: "Multi",
-            },
-          ],
-        }
+        ok: true,
+        json: async () => [
+          {
+            permissaoId: "view",
+            codigo: "PACIENTE_VER",
+            modulo: "PACIENTES",
+            nome: "Ver pacientes",
+          },
+          {
+            permissaoId: "appear",
+            codigo: "AGENDA_APARECER",
+            modulo: "AGENDA",
+            nome: "Aparecer",
+          },
+          {
+            permissaoId: "multi",
+            codigo: "AGENDA_MULTI_VER",
+            modulo: "AGENDA",
+            nome: "Multi",
+          },
+        ],
+      }
       : original(url, options),
   );
   montar();
@@ -669,6 +687,45 @@ it("permite filtrar equipe usando os chips rápidos integrados abaixo da busca",
   expect(screen.queryByText(/Status: Ativos/)).not.toBeInTheDocument();
 });
 
+it("aplica filtros de forma acumulativa entre múltiplos chips e pílulas ativas", async () => {
+  montar();
+  await screen.findByRole("button", { name: "Ver Bruno Silva" });
+
+  const quickChips = screen.getByLabelText("Filtros rápidos de status");
+
+  const chipAtivos = Array.from(quickChips.querySelectorAll(".quick-chip")).find((c) =>
+    c.textContent.includes("Ativos"),
+  );
+  const chipAgenda = Array.from(quickChips.querySelectorAll(".quick-chip")).find((c) =>
+    c.textContent.includes("Atendem na agenda"),
+  );
+
+  // 1. Clica em "Ativos"
+  fireEvent.click(chipAtivos);
+  expect(chipAtivos).toHaveClass("active");
+  expect(screen.getByText(/Status: Ativos/)).toBeInTheDocument();
+
+  // 2. Clica em "Atendem na agenda" sem desativar "Ativos" (acumulativo)
+  fireEvent.click(chipAgenda);
+  expect(chipAtivos).toHaveClass("active");
+  expect(chipAgenda).toHaveClass("active");
+  expect(screen.getByText(/Status: Ativos/)).toBeInTheDocument();
+  expect(screen.getByText(/Agenda: Atendem/)).toBeInTheDocument();
+
+  // 3. Remove a pílula de "Status: Ativos" via botão ✕
+  const removeStatusBtn = screen.getByRole("button", { name: "Remover filtro de status" });
+  fireEvent.click(removeStatusBtn);
+  expect(screen.queryByText(/Status: Ativos/)).not.toBeInTheDocument();
+  // "Agenda: Atendem" continua ativo!
+  expect(chipAgenda).toHaveClass("active");
+  expect(screen.getByText(/Agenda: Atendem/)).toBeInTheDocument();
+
+  // 4. Limpar todos limpa o que restava
+  const clearBtn = screen.getByRole("button", { name: "Limpar todos" });
+  fireEvent.click(clearBtn);
+  expect(screen.queryByText(/Agenda: Atendem/)).not.toBeInTheDocument();
+});
+
 it("abre a ficha do usuário ao clicar em qualquer lugar do bloco retangular da linha", async () => {
   montar();
   await screen.findByRole("button", { name: "Ver Bruno Silva" });
@@ -717,3 +774,113 @@ it("não abre a ficha do usuário ao clicar no botão do WhatsApp", async () => 
   }
 });
 
+it("renderiza o botão 'Adicionar membros' antes de 'Editar perfil' e abre o modal de vinculação ao clicar", async () => {
+  const { container } = montar();
+  await screen.findByRole("button", { name: "Ver Bruno Silva" });
+
+  // Seleciona o perfil "Clínico" no container .pchips
+  const pchips = container.querySelector(".pchips");
+  const profileButton = Array.from(pchips.querySelectorAll("button")).find((b) =>
+    b.textContent.includes("Clínico"),
+  );
+  expect(profileButton).toBeTruthy();
+  fireEvent.click(profileButton);
+
+  // O cabeçalho do perfil selecionado deve exibir "Adicionar membros"
+  const addMembersBtn = await screen.findByRole("button", {
+    name: /Adicionar membros/i,
+  });
+  expect(addMembersBtn).toBeInTheDocument();
+
+  // Verifica que existe o botão de editar ou usar como base
+  const actionBtn = screen.getByRole("button", {
+    name: /(Editar perfil|Usar como base)/i,
+  });
+  expect(actionBtn).toBeInTheDocument();
+
+  // Verifica que "Adicionar membros" precede o botão de edição na ordem do DOM
+  expect(
+    addMembersBtn.compareDocumentPosition(actionBtn) &
+    Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+
+  // Clica em "Adicionar membros"
+  fireEvent.click(addMembersBtn);
+
+  // Modal deve abrir com o título e lista de membros elegíveis (excluindo Dono)
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  expect(
+    screen.getByRole("heading", { name: "Adicionar Membros ao Perfil" }),
+  ).toBeInTheDocument();
+  expect(screen.queryByText("Ana Dono")).not.toBeInTheDocument();
+});
+
+
+
+it("abre a ficha do perfil ao clicar no rail, e fechar a ficha (✕) remove o banner e o filtro", async () => {
+  const { container } = montar();
+  await screen.findByRole("button", { name: "Ver Bruno Silva" });
+
+  // Clica no perfil "Clínico" no Rail lateral
+  const railItems = container.querySelectorAll(".rail .rit");
+  const clinicoItem = Array.from(railItems).find((item) =>
+    item.textContent.includes("Clínico"),
+  );
+  expect(clinicoItem).toBeTruthy();
+  fireEvent.click(clinicoItem);
+
+  // A ficha .pban deve estar visível
+  const pban = container.querySelector(".pban");
+  expect(pban).toBeInTheDocument();
+  expect(pban).toHaveTextContent("Clínico");
+
+  // Barra de pílulas deve exibir filtro ativo do perfil
+  expect(screen.getByText(/Perfil: Clínico/)).toBeInTheDocument();
+
+  // Clica no botão de fechar (✕) da ficha
+  const closePbanBtn = screen.getByRole("button", {
+    name: "Fechar ficha do perfil e remover filtro",
+  });
+  expect(closePbanBtn).toBeInTheDocument();
+  fireEvent.click(closePbanBtn);
+
+  // Banner recolhe e filtro é removido
+  expect(container.querySelector(".pban")).toBeNull();
+  expect(screen.queryByText(/Perfil: Clínico/)).not.toBeInTheDocument();
+});
+
+it("abre o modal 'Todos os Perfis', permite busca, fixar/desafixar perfil no rail e abrir ficha", async () => {
+  const { container } = montar();
+  await screen.findByRole("button", { name: "Ver Bruno Silva" });
+
+  // Clica no botão de ver todos os perfis
+  const seeAllBtn = screen.getByRole("button", {
+    name: /Ver todos os \d+ perfis/i,
+  });
+  expect(seeAllBtn).toBeInTheDocument();
+  fireEvent.click(seeAllBtn);
+
+  // Modal aberto
+  const modal = screen.getByRole("dialog", {
+    name: "Todos os Perfis de Acesso",
+  });
+  expect(modal).toBeInTheDocument();
+
+  // Testa busca no modal
+  const searchInput = screen.getByLabelText("Buscar perfil na lista completa");
+  fireEvent.change(searchInput, { target: { value: "Clínico" } });
+  expect(modal.querySelector(".modal-perfil-name")).toHaveTextContent("Clínico");
+
+  // Testa fixar/desafixar
+  const pinBtn = screen.getByRole("button", { name: /Fixar Clínico|Desafixar Clínico/i });
+  expect(pinBtn).toBeInTheDocument();
+  fireEvent.click(pinBtn);
+
+  // Clica no botão Ficha para abrir a ficha do perfil
+  const fichaBtn = screen.getByRole("button", { name: "Abrir ficha de Clínico" });
+  fireEvent.click(fichaBtn);
+
+  // Modal fecha e ficha abre na tela principal
+  expect(screen.queryByRole("dialog", { name: "Todos os Perfis de Acesso" })).not.toBeInTheDocument();
+  expect(container.querySelector(".pban")).toHaveTextContent("Clínico");
+});
