@@ -138,27 +138,30 @@ export function ConsultaHub({
     chaveRebusca: chaveAnamnese,
   });
   const papel = usePapel();
-  const isCardAllowed = (cardId) => {
+  const getCardEstado = (cardId) => {
     if (!papel || (!papel.papel && (!papel.permissoes || papel.permissoes.length === 0))) {
-      return true;
+      return 'disponivel';
+    }
+    if (papel?.getEstadoEtapaAtendimento) {
+      return papel.getEstadoEtapaAtendimento(cardId);
     }
     switch (cardId) {
       case 'avaliacao':
-        return Boolean(papel.canSeeHubAvaliacao);
+        return papel.canSeeHubAvaliacao ? 'disponivel' : 'bloqueado';
       case 'anamnese':
-        return Boolean(papel.canSeeHubAnamnese);
+        return papel.canSeeHubAnamnese ? 'disponivel' : 'bloqueado';
       case 'planejamento':
-        return Boolean(papel.canSeeOrcamentos);
+        return papel.canSeeOrcamentos ? 'disponivel' : 'bloqueado';
       case 'termos':
-        return Boolean(papel.canSeeHubTermos);
+        return papel.canSeeHubTermos ? 'disponivel' : 'bloqueado';
       case 'procedimento':
-        return Boolean(papel.canExecuteHubProcedimento);
+        return papel.canExecuteHubProcedimento ? 'disponivel' : 'bloqueado';
       case 'retorno':
-        return Boolean(papel.canExecuteHubProcedimento);
+        return papel.canExecuteHubProcedimento ? 'disponivel' : 'bloqueado';
       case 'retorno-avulso':
-        return Boolean(papel.canSeeHubOrientacao);
+        return papel.canSeeHubOrientacao ? 'disponivel' : 'bloqueado';
       default:
-        return true;
+        return 'disponivel';
     }
   };
   const progressoPlano = (() => {
@@ -181,7 +184,8 @@ export function ConsultaHub({
   const semVinculo = resolucaoEfetiva?.procedimentosSemVinculo || [];
 
   const handleSelectModule = (id) => {
-    if (!isCardAllowed(id)) {
+    const estado = getCardEstado(id);
+    if (estado === 'bloqueado') {
       return;
     }
     if (
@@ -196,7 +200,11 @@ export function ConsultaHub({
       });
       return;
     }
-    onSelectModule?.(id);
+    if (estado === 'leitura') {
+      onSelectModule?.(id, { modoLeitura: true });
+    } else {
+      onSelectModule?.(id);
+    }
   };
 
   return (
@@ -236,7 +244,9 @@ export function ConsultaHub({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => {
           const ModuleIcon = card.icon;
-          const allowed = isCardAllowed(card.id);
+          const estado = getCardEstado(card.id);
+          const allowed = estado !== 'bloqueado';
+          const isModoLeitura = estado === 'leitura';
           const pendingDot = getCardPendingDot(card.id, paciente, termosPendentesEfetivos, progressoPlano, anamneseStatus);
           const consentDot =
             pendingDot == null
@@ -251,20 +261,26 @@ export function ConsultaHub({
               onClick={() => {
                 if (!allowed) return;
                 if (card.id === 'retorno-avulso') {
-                  onIniciarRetornoAvulso?.();
+                  onIniciarRetornoAvulso?.({ modoLeitura: isModoLeitura });
                   return;
                 }
                 handleSelectModule(card.id);
               }}
               className={`group relative flex flex-col gap-3 rounded-xl border p-4 text-left transition-colors sm:p-5 ${
-                allowed
-                  ? 'border-app-border bg-white hover:bg-app-nav-hover active:bg-app-nav-active cursor-pointer'
-                  : 'border-slate-200 bg-slate-50/80 opacity-60 cursor-not-allowed'
+                !allowed
+                  ? 'border-slate-200 bg-slate-50/80 opacity-60 cursor-not-allowed'
+                  : isModoLeitura
+                  ? 'border-sky-200 bg-sky-50/40 hover:bg-sky-50/70 active:bg-sky-100/70 cursor-pointer'
+                  : 'border-app-border bg-white hover:bg-app-nav-hover active:bg-app-nav-active cursor-pointer'
               }`}
             >
               {!allowed ? (
                 <span className="absolute right-3 top-3 sm:right-3.5 sm:top-3.5 inline-flex items-center gap-1 rounded-md bg-slate-200/80 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-600">
                   <Lock className="h-3 w-3" /> Bloqueado
+                </span>
+              ) : isModoLeitura ? (
+                <span className="absolute right-3 top-3 sm:right-3.5 sm:top-3.5 inline-flex items-center gap-1 rounded-md bg-sky-100 text-sky-800 border border-sky-300 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider">
+                  <Eye className="h-3 w-3" /> Modo Leitura
                 </span>
               ) : statusDot ? (
                 <span className="absolute right-3 top-3 sm:right-3.5 sm:top-3.5">

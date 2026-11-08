@@ -7,7 +7,7 @@ import { isValidAdvanceOffer } from '../../utils/agendaAdvanceOffer.js';
 import { isAgendaNoShow } from '../../utils/agendaCancelamentoMotivo.js';
 import { getTimingBadge, getExecutionSummary } from '../../utils/agendaTimingBadges.js';
 import { getConsultaEmAndamento } from '../../utils/agendaCardActions.js';
-import { ConsultaEmAndamentoChip } from './AgendaRailCardActions.jsx';
+import { ConsultaEmAndamentoChip, ProfissionalSubstituidoBadge } from './AgendaRailCardActions.jsx';
 import {
   BLOQUEIO_HATCH_BG,
   bloqueioHoraFimLabel,
@@ -126,7 +126,7 @@ export function AgendaAppointmentSummaryCard({
   const isBloqueio = appointment.tipo === 'bloqueio' && appointment.status !== 'cancelado';
   const isReagendado = appointment.status === 'reagendado';
   const isNoShow = appointment.status === 'cancelado' && isAgendaNoShow(appointment);
-  const { canStartAnamnese, roleUserId } = usePapel();
+  const { canStartAnamnese, roleUserId, isDono } = usePapel();
   const { fuso } = useFusoClinica();
   const atendimentoId = appointment?.atendimentoId;
   const atendimentoStatusCodigo = appointment?.atendimentoStatusCodigo;
@@ -224,12 +224,30 @@ export function AgendaAppointmentSummaryCard({
     : STATUS_BADGE_CLASSES[appointment.status] || STATUS_BADGE_CLASSES.pendente;
 
   const isPanel = variant === 'panel' || variant === 'highlight';
+  const isTitular =
+    !appointment.profissionalRoleUserId ||
+    !roleUserId ||
+    String(appointment.profissionalRoleUserId) === String(roleUserId);
+  const isIniciarAction =
+    !andamento.emAndamento &&
+    appointment.status !== 'pendente' &&
+    appointment.status !== 'aguardando_confirmacao' &&
+    appointment.status !== 'cancelado';
+  const primaryBlockedNonTitular = isIniciarAction && !isTitular && !isDono;
+  const primaryBlockedTitle = primaryBlockedNonTitular
+    ? 'Apenas o profissional titular agendado ou o Dono da clínica podem iniciar este atendimento.'
+    : undefined;
+  const foiSubstituido = Boolean(
+    appointment.profissionalOriginalNome &&
+      appointment.profissionalOriginalNome !== appointment.profissionalNome,
+  );
   // Consulta em andamento: só quem abriu vê "Voltar à consulta"; para os outros o botão some.
   const mostrarPrincipal = andamento.emAndamento
     ? andamento.minha
     : showPrimaryActionButton(appointment.status, canStartAnamnese);
   const rotuloVoltar = andamento.emAndamento ? 'Voltar à consulta' : null;
   const handlePrincipal = () => {
+    if (primaryBlockedNonTitular) return;
     if (andamento.emAndamento && andamento.minha && typeof onVoltarConsulta === 'function') {
       onVoltarConsulta(andamento.atendimentoId);
       return;
@@ -290,9 +308,15 @@ export function AgendaAppointmentSummaryCard({
                 {metaLine}
               </p>
               {(showProfissional || appointment.profissionalNome) && appointment.profissionalNome ? (
-                <div className="mt-0.5 flex items-center gap-1 text-xs text-ink-500" title={appointment.profissionalNome}>
+                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-500" title={appointment.profissionalNome}>
                   <Stethoscope className="h-3.5 w-3.5 text-ink-400 shrink-0" />
                   <span className="truncate">{appointment.profissionalNome}</span>
+                  {foiSubstituido ? (
+                    <ProfissionalSubstituidoBadge
+                      profissionalOriginalNome={appointment.profissionalOriginalNome}
+                      motivoTrocaProfissional={appointment.motivoTrocaProfissional}
+                    />
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -331,7 +355,13 @@ export function AgendaAppointmentSummaryCard({
                   <button
                     type="button"
                     onClick={handlePrincipal}
-                    className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors duration-150 ${styles.primary}`}
+                    disabled={primaryBlockedNonTitular}
+                    title={primaryBlockedTitle}
+                    className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors duration-150 ${
+                      primaryBlockedNonTitular
+                        ? 'cursor-not-allowed bg-slate-100 text-slate-400 border border-slate-200'
+                        : styles.primary
+                    }`}
                   >
                     {rotuloVoltar || panelActionLabel(appointment.status)}
                   </button>
@@ -392,6 +422,14 @@ export function AgendaAppointmentSummaryCard({
           ) : null}
 
           <p className="mt-0.5 truncate text-[11px] font-medium text-[#555]">{metaParts.join(' · ')}</p>
+          {foiSubstituido ? (
+            <div className="mt-1">
+              <ProfissionalSubstituidoBadge
+                profissionalOriginalNome={appointment.profissionalOriginalNome}
+                motivoTrocaProfissional={appointment.motivoTrocaProfissional}
+              />
+            </div>
+          ) : null}
 
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             {andamento.emAndamento ? <ConsultaEmAndamentoChip /> : null}
@@ -414,7 +452,13 @@ export function AgendaAppointmentSummaryCard({
                   <button
                     type="button"
                     onClick={handlePrincipal}
-                    className={`rounded-md px-2 py-1 text-[10px] font-bold transition-colors ${styles.primary}`}
+                    disabled={primaryBlockedNonTitular}
+                    title={primaryBlockedTitle}
+                    className={`rounded-md px-2 py-1 text-[10px] font-bold transition-colors ${
+                      primaryBlockedNonTitular
+                        ? 'cursor-not-allowed bg-slate-100 text-slate-400 border border-slate-200'
+                        : styles.primary
+                    }`}
                   >
                     {rotuloVoltar || compactActionLabel(appointment.status)}
                   </button>
@@ -505,9 +549,15 @@ export function AgendaAppointmentSummaryCard({
               ) : null}
             </div>
           ) : null}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <UserRound className="h-3.5 w-3.5 text-[#888888]" />
             <span>{appointment.profissionalNome}</span>
+            {foiSubstituido ? (
+              <ProfissionalSubstituidoBadge
+                profissionalOriginalNome={appointment.profissionalOriginalNome}
+                motivoTrocaProfissional={appointment.motivoTrocaProfissional}
+              />
+            ) : null}
           </div>
         </div>
 
@@ -532,7 +582,13 @@ export function AgendaAppointmentSummaryCard({
                 <button
                   type="button"
                   onClick={handlePrincipal}
-                  className={`${BTN_ACTION} rounded-lg px-3 py-2 text-[11px] font-bold transition-colors ${styles.primary}`}
+                  disabled={primaryBlockedNonTitular}
+                  title={primaryBlockedTitle}
+                  className={`${BTN_ACTION} rounded-lg px-3 py-2 text-[11px] font-bold transition-colors ${
+                    primaryBlockedNonTitular
+                      ? 'cursor-not-allowed bg-slate-100 text-slate-400 border border-slate-200'
+                      : styles.primary
+                  }`}
                 >
                   {rotuloVoltar || actionLabel(appointment.status)}
                 </button>
