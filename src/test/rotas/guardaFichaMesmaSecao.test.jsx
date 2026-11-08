@@ -1,6 +1,6 @@
 /** Onda 3B-2: clicar "Fichas" estando em Fichas com ficha (aberta ou nova) suja mostra o aviso do App, uma vez. */
 import React from 'react';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { assentarMuito, montarApp, TIMEOUT } from '../consulta/appConsulta.jsx';
@@ -44,21 +44,21 @@ describe.each([
       fireEvent.click(await screen.findByRole('button', { name: botaoNova }));
       await assentarMuito();
     }
-    expect(campo()).not.toBeNull();
+    await waitFor(() => expect(campo()).not.toBeNull());
     await sujarEClicarFichas();
-    expect(avisos()).toHaveLength(1);
+    await waitFor(() => expect(avisos()).toHaveLength(1));
     expect(campo()).not.toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /continuar editando/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /continuar editando/i }));
     await assentarMuito();
-    expect(avisos()).toHaveLength(0);
-    expect(campo()).not.toBeNull();
-    expect(campo().value).toBe('x');
+    await waitFor(() => expect(avisos()).toHaveLength(0));
+    await waitFor(() => expect(campo()).not.toBeNull());
+    await waitFor(() => expect(campo().value).toBe('x'));
     fireEvent.click(botaoFichas());
     await assentarMuito();
-    fireEvent.click(screen.getByRole('button', { name: 'Sair sem salvar' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Sair sem salvar' }));
     await assentarMuito();
-    expect(avisos()).toHaveLength(0);
-    expect(campo()).toBeNull();
-    expect(caminho()).toBe('/configuracoes/fichas');
+    await waitFor(() => expect(avisos()).toHaveLength(0));
+    await waitFor(() => expect(campo()).toBeNull());
+    await waitFor(() => expect(caminho()).toBe('/configuracoes/fichas'));
   }, TIMEOUT);
 });

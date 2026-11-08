@@ -1,6 +1,6 @@
 /** Correção 4 (Testador-C4): lacunas da Onda 3 — POP sempre bloqueado não cria aviso a mais, ficha existente, aviso fantasma, rascunho de termos. */
 import React from 'react';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { flushSync } from 'react-dom';
@@ -63,22 +63,23 @@ describe('Correção 4 — Configurações', () => {
     await menu(/^Configurações$/);
     fireEvent.click(screen.getAllByText(/Fichas|Anamnese/)[0]); await assentarMuito();
     fireEvent.click(await screen.findByText('Ficha Cinco')); await assentarMuito();
-    expect(caminho()).toBe('/configuracoes/fichas/5');
+    await waitFor(() => expect(caminho()).toBe('/configuracoes/fichas/5'));
+    await waitFor(() => expect(campo()).not.toBeNull());
     fireEvent.change(campo(), { target: { value: 'texto' } }); await assentarMuito();
   }
 
   it('2) ficha existente suja + Voltar: avisa; continuar mantém texto/endereço; sair volta à lista sem novo aviso', async () => {
     await abrirFichaExistenteSuja();
     await ir(-1);
-    expect(avisos()).toHaveLength(1);
-    fireEvent.click(screen.getByRole('button', { name: /continuar editando/i })); await assentarMuito();
-    expect(avisos()).toHaveLength(0);
-    expect(campo().value).toBe('texto');
-    expect(caminho()).toBe('/configuracoes/fichas/5');
+    await waitFor(() => expect(avisos()).toHaveLength(1));
+    fireEvent.click(await screen.findByRole('button', { name: /continuar editando/i })); await assentarMuito();
+    await waitFor(() => expect(avisos()).toHaveLength(0));
+    await waitFor(() => expect(campo().value).toBe('texto'));
+    await waitFor(() => expect(caminho()).toBe('/configuracoes/fichas/5'));
     await ir(-1);
-    fireEvent.click(screen.getByRole('button', { name: 'Sair sem salvar' })); await assentarMuito();
-    expect(caminho()).toBe('/configuracoes/fichas');
-    expect(campo()).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sair sem salvar' })); await assentarMuito();
+    await waitFor(() => expect(caminho()).toBe('/configuracoes/fichas'));
+    await waitFor(() => expect(campo()).toBeNull());
     await ir(-1);
     expect(avisos()).toHaveLength(0);
   }, TIMEOUT);
@@ -86,7 +87,8 @@ describe('Correção 4 — Configurações', () => {
   it('3) depois de "sair sem salvar", Agenda e de volta a Configurações: sem aviso fantasma', async () => {
     await abrirFichaExistenteSuja();
     await ir(-1);
-    fireEvent.click(screen.getByRole('button', { name: 'Sair sem salvar' })); await assentarMuito();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sair sem salvar' })); await assentarMuito();
+    await waitFor(() => expect(avisos()).toHaveLength(0)); // sinal positivo: o aviso fechou
     await menu(/^Agenda$/);
     expect(avisos()).toHaveLength(0);
     await menu(/^Configurações$/);
@@ -114,7 +116,7 @@ describe('Correção 4 — Termos: rascunho por id', () => {
     const a = await screen.findByDisplayValue('Termo A');
     fireEvent.change(a, { target: { value: 'A digitado' } });
     await nav(-1);
-    expect(aqui()).toBe('/configuracoes/termos');
+    await waitFor(() => expect(aqui()).toBe('/configuracoes/termos'));
     abrir('Termo B');
     const b = await screen.findByDisplayValue('Termo B');
     expect(screen.queryByDisplayValue('A digitado')).toBeNull(); // B não herda texto de A
@@ -135,7 +137,7 @@ describe('Correção 4 — Termos: rascunho por id', () => {
     expect(await screen.findByDisplayValue('Termo B')).toBeTruthy();
     expect(screen.queryByDisplayValue('A digitado')).toBeNull();
     await nav(-1);
-    expect(aqui()).toBe('/configuracoes/termos/7');
+    await waitFor(() => expect(aqui()).toBe('/configuracoes/termos/7'));
     const achou = await screen.findByDisplayValue(/Termo A|A digitado/);
     expect(achou.value).toBe('Termo A'); // 🟢 documentado: 1 rascunho só; hidratar B descarta o de A (só por endereço direto)
   });

@@ -1,5 +1,5 @@
 /** Guarda de alterações não salvas nos horários: Voltar (POP) abre o modal; atalho da agenda (sem guarda) não. */
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { assentarMuito, montarApp, TIMEOUT } from '../consulta/appConsulta.jsx';
@@ -44,23 +44,23 @@ describe('Guarda de horários não salvos', () => {
   it('Voltar com horários sujos abre o modal; Continuar editando fica; Sair sem salvar sai', async () => {
     await abrirHorariosSujos();
     const aqui = caminho();
-    expect(aqui.startsWith(caminhos.configuracoes())).toBe(true);
+    await waitFor(() => expect(aqui.startsWith(caminhos.configuracoes())).toBe(true));
 
     await voltar();
-    expect(modal()).not.toBeNull();
-    expect(screen.getByText(MODAL)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar editando' }));
+    await waitFor(() => expect(modal()).not.toBeNull());
+    expect(await screen.findByText(MODAL)).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Continuar editando' }));
     await assentarMuito();
-    expect(modal()).toBeNull();
+    await waitFor(() => expect(modal()).toBeNull()); // sinal positivo: o aviso fechou; só então a negativa
     expect(caminho()).toBe(aqui);
-    expect(screen.getByRole('switch', { name: 'Terça-feira ativo' })).toBeTruthy();
+    expect(await screen.findByRole('switch', { name: 'Terça-feira ativo' })).toBeTruthy();
 
     await voltar();
-    expect(screen.getByText(MODAL)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Sair sem salvar' }));
+    expect(await screen.findByText(MODAL)).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sair sem salvar' }));
     await assentarMuito();
-    expect(modal()).toBeNull();
-    expect(caminho()).not.toBe(aqui);
+    await waitFor(() => expect(modal()).toBeNull());
+    await waitFor(() => expect(caminho()).not.toBe(aqui));
   }, TIMEOUT);
 
   it('atalho da agenda de dentro de Configurações (sem guarda) não mostra o modal', async () => {
@@ -70,7 +70,7 @@ describe('Guarda de horários não salvos', () => {
       ultimoRoteador().navigate(caminhos.agenda());
     });
     await assentarMuito();
+    await waitFor(() => expect(caminho()).toBe(caminhos.agenda())); // sinal positivo antes da negativa
     expect(modal()).toBeNull();
-    expect(caminho()).toBe(caminhos.agenda());
   }, TIMEOUT);
 });

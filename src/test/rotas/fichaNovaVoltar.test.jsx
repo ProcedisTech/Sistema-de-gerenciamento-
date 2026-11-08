@@ -1,6 +1,6 @@
 /** Correção Onda 3 (🔴1): ficha nova digitada + Voltar do navegador não pode sumir sem aviso. */
 import React from 'react';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { assentarMuito, montarApp, TIMEOUT } from '../consulta/appConsulta.jsx';
@@ -38,23 +38,23 @@ describe('ficha nova + Voltar do navegador', () => {
     await montarApp({ caminho: '/configuracoes/fichas/5', rotas });
     await clicar(await screen.findByRole('button', { name: 'Voltar-editor' })); // lista; a ficha 5 fica como entrada anterior
     await abrirNovaFicha();
-    await clicar(screen.getByRole('button', { name: 'Voltar-editor' }));
-    expect(campo()).toBeNull();
+    await clicar(await screen.findByRole('button', { name: 'Voltar-editor' }));
+    await waitFor(() => expect(campo()).toBeNull());
     await abrirNovaFicha();
     fireEvent.change(campo(), { target: { value: 'texto' } });
     await assentarMuito();
     ultimoRoteador().navigate(-1);
     await assentarMuito();
-    expect(avisos()).toHaveLength(1);
-    expect(campo()).not.toBeNull();
-    await clicar(screen.getByRole('button', { name: /continuar editando/i }));
-    expect(avisos()).toHaveLength(0);
-    expect(campo().value).toBe('texto');
+    await waitFor(() => expect(avisos()).toHaveLength(1));
+    await waitFor(() => expect(campo()).not.toBeNull());
+    await clicar(await screen.findByRole('button', { name: /continuar editando/i }));
+    await waitFor(() => expect(avisos()).toHaveLength(0));
+    await waitFor(() => expect(campo().value).toBe('texto'));
     ultimoRoteador().navigate(-1);
     await assentarMuito();
-    await clicar(screen.getByRole('button', { name: 'Sair sem salvar' }));
-    expect(ultimoRoteador().state.location.pathname).toBe('/configuracoes/fichas/5');
-    expect(avisos()).toHaveLength(0);
+    await clicar(await screen.findByRole('button', { name: 'Sair sem salvar' }));
+    await waitFor(() => expect(ultimoRoteador().state.location.pathname).toBe('/configuracoes/fichas/5'));
+    await waitFor(() => expect(avisos()).toHaveLength(0));
   }, TIMEOUT);
 
   it('clicar "Fichas" na lateral estando em Fichas não empilha endereço repetido', async () => {
@@ -67,7 +67,7 @@ describe('ficha nova + Voltar do navegador', () => {
   it('sem alteração: Voltar do editor e Voltar do navegador saem direto, sem aviso', async () => {
     await montarApp({ caminho: '/configuracoes/fichas', rotas });
     await abrirNovaFicha();
-    await clicar(screen.getByRole('button', { name: 'Voltar-editor' }));
+    await clicar(await screen.findByRole('button', { name: 'Voltar-editor' }));
     await abrirNovaFicha();
     ultimoRoteador().navigate(-1);
     await assentarMuito();

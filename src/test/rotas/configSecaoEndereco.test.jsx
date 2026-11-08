@@ -1,5 +1,5 @@
 /** Onda 3A-2: a seção de Configurações vem do endereço; trocar empilha; o aviso de "não salvo" é um só (do App). */
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { assentarMuito, montarApp, TIMEOUT } from '../consulta/appConsulta.jsx';
@@ -23,41 +23,41 @@ afterEach(() => {
 describe('Seção de Configurações pelo endereço', () => {
   it('F5 em /configuracoes/horarios abre Horários', async () => {
     await montarApp({ caminho: '/configuracoes/horarios', rotas });
-    expect(noHorarios()).toBe(true);
+    await waitFor(() => expect(noHorarios()).toBe(true));
   }, TIMEOUT);
 
   it('clicar numa seção empilha /configuracoes/<slug> e Voltar volta', async () => {
     await montarApp({ caminho: '/configuracoes/horarios', rotas });
     fireEvent.click(screen.getAllByRole('button', { name: 'Feriados' })[0]);
     await assentarMuito();
-    expect(caminho()).toBe('/configuracoes/feriados');
-    expect(noHorarios()).toBe(false);
+    await waitFor(() => expect(caminho()).toBe('/configuracoes/feriados'));
+    await waitFor(() => expect(noHorarios()).toBe(false));
     act(() => {
       ultimoRoteador().navigate(-1);
     });
     await assentarMuito();
-    expect(caminho()).toBe('/configuracoes/horarios');
-    expect(noHorarios()).toBe(true);
+    await waitFor(() => expect(caminho()).toBe('/configuracoes/horarios'));
+    await waitFor(() => expect(noHorarios()).toBe(true));
   }, TIMEOUT);
 
   it('com alteração não salva, trocar de seção pela barra lateral mostra o aviso uma vez', async () => {
     await montarApp({ caminho: '/configuracoes/horarios', rotas });
-    fireEvent.click(screen.getByRole('switch', { name: 'Terça-feira inativo' }));
+    fireEvent.click(await screen.findByRole('switch', { name: 'Terça-feira inativo' }));
     await assentarMuito();
     fireEvent.click(screen.getAllByRole('button', { name: 'Feriados' })[0]);
     await assentarMuito();
-    expect(avisos()).toHaveLength(1);
+    await waitFor(() => expect(avisos()).toHaveLength(1)); // sinal positivo antes da negativa
     expect(caminho()).toBe('/configuracoes/horarios');
-    fireEvent.click(screen.getByRole('button', { name: 'Sair sem salvar' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Sair sem salvar' }));
     await assentarMuito();
-    expect(avisos()).toHaveLength(0);
-    expect(caminho()).toBe('/configuracoes/feriados');
+    await waitFor(() => expect(avisos()).toHaveLength(0));
+    await waitFor(() => expect(caminho()).toBe('/configuracoes/feriados'));
   }, TIMEOUT);
 
   it('slug legado /configuracoes/agenda-horarios é substituído por /configuracoes/horarios', async () => {
     await montarApp({ caminho: '/configuracoes/agenda-horarios', rotas });
-    expect(caminho()).toBe('/configuracoes/horarios');
-    expect(noHorarios()).toBe(true);
-    expect(ultimoRoteador().state.historyAction).toBe('REPLACE');
+    await waitFor(() => expect(caminho()).toBe('/configuracoes/horarios'));
+    await waitFor(() => expect(noHorarios()).toBe(true));
+    await waitFor(() => expect(ultimoRoteador().state.historyAction).toBe('REPLACE'));
   }, TIMEOUT);
 });

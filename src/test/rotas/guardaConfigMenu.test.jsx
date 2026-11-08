@@ -1,5 +1,5 @@
 /** Menu "Configurações" (e atalhos do catálogo) dentro de Configurações com horários sujos: guarda igual à antiga. */
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { assentarMuito, montarApp, TIMEOUT } from '../consulta/appConsulta.jsx';
@@ -40,26 +40,26 @@ afterEach(() => {
 describe('Guarda de horários não salvos ao clicar Configurações no menu', () => {
   it('(a)(b) com horários sujos abre o modal; Continuar editando mantém a seção; Sair sem salvar vai ao hub', async () => {
     await abrirHorarios({ sujar: true });
-    expect(noHorarios()).toBe(true);
+    await waitFor(() => expect(noHorarios()).toBe(true));
 
     menuConfig();
     await assentarMuito();
-    expect(modal()).not.toBeNull();
-    expect(screen.getByText(MODAL)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar editando' }));
+    await waitFor(() => expect(modal()).not.toBeNull());
+    expect(await screen.findByText(MODAL)).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Continuar editando' }));
     await assentarMuito();
-    expect(modal()).toBeNull();
+    await waitFor(() => expect(modal()).toBeNull()); // sinal positivo: o aviso fechou; só então a negativa
     expect(noHorarios()).toBe(true);
-    expect(screen.getByRole('switch', { name: 'Terça-feira ativo' })).toBeTruthy();
+    expect(await screen.findByRole('switch', { name: 'Terça-feira ativo' })).toBeTruthy();
 
     menuConfig();
     await assentarMuito();
-    expect(screen.getByText(MODAL)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Sair sem salvar' }));
+    expect(await screen.findByText(MODAL)).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sair sem salvar' }));
     await assentarMuito();
-    expect(modal()).toBeNull();
-    expect(noHorarios()).toBe(false);
-    expect(screen.getAllByText(/Horários, feriados e mensagens/).length).toBeGreaterThan(0);
+    await waitFor(() => expect(modal()).toBeNull());
+    await waitFor(() => expect(noHorarios()).toBe(false));
+    await waitFor(() => expect(screen.getAllByText(/Horários, feriados e mensagens/).length).toBeGreaterThan(0));
   }, TIMEOUT);
 
   it('(c) atalho do catálogo (mesma chamada de irParaTela com guarda e secao) abre o modal e não troca a seção', async () => {
@@ -69,19 +69,20 @@ describe('Guarda de horários não salvos ao clicar Configurações no menu', ()
       ultimoRoteador().navigate(caminhos.configuracoes('procedimentos'), { state: { guarda: true } });
     });
     await assentarMuito();
-    expect(screen.getByText(MODAL)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar editando' }));
+    expect(await screen.findByText(MODAL)).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Continuar editando' }));
     await assentarMuito();
+    await waitFor(() => expect(modal()).toBeNull()); // sinal positivo: o aviso fechou; só então a negativa
     expect(noHorarios()).toBe(true);
   }, TIMEOUT);
 
   it('(d) sem alteração, Configurações no menu volta ao hub sem modal', async () => {
     await abrirHorarios({ sujar: false });
-    expect(noHorarios()).toBe(true);
+    await waitFor(() => expect(noHorarios()).toBe(true));
     menuConfig();
     await assentarMuito();
+    await waitFor(() => expect(noHorarios()).toBe(false)); // sinal positivo antes da negativa
     expect(modal()).toBeNull();
-    expect(noHorarios()).toBe(false);
-    expect(screen.getAllByText(/Horários, feriados e mensagens/).length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.getAllByText(/Horários, feriados e mensagens/).length).toBeGreaterThan(0));
   }, TIMEOUT);
 });
