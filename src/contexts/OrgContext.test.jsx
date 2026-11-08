@@ -20,6 +20,7 @@ describe('restauração do contexto da clínica', () => {
       result.current.setRoleUserId('vinculo');
       result.current.setPapel('DONO');
       result.current.setRoleNome('DONO');
+      result.current.setPerfilNome('Dono da Clínica');
       result.current.setPermissoes(['PACIENTE_VER']);
       result.current.setApareceNaAgenda(true);
       result.current.setFusoHorario('America/Rio_Branco');
@@ -36,7 +37,7 @@ describe('restauração do contexto da clínica', () => {
     }, { wrapper });
     loadPermissions(result);
     act(() => result.current.setOrgId(ORG, 'clinica-top'));
-    expect(result.current).toMatchObject({ contextStatus: 'ready', papel: 'DONO', roleNome: 'DONO',
+    expect(result.current).toMatchObject({ contextStatus: 'ready', papel: 'DONO', roleNome: 'DONO', perfilNome: 'Dono da Clínica',
       roleUserId: 'vinculo', permissoes: ['PACIENTE_VER'], apareceNaAgenda: true, orgSlug: 'clinica-top',
       fusoHorario: 'America/Rio_Branco' });
     expect(fetchContext).toHaveBeenCalledTimes(1);
@@ -57,7 +58,7 @@ describe('restauração do contexto da clínica', () => {
     loadPermissions(result);
     act(() => result.current.setOrgId(OTHER));
     expect(result.current).toMatchObject({ orgId: OTHER, contextStatus: 'loading', papel: null,
-      roleUserId: '', roleNome: '', permissoes: [], apareceNaAgenda: null, fusoHorario: null });
+      roleUserId: '', roleNome: '', perfilNome: '', permissoes: [], apareceNaAgenda: null, fusoHorario: null });
   });
 
   it('recarrega a mesma clínica após logout, sem preservar autorização anterior', () => {
