@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
   AlertTriangle,
+  ArrowLeftRight,
   Bell,
   BookOpen,
   Cake,
@@ -316,6 +317,7 @@ function buildIntercorrenciaMapFromRelatos(relatos) {
 }
 
 function ProntuarioSessionPhotos({ fotosProc, onPreviewPhoto, selectedPatientId }) {
+  const { canSeeGaleria } = usePapel();
   const [selectedStage, setSelectedStage] = useState('todas');
 
   const grouped = useMemo(() => {
@@ -337,6 +339,8 @@ function ProntuarioSessionPhotos({ fotosProc, onPreviewPhoto, selectedPatientId 
       ),
     };
   }, [fotosProc]);
+
+  if (!canSeeGaleria) return null;
 
   const activePhotos = grouped[selectedStage] || grouped.todas;
   const visiblePhotos = activePhotos.slice(0, 4);
@@ -2531,6 +2535,8 @@ export function PatientProfileView({
                                     timeLabel={timeLabel}
                                     procedureName={nomeProc}
                                     professionalName={proc.profissionalNome || '—'}
+                                    profissionalAgendadoNome={proc.profissionalAgendadoNome}
+                                    motivoTrocaProfissional={proc.motivoTrocaProfissional}
                                     retornoCount={retornoCount}
                                     statusNome={proc.statusNome || ''}
                                     fotosCount={fotosProc.length}
@@ -2562,6 +2568,8 @@ export function PatientProfileView({
                                           timeLabel={childTimeLabel}
                                           procedureName={childNomeProc}
                                           professionalName={child.profissionalNome || '—'}
+                                          profissionalAgendadoNome={child.profissionalAgendadoNome}
+                                          motivoTrocaProfissional={child.motivoTrocaProfissional}
                                           depth={1}
                                           isRetoque={Boolean(child.isRetoque)}
                                           statusNome={child.statusNome || ''}
@@ -2751,9 +2759,30 @@ export function PatientProfileView({
                                         {nomeProc}
                                       </p>
                                       <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px] text-[#64748b]">
-                                        <p className="flex items-center gap-1.5 truncate font-medium" title={proc.profissionalNome || undefined}>
+                                        <p
+                                          className="flex flex-wrap items-center gap-1.5 truncate font-medium"
+                                          title={
+                                            proc.profissionalAgendadoNome &&
+                                            proc.profissionalAgendadoNome !== proc.profissionalNome
+                                              ? proc.motivoTrocaProfissional
+                                                ? `Agendado com ${proc.profissionalAgendadoNome} → Realizado por ${proc.profissionalNome || '—'} · Motivo: ${proc.motivoTrocaProfissional}`
+                                                : `Agendado com ${proc.profissionalAgendadoNome} → Realizado por ${proc.profissionalNome || '—'}`
+                                              : proc.profissionalNome || undefined
+                                          }
+                                        >
                                           <Stethoscope className="h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
-                                          <span className="truncate">Realizado por {proc.profissionalNome || '—'}</span>
+                                          {proc.profissionalAgendadoNome &&
+                                          proc.profissionalAgendadoNome !== proc.profissionalNome ? (
+                                            <span className="inline-flex flex-wrap items-center gap-1">
+                                              <span>Agendado com {proc.profissionalAgendadoNome}</span>
+                                              <ArrowLeftRight className="h-3 w-3 shrink-0 text-amber-600" aria-hidden />
+                                              <span className="font-semibold text-[#0f172a]">
+                                                Realizado por {proc.profissionalNome || '—'}
+                                              </span>
+                                            </span>
+                                          ) : (
+                                            <span className="truncate">Realizado por {proc.profissionalNome || '—'}</span>
+                                          )}
                                         </p>
                                         {fotosProc.length > 0 && (
                                           <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">

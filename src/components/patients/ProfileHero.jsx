@@ -304,8 +304,10 @@ export function ProfileHero({
           {canStartAnamnese && (
             <button
               type="button"
-              onClick={() => onStartAttendance?.(patient)}
-              className="inline-flex h-11 min-w-[min(100%,12rem)] flex-1 items-center justify-center gap-2 rounded-xl border-0 bg-white px-3 text-[13px] font-semibold text-vivid-teal-800 shadow-md transition-colors hover:bg-white/90 sm:min-w-[9.5rem] sm:flex-none sm:px-4 sm:text-[14px]"
+              onClick={() => isPerfilAtivo && onStartAttendance?.(patient)}
+              disabled={!isPerfilAtivo}
+              title={!isPerfilAtivo ? 'Paciente inativado. Reative para iniciar atendimentos.' : 'Iniciar atendimento'}
+              className="inline-flex h-11 min-w-[min(100%,12rem)] flex-1 items-center justify-center gap-2 rounded-xl border-0 bg-white px-3 text-[13px] font-semibold text-vivid-teal-800 shadow-md transition-colors hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-[9.5rem] sm:flex-none sm:px-4 sm:text-[14px]"
             >
               <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-vivid-teal-100">
                 <Play className="h-2.5 w-2.5 fill-vivid-teal-700 text-vivid-teal-700" aria-hidden />
@@ -317,6 +319,7 @@ export function ProfileHero({
             type="button"
             onClick={onAgendar}
             disabled={!isPerfilAtivo || !patient?.id}
+            title={!isPerfilAtivo ? 'Paciente inativado. Reative para agendar.' : 'Agendar'}
             className={secondaryActionBtn}
           >
             <Calendar className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
