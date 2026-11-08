@@ -25,7 +25,11 @@ import { mapBackendPatient } from '../../utils/patientMapping';
 import { resolveAnamneseDesatualizada } from '../../utils/patientAnamneseAlerts.js';
 import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
 import { abrirWhatsApp } from '../../utils/whatsapp.js';
-import { formatAgendamentoApiError, isAgendaSlotOverlapError } from '../../utils/agendaErrors';
+import {
+  formatAgendamentoApiError,
+  isAgendaForaDisponibilidadeError,
+  isAgendaSlotOverlapError,
+} from '../../utils/agendaErrors';
 import {
   buildCalendarCells,
   formatMonthYearLabel,
@@ -359,6 +363,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   const [slotsOcupados, setSlotsOcupados] = useState([]);
   const [slotsOcupadosLoading, setSlotsOcupadosLoading] = useState(false);
   const [submittingReagendar, setSubmittingReagendar] = useState(false);
+  const [submittingTrocarProfissional, setSubmittingTrocarProfissional] = useState(false);
   const [bloqueioModalOpen, setBloqueioModalOpen] = useState(false);
   const [bloqueioForm, setBloqueioForm] = useState(() => defaultBloqueioForm(todayIso));
   const [bloqueioFormErrors, setBloqueioFormErrors] = useState({});
@@ -2275,6 +2280,51 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     [isNivel1, loadMonth, refreshWeekGrid, toastSuccess, toastError, abrirConfirmacaoForaDisp, canEncaixarForaDisp, notifyAgendaPatientSync, refreshHojeIfOffCurrentMonth]
   );
 
+  const handleTrocarProfissional = useCallback(
+    async ({ agendaId, novoProfissionalRoleUserId, motivo, forcar = false }) => {
+      if (isNivel1) return { ok: false, error: 'Nível 1: apenas visualização.' };
+      if (!agendaId || !novoProfissionalRoleUserId || !motivo) {
+        return { ok: false, error: 'Selecione o profissional e informe o motivo da substituição.' };
+      }
+      setSubmittingTrocarProfissional(true);
+      try {
+        await agendasApi.trocarProfissional(
+          agendaId,
+          { novoProfissionalRoleUserId, motivo },
+          { forcar: Boolean(forcar) },
+        );
+        dispMonthCacheRef.current = {};
+        toastSuccess('Profissional do agendamento substituído com sucesso.');
+        await loadMonth();
+        await refreshWeekGrid();
+        await refreshHojeIfOffCurrentMonth();
+        notifyAgendaPatientSync();
+        setError('');
+        return { ok: true };
+      } catch (err) {
+        if (isAgendaForaDisponibilidadeError(err) && !forcar) {
+          return {
+            ok: false,
+            foraDaDisponibilidade: true,
+            message:
+              err?.body?.detail?.replace(/^FORA_DA_DISPONIBILIDADE:\s*/i, '') ||
+              'O profissional selecionado está fora da disponibilidade ou já possui compromisso neste horário.',
+          };
+        }
+        const msg =
+          err?.body?.detail ||
+          err?.body?.message ||
+          formatAgendamentoApiError(err) ||
+          'Não foi possível transferir o profissional.';
+        toastError(msg);
+        return { ok: false, error: msg };
+      } finally {
+        setSubmittingTrocarProfissional(false);
+      }
+    },
+    [isNivel1, loadMonth, refreshWeekGrid, refreshHojeIfOffCurrentMonth, notifyAgendaPatientSync, toastSuccess, toastError],
+  );
+
   const handleEnviarWhatsApp = useCallback(
     async (agendaId, tipoEnvio = 'confirmacao_24h') => {
       if (!agendaId) return false;
@@ -2452,8 +2502,14 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   );
 
   const openCreateModal = useCallback(
-    (date = selectedDay) => {
+    (dateOrOpts = selectedDay, maybeOpts = {}) => {
       if (isNivel1) return;
+      const isDateFirst = typeof dateOrOpts === 'string' && dateOrOpts.includes('-');
+      const targetDate = isDateFirst ? dateOrOpts : selectedDay;
+      const opts = isDateFirst
+        ? (maybeOpts || {})
+        : (dateOrOpts && typeof dateOrOpts === 'object' ? dateOrOpts : {});
+
       setEditingAppointment(null);
       setPatientSelectLocked(false);
       setPlanejamentoItemIdPorCatalogo({});
@@ -2462,12 +2518,33 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       setPlanoItemEscolhidoPorCatalogo({});
       planoLoadTokenRef.current += 1;
       planejamentoItemIdVinculoRef.current = null;
-      setForm(defaultForm(date, patientOptions, null));
+      setForm(defaultForm(targetDate, patientOptions, null));
       setFormErrors({});
       applyProfissionalPreselect();
+
+      const forcedProf = String(opts.profissionalRoleUserId ?? opts.roleUserId ?? '').trim();
+      if (forcedProf) {
+        setRoleUserIdAgenda(forcedProf);
+      }
+
+      onAgendaSavedRef.current =
+        typeof opts.onAgendaSaved === 'function' ? opts.onAgendaSaved : null;
+
       setModalMode('create');
     },
     [isNivel1, patientOptions, selectedDay, applyProfissionalPreselect]
+  );
+
+  const openCreateModalForProfissional = useCallback(
+    (pessoa, opts = {}) => {
+      if (isNivel1) return;
+      const profId = String(pessoa?.roleUserId || pessoa?.id || '').trim();
+      openCreateModal(opts.data || opts.date || selectedDay, {
+        ...opts,
+        profissionalRoleUserId: profId || opts.profissionalRoleUserId,
+      });
+    },
+    [isNivel1, openCreateModal, selectedDay]
   );
 
   const openCreateModalAtSlot = useCallback(
@@ -3158,6 +3235,8 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     handleRemoverBloqueio,
     handleEnviarWhatsApp,
     handleReagendar,
+    handleTrocarProfissional,
+    submittingTrocarProfissional,
     horarioConflita,
     horarioConflitoCom,
     isHorarioOcupado,
@@ -3174,6 +3253,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     openCreateModal,
     openCreateModalAtSlot,
     openCreateModalForPatient,
+    openCreateModalForProfissional,
     openReagendarModal,
     grupoReagendarDuracoes,
     setPlanejamentoItemIdPorCatalogo,

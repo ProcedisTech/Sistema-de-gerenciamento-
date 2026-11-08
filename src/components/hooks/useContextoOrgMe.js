@@ -24,6 +24,7 @@ export function useContextoOrgMe({ authReady, isLoggedIn }) {
     setContextStatus,
     setRoleUserId,
     setRoleNome,
+    setPerfilNome,
     setPapel,
     setPermissoes,
     setApareceNaAgenda,
@@ -62,7 +63,8 @@ export function useContextoOrgMe({ authReady, isLoggedIn }) {
           fuso = FUSO_PADRAO;
         }
         setRoleUserId(me.roleUserId ?? '');
-        setRoleNome(me.perfilAcessoCodigo ?? me.role ?? '');
+        setRoleNome(me.role ?? '');
+        setPerfilNome(me.perfilAcessoNome ?? '');
         setPapel(resolverPapel(me.perfilAcessoCodigo ?? me.role ?? ''));
         setPermissoes(me.permissoes || []);
         setApareceNaAgenda(me.apareceNaAgenda);
@@ -75,6 +77,8 @@ export function useContextoOrgMe({ authReady, isLoggedIn }) {
         setPermissoes([]);
         setApareceNaAgenda(null);
         setRoleUserId('');
+        setRoleNome('');
+        setPerfilNome('');
         setPapel(null);
         setFusoHorario(null);
         setContextStatus('error');
@@ -90,7 +94,7 @@ export function useContextoOrgMe({ authReady, isLoggedIn }) {
       setMeEmAndamento(false);
     };
   }, [authReady, isLoggedIn, orgId, contextoNonce,
-    setRoleUserId, setRoleNome, setPapel, setPermissoes, setApareceNaAgenda, setFusoHorario, setContextStatus]);
+    setRoleUserId, setRoleNome, setPerfilNome, setPapel, setPermissoes, setApareceNaAgenda, setFusoHorario, setContextStatus]);
 
   const aguardandoSemMe = Boolean(
     authReady && isLoggedIn && orgId && !meEmAndamento

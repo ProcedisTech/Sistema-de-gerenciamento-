@@ -28,7 +28,7 @@ export function ConfiguracoesView({
   canSeeAnamnese = false,
   canSeeProcedimentos = false,
   canSeeTermos = false,
-  canSeePerfil = false,
+  canSeePerfil = true,
   canSeeClinica = false,
   canSeeAgendaConfig = false,
   canSeeEquipe = false,

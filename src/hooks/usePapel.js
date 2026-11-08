@@ -69,24 +69,91 @@ export function usePapel() {
   const canSeeAgendaPropria     = hasPerm(PERMISSOES.AGENDA_PROPRIA_VER, PERFIS_ACESSO.NIVEL_3);
   const canEncaixarForaDisp     = hasPerm(PERMISSOES.AGENDA_FORA_DISP_ENCAIXAR, PERFIS_ACESSO.NIVEL_4);
   const canAparecerNaAgenda     = hasPerm(PERMISSOES.AGENDA_APARECER, PERFIS_ACESSO.NIVEL_3);
+  const canTrocarProfissional   = hasPerm(PERMISSOES.AGENDA_TROCAR_PROFISSIONAL) || (canEditAgenda && canSeeAgendaMulti);
 
   // ── Módulo: Pacientes ────────────────────────────────────────────────────
   const canSeePacientes         = hasPerm(PERMISSOES.PACIENTE_VER, PERFIS_ACESSO.NIVEL_1);
   const canCreatePacientes      = hasPerm(PERMISSOES.PACIENTE_CRIAR, PERFIS_ACESSO.NIVEL_2);
   const canEditPacientes        = hasPerm(PERMISSOES.PACIENTE_EDITAR, PERFIS_ACESSO.NIVEL_2);
   const canWritePacientes       = canEditPacientes; // alias legado
-  const canInativarPacientes    = hasPerm(PERMISSOES.PACIENTE_EXCLUIR, PERFIS_ACESSO.NIVEL_3);
-  const canReativarPacientes    = hasPerm(PERMISSOES.PACIENTE_EXCLUIR, PERFIS_ACESSO.NIVEL_3);
+  const canInativarPacientes    = hasPerm(PERMISSOES.PACIENTE_INATIVAR) || hasPerm(PERMISSOES.PACIENTE_EXCLUIR);
+  const canReativarPacientes    = canInativarPacientes;
 
   // ── Módulo: Atendimento ──────────────────────────────────────────────────
-  const canStartAnamnese        = hasPerm(PERMISSOES.ANAMNESE_PREENCHIMENTO_CRIAR, PERFIS_ACESSO.NIVEL_3);
-  const canRealizarAtendimento  = canStartAnamnese;
-  const canStartAtendimento     = canStartAnamnese;
-  const canSeeHubAvaliacao      = hasPerm(PERMISSOES.HUB_AVALIACAO_VER, PERFIS_ACESSO.NIVEL_2);
-  const canSeeHubAnamnese       = hasPerm(PERMISSOES.HUB_ANAMNESE_VER, PERFIS_ACESSO.NIVEL_2);
-  const canSeeHubTermos         = hasPerm(PERMISSOES.HUB_TERMOS_VER, PERFIS_ACESSO.NIVEL_2);
-  const canExecuteHubProcedimento = hasPerm(PERMISSOES.HUB_PROCEDIMENTO_EXECUTAR, PERFIS_ACESSO.NIVEL_3);
-  const canSeeHubOrientacao     = hasPerm(PERMISSOES.HUB_ORIENTACAO_VER, PERFIS_ACESSO.NIVEL_2);
+  const canRealizarAtendimento  = hasPerm(PERMISSOES.ATENDIMENTO_REALIZAR) || hasPerm(PERMISSOES.ANAMNESE_PREENCHIMENTO_CRIAR);
+  const canStartAnamnese        = canRealizarAtendimento;
+  const canStartAtendimento     = canRealizarAtendimento;
+
+  // 6 Pares Clínicos Coesos (Visualizar / Gerenciar)
+  const canSeeAtendimentoAnamnese     = hasPerm(PERMISSOES.ATENDIMENTO_ANAMNESE_VER) || hasPerm(PERMISSOES.HUB_ANAMNESE_VER);
+  const canManageAtendimentoAnamnese  = hasPerm(PERMISSOES.ATENDIMENTO_ANAMNESE_PREENCHER) || canRealizarAtendimento;
+
+  const canSeeAtendimentoAvaliacao    = hasPerm(PERMISSOES.ATENDIMENTO_AVALIACAO_VER) || hasPerm(PERMISSOES.HUB_AVALIACAO_VER);
+  const canManageAtendimentoAvaliacao = hasPerm(PERMISSOES.ATENDIMENTO_AVALIACAO_GERENCIAR) || (canRealizarAtendimento && isProfissional);
+
+  const canSeeAtendimentoPlanejamento    = hasPerm(PERMISSOES.ATENDIMENTO_PLANEJAMENTO_VER) || hasPerm(PERMISSOES.PACIENTE_ORCAMENTO_VER);
+  const canManageAtendimentoPlanejamento = hasPerm(PERMISSOES.ATENDIMENTO_PLANEJAMENTO_GERENCIAR) || hasPerm(PERMISSOES.PACIENTE_ORCAMENTO_EDITAR);
+
+  const canSeeAtendimentoTermos       = hasPerm(PERMISSOES.ATENDIMENTO_TERMOS_VER) || hasPerm(PERMISSOES.HUB_TERMOS_VER);
+  const canManageAtendimentoTermos    = hasPerm(PERMISSOES.ATENDIMENTO_TERMO_COLETAR) || hasPerm(PERMISSOES.DOCUMENTO_ASSINATURA_CRIAR) || canSeeAtendimentoTermos;
+
+  const canSeeAtendimentoProcedimento    = hasPerm(PERMISSOES.ATENDIMENTO_PROCEDIMENTO_VER) || hasPerm(PERMISSOES.HUB_PROCEDIMENTO_EXECUTAR);
+  const canManageAtendimentoProcedimento = hasPerm(PERMISSOES.ATENDIMENTO_PROCEDIMENTO_EXECUTAR) || hasPerm(PERMISSOES.HUB_PROCEDIMENTO_EXECUTAR);
+
+  const canSeeAtendimentoRetorno     = hasPerm(PERMISSOES.ATENDIMENTO_RETORNO_VER) || hasPerm(PERMISSOES.HUB_ORIENTACAO_VER);
+  const canManageAtendimentoRetorno  = hasPerm(PERMISSOES.ATENDIMENTO_RETORNO_GERENCIAR);
+
+  // Aliases legados do Hub para retrocompatibilidade
+  const canSeeHubAvaliacao      = canSeeAtendimentoAvaliacao;
+  const canSeeHubAnamnese       = canSeeAtendimentoAnamnese;
+  const canSeeHubTermos         = canSeeAtendimentoTermos;
+  const canExecuteHubProcedimento = canManageAtendimentoProcedimento;
+  const canSeeHubOrientacao     = canSeeAtendimentoRetorno;
+
+  /**
+   * Helper central para calcular o estado de autorização de um card no Hub de Consulta.
+   * @param {'anamnese'|'avaliacao'|'planejamento'|'termos'|'procedimento'|'retorno'|'retorno-avulso'} etapaId
+   * @returns {'disponivel'|'leitura'|'bloqueado'}
+   */
+  const getEstadoEtapaAtendimento = (etapaId) => {
+    // Se não há papel nem permissões configuradas (ex: testes unitários neutros sem provider), fallback permissivo
+    if (!papel && (!permissoes || permissoes.length === 0)) {
+      return 'disponivel';
+    }
+    // Se o usuário não tem permissão para realizar atendimento, todas as etapas clínicas são bloqueadas
+    if (!canRealizarAtendimento && !isDono && !isAdmin) {
+      return 'bloqueado';
+    }
+    switch (etapaId) {
+      case 'anamnese':
+        if (canManageAtendimentoAnamnese || isDono || isAdmin) return 'disponivel';
+        if (canSeeAtendimentoAnamnese) return 'leitura';
+        return 'bloqueado';
+      case 'avaliacao':
+        if (canManageAtendimentoAvaliacao || isDono || isAdmin) return 'disponivel';
+        if (canSeeAtendimentoAvaliacao) return 'leitura';
+        return 'bloqueado';
+      case 'planejamento':
+        if (canManageAtendimentoPlanejamento || isDono || isAdmin) return 'disponivel';
+        if (canSeeAtendimentoPlanejamento) return 'leitura';
+        return 'bloqueado';
+      case 'termos':
+        if (canManageAtendimentoTermos || isDono || isAdmin) return 'disponivel';
+        if (canSeeAtendimentoTermos) return 'leitura';
+        return 'bloqueado';
+      case 'procedimento':
+        if (canManageAtendimentoProcedimento || isDono || isAdmin) return 'disponivel';
+        if (canSeeAtendimentoProcedimento) return 'leitura';
+        return 'bloqueado';
+      case 'retorno':
+      case 'retorno-avulso':
+        if (canManageAtendimentoRetorno || isDono || isAdmin) return 'disponivel';
+        if (canSeeAtendimentoRetorno) return 'leitura';
+        return 'bloqueado';
+      default:
+        return 'disponivel';
+    }
+  };
 
   // ── Módulo: Anamnese (Modelos) ───────────────────────────────────────────
   const canSeeConfigAnamnese    = hasPerm(PERMISSOES.ANAMNESE_MODELO_VER, PERFIS_ACESSO.NIVEL_3);
@@ -130,6 +197,10 @@ export function usePapel() {
   const canDeleteUsers          = hasPerm(PERMISSOES.USUARIO_EXCLUIR, PERFIS_ACESSO.NIVEL_5);
   const canSeeConfigPerfil      = hasPerm(PERMISSOES.PERFIL_ACESSO_VER, PERFIS_ACESSO.NIVEL_4);
   const canEditConfigPerfil     = hasPerm(PERMISSOES.PERFIL_ACESSO_EDITAR, PERFIS_ACESSO.NIVEL_5);
+
+  // ── Módulo: Meu Perfil ──────────────────────────────────────────────────
+  // Todo colaborador autenticado tem direito de visualizar e editar seu próprio perfil pessoal (dados cadastrais, assinatura e foto)
+  const canSeeMeuPerfil         = Boolean(roleUserId || papel);
 
   // ── Módulo: Sistema & Auditoria ──────────────────────────────────────────
   const canSeeConfigAuditoria   = hasPerm(PERMISSOES.AUDITORIA_VER, PERFIS_ACESSO.NIVEL_5);
@@ -188,6 +259,7 @@ export function usePapel() {
     canSeeAgendaPropria,
     canEncaixarForaDisp,
     canAparecerNaAgenda,
+    canTrocarProfissional,
 
     // Pacientes
     canCreatePacientes,
@@ -196,10 +268,24 @@ export function usePapel() {
     canInativarPacientes,
     canReativarPacientes,
 
-    // Atendimento
+    // Atendimento (Pares Clínicos & Ciclo Pleno)
     canStartAnamnese,
     canRealizarAtendimento,
     canStartAtendimento,
+    getEstadoEtapaAtendimento,
+    canSeeAtendimentoAnamnese,
+    canManageAtendimentoAnamnese,
+    canSeeAtendimentoAvaliacao,
+    canManageAtendimentoAvaliacao,
+    canSeeAtendimentoPlanejamento,
+    canManageAtendimentoPlanejamento,
+    canSeeAtendimentoTermos,
+    canManageAtendimentoTermos,
+    canSeeAtendimentoProcedimento,
+    canManageAtendimentoProcedimento,
+    canSeeAtendimentoRetorno,
+    canManageAtendimentoRetorno,
+    // Aliases legados do Hub
     canSeeHubAvaliacao,
     canSeeHubAnamnese,
     canSeeHubTermos,
@@ -247,6 +333,7 @@ export function usePapel() {
     canDeleteUsers,
     canSeeConfigPerfil,
     canEditConfigPerfil,
+    canSeeMeuPerfil,
 
     // Sistema
     canSeeConfigAuditoria,

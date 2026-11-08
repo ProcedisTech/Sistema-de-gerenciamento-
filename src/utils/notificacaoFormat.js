@@ -7,6 +7,7 @@ export const TIPO_VERBO = {
   paciente_sem_resposta: 'não respondeu',
   agenda_cancelada: 'Agendamento cancelado',
   agenda_reagendada: 'Agendamento reagendado',
+  agenda_profissional_transferido: 'Transferência de profissional',
   SUGESTAO_PROCEDIMENTO: 'sugeriu procedimento',
 };
 
@@ -18,7 +19,11 @@ export const TIPOS_CONFIRMACAO = [
   'paciente_sem_resposta',
 ];
 
-export const TIPOS_AGENDA = ['agenda_cancelada', 'agenda_reagendada'];
+export const TIPOS_AGENDA = [
+  'agenda_cancelada',
+  'agenda_reagendada',
+  'agenda_profissional_transferido',
+];
 
 export const CHIP_FILTERS = [
   { id: 'todas', label: 'Todas' },
@@ -90,6 +95,24 @@ export function formatarMensagemNotificacao(n) {
       if (nome)
         return `Agendamento de ${nome} reagendado`;
       return 'Agendamento reagendado';
+    }
+    case 'agenda_profissional_transferido': {
+      const de = payload.profissionalAnteriorNome || payload.profissional_anterior_nome;
+      const para = payload.profissionalNovoNome || payload.profissional_novo_nome;
+      const quandoStr = quando ? ` em ${quando}` : '';
+      if (nome && de && para) {
+        return `Agendamento de ${nome}${quandoStr}${procStr} transferido de ${de} para ${para}`;
+      }
+      if (nome && para) {
+        return `Agendamento de ${nome}${quandoStr}${procStr} transferido para ${para}`;
+      }
+      if (nome) {
+        return `Agendamento de ${nome}${quandoStr}${procStr} com profissional transferido`;
+      }
+      if (de && para) {
+        return `Agendamento transferido de ${de} para ${para}`;
+      }
+      return 'Transferência de profissional no agendamento';
     }
     case 'SUGESTAO_PROCEDIMENTO': {
       const { nomeSugerido, profissionalNome } = payload;

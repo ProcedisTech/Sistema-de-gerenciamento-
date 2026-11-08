@@ -328,3 +328,48 @@ it("Escape fecha somente a assinatura e mantém o cadastro aberto", async () => 
   ).toBeInTheDocument();
   expect(onClose).not.toHaveBeenCalled();
 });
+
+it("modo visualização de terceiro (isSelf=false) é estritamente somente-leitura e sem botão Editar", async () => {
+  const onAlterarAcesso = vi.fn();
+  const colaborador = {
+    ...perfil,
+    nomeCompleto: "Dra. Camila Souza",
+    roleName: "Médica",
+    perfilAcessoNome: "Profissional Clínico",
+  };
+
+  render(
+    <UsuarioCadastroModal
+      isSelf={false}
+      pessoa={colaborador}
+      canManageUsers
+      onAlterarAcesso={onAlterarAcesso}
+      onClose={vi.fn()}
+    />,
+  );
+
+  // Modal com título de colaborador e subtítulo específico
+  expect(
+    screen.getByRole("dialog", { name: "Cadastro do Colaborador" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(/Visualização dos dados cadastrais de Dra. Camila Souza/),
+  ).toBeInTheDocument();
+
+  // Botão Editar NÃO deve existir no documento
+  expect(screen.queryByRole("button", { name: "Editar" })).not.toBeInTheDocument();
+
+  // Campos desabilitados para edição
+  expect(screen.getByLabelText(/Nome completo/)).toBeDisabled();
+
+  // Card 3 exibe Cargo e Perfil com chips
+  expect(screen.getByText("Cargo e Perfil de Acesso")).toBeInTheDocument();
+  expect(screen.getByText("Médica")).toBeInTheDocument();
+  expect(screen.getByText("Profissional Clínico")).toBeInTheDocument();
+
+  // Clicar em Alterar Acesso & Permissões dispara o callback e o botão NÃO deve estar desabilitado
+  const btnAlterar = screen.getByRole("button", { name: "Alterar Acesso & Permissões" });
+  expect(btnAlterar).not.toBeDisabled();
+  fireEvent.click(btnAlterar);
+  expect(onAlterarAcesso).toHaveBeenCalledTimes(1);
+});

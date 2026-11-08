@@ -10,6 +10,7 @@ vi.mock('../../hooks/usePapel', () => ({
   usePapel: () => ({
     canSeeConfig: true,
     canSeeConfigEquipe: true,
+    canSeeConfigAuditoria: true,
   }),
 }));
 
@@ -144,3 +145,21 @@ describe('Sidebar do tablet (painel aberto)', () => {
     expect(marca.previousElementSibling).toHaveAttribute('aria-label', 'Recolher menu');
   });
 });
+
+describe('Navegação e itens da Sidebar', () => {
+  it('renderiza os itens de navegação incluindo Gestão de Equipe e Auditoria', () => {
+    const setActiveView = vi.fn();
+    render(<Sidebar {...baseProps} setActiveView={setActiveView} />);
+
+    expect(screen.getByRole('button', { name: 'Pacientes' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Agenda' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Gestão de Equipe' })).toBeInTheDocument();
+    const btnAuditoria = screen.getByRole('button', { name: 'Auditoria' });
+    expect(btnAuditoria).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Configurações' })).toBeInTheDocument();
+
+    fireEvent.click(btnAuditoria);
+    expect(setActiveView).toHaveBeenCalledWith('auditoria');
+  });
+});
+

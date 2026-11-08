@@ -355,6 +355,10 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
         if (atId && !existente.atendimentoId) {
           existente.atendimentoId = atId;
         }
+        if (proc.profissionalAgendadoNome && !existente.profissionalAgendadoNome) {
+          existente.profissionalAgendadoNome = proc.profissionalAgendadoNome;
+          existente.motivoTrocaProfissional = proc.motivoTrocaProfissional || null;
+        }
         if (isRetorno) {
           existente.isRetorno = true;
           existente.statusNome = 'RETORNO';
@@ -398,6 +402,8 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
           ],
           nomeProcedimento: nomeAtual,
           profissionalNome: proc.profissionalNome || '—',
+          profissionalAgendadoNome: proc.profissionalAgendadoNome || null,
+          motivoTrocaProfissional: proc.motivoTrocaProfissional || null,
           statusNome: isRetorno ? 'RETORNO' : (proc.statusNome || 'FINALIZADO'),
           isRetorno,
           procedimentoFeitoOrigemId: paiId,

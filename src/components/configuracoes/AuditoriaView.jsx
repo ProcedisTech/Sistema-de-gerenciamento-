@@ -11,6 +11,7 @@ import { useFusoClinica } from '../hooks/useFusoClinica';
 import { ConfigCardStackSkeleton } from '../shared/ConfigPanelSkeletons';
 import { usePapel } from '../../hooks/usePapel';
 import { useToast } from '../../contexts/useToast.js';
+import { agendaEnterClass } from '../agenda/agendaEnterClasses.js';
 
 const PERIODOS = [
   { value: '', label: 'Todo o período' },
@@ -39,6 +40,13 @@ export function AuditoriaView({ roleUserId } = {}) {
 
   const [registros, setRegistros] = useState([]);
   const [relatorioAberto, setRelatorioAberto] = useState(false);
+  const [showEntrance, setShowEntrance] = useState(true);
+
+  useEffect(() => {
+    if (!showEntrance) return undefined;
+    const id = window.setTimeout(() => setShowEntrance(false), 1800);
+    return () => window.clearTimeout(id);
+  }, [showEntrance]);
   const [totalNoBanco, setTotalNoBanco] = useState(0);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState('');
@@ -321,14 +329,14 @@ function formatDescricaoForPdf(desc) {
   return (
     <section className="prototype-equipe prototype-auditoria" aria-label="Histórico de auditoria">
       {!loading && registrosTruncados && !erro && <div className="hint" role="status"><PrototypeIcon name="info" size="s" /><span>Mostrando as {registros.length} ações mais recentes de {totalNoBanco} no total. Os filtros são aplicados apenas às ações carregadas.</span></div>}
-      <div className="audit-summary">
+      <div className={`audit-summary ${agendaEnterClass(showEntrance, 'agenda-delay-100')}`}>
         <div className="box"><span><small>Registros encontrados</small><b>{loading || erro ? '—' : filtrados.length}</b></span><PrototypeIcon name="hist" size="l" /></div>
         <div className={`box${suspeitas > 0 ? " alert" : ""}`}><span><small>Ações suspeitas</small><b>{loading || erro ? '—' : suspeitas}</b></span><PrototypeIcon name="info" size="l" /></div>
         <div className="box"><span><small>Pessoas com atividade</small><b>{loading || erro ? '—' : pessoasAtivas}</b></span><PrototypeIcon name="users" size="l" /></div>
       </div>
       <div className="box audit-content">
-        <div className="audit-filter-heading"><PrototypeIcon name="search" size="s" /><h3>Filtrar histórico</h3></div>
-        <div className="audit-filters">
+        <div className={`audit-filter-heading ${agendaEnterClass(showEntrance, 'agenda-delay-150')}`}><PrototypeIcon name="search" size="s" /><h3>Filtrar histórico</h3></div>
+        <div className={`audit-filters ${agendaEnterClass(showEntrance, 'agenda-delay-150')}`}>
           <label>Buscar registro<input className={selectCls} value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Pessoa, ação, perfil, módulo ou IP" /></label>
           <label>Período<select className={selectCls} value={filtroPeriodo} onChange={(e) => setFiltroPeriodo(e.target.value)}>{PERIODOS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</select></label>
           <label>Responsável<select className={selectCls} value={filtroRoleUserId} onChange={(e) => setFiltroRoleUserId(e.target.value)}><option value="">Todas as pessoas</option>{[...pessoasDisponiveis].map(([id, nome]) => <option key={id} value={id}>{nome}</option>)}</select></label>
@@ -336,18 +344,18 @@ function formatDescricaoForPdf(desc) {
         </div>
         {erroClinica && <div className="audit-warning" role="alert">{erroClinica} <button className={buttonCls} onClick={fetchClinica}>Tentar novamente</button></div>}
         {erroEquipe && <div className="audit-warning" role="alert">{erroEquipe} <button className={buttonCls} onClick={fetchEquipe}>Tentar novamente</button></div>}
-        <div className="audit-security">
+        <div className={`audit-security ${agendaEnterClass(showEntrance, 'agenda-delay-150')}`}>
           <label><input type="checkbox" checked={filtroSuspeito} onChange={(e) => setFiltroSuspeito(e.target.checked)} /><PrototypeIcon name="info" size="s" />Mostrar apenas ações suspeitas</label>
           <select aria-label="Ordenação" className={selectCls} value={ordenacao} onChange={(e) => setOrdenacao(e.target.value)}>{ORDENACOES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
         </div>
-        <div className="audit-count">
+        <div className={`audit-count ${agendaEnterClass(showEntrance, 'agenda-delay-200')}`}>
           <span aria-live="polite">{loading ? 'Carregando registros…' : erro ? 'Histórico indisponível' : `${filtrados.length} registros encontrados`}</span>
           <div className="audit-actions">
           {canExportPdf && <button className="btn-p" onClick={() => setRelatorioAberto(true)} disabled={loading || !!erro || !clinica || !!erroClinica || exportando || filtrados.length === 0}><PrototypeIcon name="file" size="s" />{exportando ? 'Gerando PDF…' : 'Exportar / PDF'}</button>}
           <button className={buttonCls} onClick={limparFiltros}>Limpar filtros</button>
           </div>
         </div>
-        <div className="box audit-list">
+        <div className={`box audit-list ${agendaEnterClass(showEntrance, 'agenda-delay-250')}`}>
           {!loading && !erro && itensDaPagina.length > 0 && <div className="audit-list-heading" aria-hidden="true"><span>Data e hora</span><span>Responsável</span><span>Ação realizada</span><span /></div>}
           {loading ? <div className="audit-state" role="status" aria-label="Carregando histórico"><ConfigCardStackSkeleton count={4} className="h-20" /></div> : erro ? (
             <div role="alert" className="audit-state">{erro}<br /><button className={buttonCls} onClick={fetchAuditoria}>Tentar novamente</button></div>
@@ -364,7 +372,7 @@ function formatDescricaoForPdf(desc) {
             </button>;
           })}
         </div>
-        {!loading && !erro && filtrados.length > 0 && <div className="audit-pager"><span>Página {paginaAtual} de {totalPaginas}</span><button className={buttonCls} onClick={() => setPagina((p) => Math.max(1, p - 1))} disabled={paginaAtual === 1}><PrototypeIcon name="cl" size="s" />Anterior</button><button className={buttonCls} onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))} disabled={paginaAtual >= totalPaginas}>Próxima<PrototypeIcon name="cr" size="s" /></button></div>}
+        {!loading && !erro && filtrados.length > 0 && <div className={`audit-pager ${agendaEnterClass(showEntrance, 'agenda-delay-250')}`}><span>Página {paginaAtual} de {totalPaginas}</span><button className={buttonCls} onClick={() => setPagina((p) => Math.max(1, p - 1))} disabled={paginaAtual === 1}><PrototypeIcon name="cl" size="s" />Anterior</button><button className={buttonCls} onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))} disabled={paginaAtual >= totalPaginas}>Próxima<PrototypeIcon name="cr" size="s" /></button></div>}
         <p className="invite-note">As sinalizações de ações suspeitas devem ser conferidas e não confirmam uma irregularidade.</p>
       </div>
       {relatorioAberto && canExportPdf && <AuditoriaDetailsModal relatorio={{ clinica, rows: filtrados, suspeitas: filtroSuspeito, ordem: ordenacao, exportar: exportarParaPDF, exportando,

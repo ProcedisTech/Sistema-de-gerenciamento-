@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { 
+  ArrowLeftRight,
   ChevronDown, 
   ChevronLeft,
   ChevronRight,
@@ -189,13 +190,31 @@ function AtendimentoAvulsoItemCard({
               </>
             )}
             {atendimento.profissionalNome && atendimento.profissionalNome !== '—' && (
-              <>
-                <span className="text-slate-300">·</span>
-                <span className="flex items-center gap-1">
-                  <User className="w-3 h-3 text-slate-400" />
+              <p
+                className="text-[11px] text-slate-500 flex flex-wrap items-center gap-1.5 mt-0.5"
+                title={
+                  atendimento.profissionalAgendadoNome &&
+                  atendimento.profissionalAgendadoNome !== atendimento.profissionalNome
+                    ? atendimento.motivoTrocaProfissional
+                      ? `Agendado com ${atendimento.profissionalAgendadoNome} → Realizado por ${atendimento.profissionalNome} · Motivo: ${atendimento.motivoTrocaProfissional}`
+                      : `Agendado com ${atendimento.profissionalAgendadoNome} → Realizado por ${atendimento.profissionalNome}`
+                    : atendimento.profissionalNome
+                }
+              >
+                <User className="w-3 h-3 text-slate-400 shrink-0" />
+                {atendimento.profissionalAgendadoNome &&
+                atendimento.profissionalAgendadoNome !== atendimento.profissionalNome ? (
+                  <span className="inline-flex flex-wrap items-center gap-1">
+                    <span>Agendado com {atendimento.profissionalAgendadoNome}</span>
+                    <ArrowLeftRight className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                    <span className="font-semibold text-slate-700">
+                      Realizado por {atendimento.profissionalNome}
+                    </span>
+                  </span>
+                ) : (
                   <span>{atendimento.profissionalNome}</span>
-                </span>
-              </>
+                )}
+              </p>
             )}
           </div>
         </div>

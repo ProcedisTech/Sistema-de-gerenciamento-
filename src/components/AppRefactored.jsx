@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { buildPacienteCtx } from '../utils/pacienteCtx';
-import { Bell, CalendarDays, ChevronLeft, ChevronRight, Settings, UserCog, Users, X } from 'lucide-react';
+import { Bell, CalendarDays, ChevronLeft, ChevronRight, History, Settings, UserCog, Users, X } from 'lucide-react';
 
 // Hooks de estado
 import {
@@ -78,7 +78,7 @@ import { registrarAgendaAvulsa, registrarRetornoFuturo } from '../utils/registra
 import { evaluateProximoRetornoStep5 } from '../utils/proximoRetornoStep5.js';
 
 import { PatientsView } from './patients';
-import { ConfiguracoesView, GestaoUsuariosView } from './configuracoes';
+import { ConfiguracoesView, GestaoUsuariosView, AuditoriaView } from './configuracoes';
 import { UnsavedChangesModal } from './shared/UnsavedChangesModal';
 import { AgendaDashboard } from './agenda';
 import { AgendaFormModal } from './agenda/AgendaFormModal.jsx';
@@ -239,10 +239,12 @@ function AppRefactoredInner({ onCanalAvisos }) {
     canSeeConfigAnamnese,
     canSeeConfigProcedimentos,
     canSeeConfigTermos,
-    canSeeConfigPerfil,
+    canSeeConfigPerfil: _canSeeConfigPerfil,
+    canSeeMeuPerfil,
     canSeeConfigClinica,
     canSeeConfigAgenda,
     canSeeConfigEquipe,
+    canSeeConfigAuditoria,
     canDeleteAgenda,
     canSeePacientes,
     canStartAtendimento,
@@ -484,7 +486,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
 
   const goToView = React.useCallback((view) => {
     // Verificacao de segurança na troca de view
-    if (view === 'configuracoes' && !canSeeConfig) {
+    if (view === 'configuracoes' && !canSeeConfig && configSection !== 'perfil') {
       toast.error('Você não tem permissão para acessar as configurações.');
       return;
     }
@@ -492,11 +494,15 @@ function AppRefactoredInner({ onCanalAvisos }) {
       toast.error('Você não tem permissão para acessar a Gestão de Equipe.');
       return;
     }
+    if (view === 'auditoria' && !canSeeConfigAuditoria) {
+      toast.error('Você não tem permissão para acessar o Histórico / Auditoria.');
+      return;
+    }
     if (view === 'configuracoes') {
       setConfigSectionState(null);
     }
     setActiveView(view);
-  }, [canSeeConfig, canSeeConfigEquipe, toast, setActiveView]);
+  }, [canSeeConfig, canSeeConfigEquipe, canSeeConfigAuditoria, toast, setActiveView]);
 
   const [notifVersion, setNotifVersion] = useState(0);
   const [journeyTermoTitulo, setJourneyTermoTitulo] = React.useState('');
@@ -2157,7 +2163,15 @@ function AppRefactoredInner({ onCanalAvisos }) {
         // ignore
       }
     }
-  }, [activeView, postLoginGate, contextStatus, canSeeConfig, canSeeConfigEquipe, openingSelfProfile, setActiveView]);
+    if (activeView === 'auditoria' && postLoginGate === 'ready' && contextStatus === 'ready' && !canSeeConfigAuditoria) {
+      setActiveView('pacientes');
+      try {
+        sessionStorage.setItem('activeView', 'pacientes');
+      } catch {
+        // ignore
+      }
+    }
+  }, [activeView, postLoginGate, contextStatus, canSeeConfig, canSeeConfigEquipe, canSeeConfigAuditoria, openingSelfProfile, setActiveView]);
 
   const setConfigSection = React.useCallback((section) => {
     const next = section === null ? null : VALID_SECTIONS.has(section) ? section : 'fichas';
@@ -2978,11 +2992,15 @@ function AppRefactoredInner({ onCanalAvisos }) {
       setSelectedPatientCpf(cpf);
       setPatientDetailTab('timeline');
       setPatientView('profile');
-      setActiveView('pacientes');
+      if (activeView !== 'pacientes') {
+        goToViewWithGuard('pacientes');
+      } else {
+        setActiveView('pacientes');
+      }
     } catch (error) {
       if (patientNavigationScope.current === orgId && patientNavigationRequest.current === request) toast.error(getApiErrorToastMessage(error, 'Não foi possível abrir o histórico do paciente.'));
     }
-  }, [canSeePacientes, patients, patientListItems, orgId, fusoClinica, setPatients, captureProfileNavSnapshot, setSelectedPatientCpf, setPatientDetailTab, setPatientView, setActiveView, toast]);
+  }, [canSeePacientes, patients, patientListItems, orgId, fusoClinica, setPatients, captureProfileNavSnapshot, setSelectedPatientCpf, setPatientDetailTab, setPatientView, activeView, goToViewWithGuard, setActiveView, toast]);
 
   const handleGlobalPatientSelect = React.useCallback(
     (patient) => {
@@ -3012,6 +3030,21 @@ function AppRefactoredInner({ onCanalAvisos }) {
   const handleGlobalAgendamento = React.useCallback(() => {
     agendaSchedule.openCreateModal(agendaSchedule.selectedDay);
   }, [agendaSchedule]);
+
+  const handleAgendarComProfissional = React.useCallback(
+    (pessoa, opts = {}) => {
+      if (!pessoa) {
+        setActiveView('agenda');
+        return;
+      }
+      const roleUserId = String(pessoa?.roleUserId || pessoa?.id || '').trim();
+      agendaSchedule.openCreateModal(agendaSchedule.selectedDay, {
+        profissionalRoleUserId: roleUserId,
+        onAgendaSaved: opts.onAgendaSaved,
+      });
+    },
+    [agendaSchedule]
+  );
 
   const handleOpenNotificacoes = React.useCallback(() => {
     if (activeView !== 'notificacoes') {
@@ -4984,6 +5017,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
         return <PageSlot icon={CalendarDays} title="Agenda" />;
       case 'gestao-equipe':
         return <PageSlot icon={UserCog} title="Gestão de Equipe" />;
+      case 'auditoria':
+        return <PageSlot icon={History} title="Histórico / Auditoria" />;
       case 'configuracoes':
         return <PageSlot icon={Settings} title="Configurações" />;
       case 'notificacoes':
@@ -6010,7 +6045,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
               }
             />
             <div
-              className={`w-full mx-auto ${activeView === 'gestao-equipe' ? 'max-w-none bg-[#f8fafc]' : activeView === 'configuracoes'
+              className={`w-full mx-auto ${activeView === 'gestao-equipe' || activeView === 'auditoria' ? 'max-w-none bg-[#f8fafc]' : activeView === 'configuracoes'
                 ? 'px-3 pt-2 pb-3 sm:px-6 sm:pt-3 sm:pb-6 md:px-8 md:pt-4 md:pb-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1380px)] xl:max-w-[min(100%,1600px)] 2xl:max-w-[min(100%,1800px)] 3xl:max-w-[min(100%,1960px)] 4xl:max-w-[min(100%,2200px)]'
                 : isAgendaView
                   ? 'flex min-h-0 flex-1 flex-col overflow-hidden px-3 pt-1 pb-3 sm:px-5 sm:pt-2 sm:pb-4 md:px-6 lg:px-6 lg:py-2 xl:px-8 max-w-[1100px] md:max-w-none lg:max-w-[min(100%,1420px)] xl:max-w-[min(100%,1680px)] 2xl:max-w-[min(100%,1720px)] 3xl:max-w-[min(100%,1880px)] 4xl:max-w-[min(100%,2080px)]'
@@ -6025,7 +6060,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     ? 'flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4 lg:p-3'
                     : activeView === 'pacientes'
                       ? 'flex flex-col p-4 sm:p-5 md:p-6 lg:p-8 pb-6 sm:pb-8'
-                      : activeView === 'gestao-equipe' ? 'procedi-equipe-content' : activeView === 'configuracoes'
+                      : (activeView === 'gestao-equipe' || activeView === 'auditoria') ? 'procedi-equipe-content' : activeView === 'configuracoes'
                         ? 'rounded-[20px] border border-app-border bg-white px-4 pt-3 pb-5 shadow-app-card sm:px-6 sm:pt-4 sm:pb-6 md:px-8 md:pt-5 md:pb-8'
                         : 'rounded-[20px] border border-app-border bg-white p-4 pb-5 shadow-app-card sm:p-8 sm:pb-6'
                 }
@@ -6100,13 +6135,13 @@ function AppRefactoredInner({ onCanalAvisos }) {
                 )}
 
                 {activeView === 'configuracoes' && (
-                  <RoleGuard condition={canSeeConfig} showError>
+                  <RoleGuard condition={canSeeConfig || configSection === 'perfil' || canSeeMeuPerfil} showError>
                     <ConfiguracoesView
                       key={`${orgId}-${roleUserId}`}
                       canSeeAnamnese={canSeeConfigAnamnese}
                       canSeeProcedimentos={canSeeConfigProcedimentos}
                       canSeeTermos={canSeeConfigTermos}
-                      canSeePerfil={canSeeConfigPerfil}
+                      canSeePerfil={canSeeMeuPerfil}
                       canSeeClinica={canSeeConfigClinica}
                       canSeeAgendaConfig={canSeeConfigAgenda}
                       canSeeEquipe={canSeeConfigEquipe}
@@ -6121,7 +6156,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                         void recarregarClinicaInfo();
                       }}
                       onPerfilAtualizado={(data) => setPerfilInfo((prev) => ({ ...prev, ...data }))}
-                      onNavigateAgenda={() => setActiveView('agenda')}
+                      onNavigateAgenda={handleAgendarComProfissional}
                       onSelectPatient={canSeePacientes ? handleOpenPatientFromEquipe : undefined}
                       onEquipeInvalidate={agendaSchedule.refreshEquipe}
                       onPacientesCatalogRefresh={refreshPatientsAndPagedList}
@@ -6134,16 +6169,26 @@ function AppRefactoredInner({ onCanalAvisos }) {
 
                 {activeView === 'gestao-equipe' && (
                   <RoleGuard condition={canSeeConfigEquipe || openingSelfProfile} showError>
-                    <GestaoUsuariosView
-                      key={`${orgId}-${roleUserId}`}
-                      targetUserId={equipeTargetUserId}
-                      onClearTargetUserId={() => setEquipeTargetUserId(null)}
-                      onPerfilAtualizado={(data) => setPerfilInfo((previous) => ({ ...previous, ...data }))}
-                      onDisponibilidadeInvalidate={handleDisponibilidadeInvalidate}
-                      onEquipeInvalidate={agendaSchedule.refreshEquipe}
-                      onNavigateAgenda={() => setActiveView('agenda')}
-                      onSelectPatient={canSeePacientes ? handleOpenPatientFromEquipe : undefined}
-                    />
+                    <div className="w-full">
+                      <GestaoUsuariosView
+                        key={`${orgId}-${roleUserId}`}
+                        targetUserId={equipeTargetUserId}
+                        onClearTargetUserId={() => setEquipeTargetUserId(null)}
+                        onPerfilAtualizado={(data) => setPerfilInfo((previous) => ({ ...previous, ...data }))}
+                        onDisponibilidadeInvalidate={handleDisponibilidadeInvalidate}
+                        onEquipeInvalidate={agendaSchedule.refreshEquipe}
+                        onNavigateAgenda={handleAgendarComProfissional}
+                        onSelectPatient={canSeePacientes ? handleOpenPatientFromEquipe : undefined}
+                      />
+                    </div>
+                  </RoleGuard>
+                )}
+
+                {activeView === 'auditoria' && (
+                  <RoleGuard condition={canSeeConfigAuditoria} showError>
+                    <div className="w-full">
+                      <AuditoriaView />
+                    </div>
                   </RoleGuard>
                 )}
 
@@ -6179,7 +6224,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                 )}
 
                 {/* @deprecated — 'jornada' legado; 'consulta' reservado para ConsultaHub (render-block). */}
-                {!['jornada', 'consulta', 'pacientes', 'agenda', 'configuracoes', 'gestao-equipe', 'notificacoes'].includes(activeView) && (
+                {!['jornada', 'consulta', 'pacientes', 'agenda', 'configuracoes', 'gestao-equipe', 'auditoria', 'notificacoes'].includes(activeView) && (
                   <div className="p-6 rounded-2xl border border-app-border bg-app-surface text-[#64748b] font-bold text-[14px]">
                     Visao nao encontrada.
                   </div>
