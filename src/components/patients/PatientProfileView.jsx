@@ -38,6 +38,7 @@ import {
   // mapasApi, — reativar junto com a região aplicada na Ficha (ver handleGerarPdf)
   planejamentosApi,
 } from '../../services/api';
+import { Navigate } from 'react-router';
 import { useToast } from '../../contexts/useToast.js';
 import { useOrg } from '../../contexts/OrgContext';
 import { usePapel } from '../../hooks/usePapel';
@@ -111,6 +112,8 @@ import { PlanoFotoLightbox } from '../planos/PlanoFotoLightbox.jsx';
 import { RelatoAcompanhamentoModal } from '../journey/RelatoAcompanhamentoModal.jsx';
 import { DocumentosAssinadosTab } from './documentos/DocumentosAssinadosTab.jsx';
 import { PlanosTab } from '../planos/PlanosTab.jsx';
+import { caminhos } from '../../rotas/caminhos.js';
+import NaoEncontrado from '../../rotas/NaoEncontrado.jsx';
 import { AtendimentosAvulsosTab } from './AtendimentosAvulsosTab.jsx';
 import { AnamneseDocumentoView } from '../anamnese/AnamneseDocumentoAssinadoView.jsx';
 import { DynamicQuestion } from '../anamnese/DynamicQuestion.jsx';
@@ -537,19 +540,28 @@ function AnamneseTab({
   pacienteSexo = null,
   pacienteTelefone = '',
   roleUserId,
+  rota = null,
+  irPara = null,
 }) {
   const toast = useToast();
   const { fuso } = useFusoClinica();
   const [anamneses, setAnamneses] = useState([]);
   const [detalhes, setDetalhes] = useState({});
   const [loading, setLoading] = useState(true);
-  const [selectedId, setSelectedId] = useState(null);
+  // Com rota, o endereço é a fonte (selecionada e modo editar); o estado local só vale sem rota.
+  const emRota = !!(rota && irPara);
+  const [selectedLocal, setSelectedId] = useState(null);
+  const selectedId = emRota ? (rota.anamneseId ?? anamneses[0]?.id ?? null) : selectedLocal;
   const [fichaByAnId, setFichaByAnId] = useState({});
 
-  const [editingAnamneseId, setEditingAnamneseId] = useState(null);
+  const [editingLocal, setEditingAnamneseId] = useState(null);
+  const editingAnamneseId = emRota ? (rota.editar ? rota.anamneseId : null) : editingLocal;
+  const editInitRef = useRef(null);
   const [editingRespostas, setEditingRespostas] = useState({});
   const [editingObservacoes, setEditingObservacoes] = useState('');
   const [editSaving, setEditSaving] = useState(false);
+  /** Id da anamnese cuja ficha ou detalhe falhou ao carregar (o /editar por endereço não fica em "Carregando" para sempre). */
+  const [erroCargaId, setErroCargaId] = useState(null);
   const [errosObrigatorias, setErrosObrigatorias] = useState(new Set());
   /** Geração da lista de anamneses: resposta de uma busca mais antiga é descartada. */
   const geracaoListaRef = useRef(0);
@@ -596,7 +608,10 @@ function AnamneseTab({
           setDetalhes((prev) => ({ ...prev, [selectedId]: det }));
         }
       })
-      .catch((err) => console.warn('Erro ao carregar detalhe da anamnese:', err?.message));
+      .catch((err) => {
+        console.warn('Erro ao carregar detalhe da anamnese:', err?.message);
+        setErroCargaId(selectedId);
+      });
   }, [pacienteId, selectedId, detalhes]);
 
   useEffect(() => {
@@ -619,6 +634,7 @@ function AnamneseTab({
       })
       .catch((err) => {
         console.warn('Erro ao carregar ficha da anamnese:', err?.message);
+        setErroCargaId(targetId);
         toast.error('Não foi possível carregar o template da ficha. O botão Editar ficará indisponível.');
       });
 
@@ -627,11 +643,10 @@ function AnamneseTab({
     };
   }, [selectedId, detalhes, anamneses, fichaByAnId, toast]);
 
-  const handleStartEditAnamnese = useCallback((anId, detalhe) => {
+  const carregarEdicao = useCallback((anId, detalhe) => {
     const ficha = fichaByAnId[anId];
     if (!ficha) return;
 
-    setEditingAnamneseId(anId);
     setEditingObservacoes(detalhe.observacoes || '');
 
     const mapTipos = buildPerguntaTipoById(ficha);
@@ -640,12 +655,31 @@ function AnamneseTab({
     setErrosObrigatorias(new Set());
   }, [fichaByAnId]);
 
-  const handleCancelEdit = useCallback(() => {
-    setEditingAnamneseId(null);
+  const handleStartEditAnamnese = useCallback((anId, detalhe) => {
+    if (!fichaByAnId[anId]) return;
+    if (emRota) { irPara(caminhos.pacienteAnamnese(pacienteId, anId, { editar: true })); return; }
+    setEditingAnamneseId(anId);
+    carregarEdicao(anId, detalhe);
+  }, [fichaByAnId, emRota, irPara, pacienteId, carregarEdicao]);
+
+  // F5 / link direto em .../editar: carrega os campos quando ficha e detalhe chegam.
+  useEffect(() => {
+    if (!emRota) return;
+    if (!rota.editar) { editInitRef.current = null; return; }
+    const id = rota.anamneseId;
+    if (editInitRef.current === id || !fichaByAnId[id] || !detalhes[id]) return;
+    editInitRef.current = id;
+    carregarEdicao(id, detalhes[id]);
+  }, [emRota, rota?.editar, rota?.anamneseId, fichaByAnId, detalhes, carregarEdicao]);
+
+  // substituir: só quando vem do salvar (o Voltar não reabre o editor); Cancelar empilha. onClick passa o evento, por isso o === true.
+  const handleCancelEdit = useCallback((substituir) => {
     setEditingRespostas({});
     setEditingObservacoes('');
     setErrosObrigatorias(new Set());
-  }, []);
+    if (emRota) irPara(rota.anamneseId != null ? caminhos.pacienteAnamnese(pacienteId, rota.anamneseId) : caminhos.paciente(pacienteId, 'anamnese'), substituir === true ? { replace: true } : undefined);
+    else setEditingAnamneseId(null);
+  }, [emRota, irPara, pacienteId, rota?.anamneseId]);
 
   const handleRespostaChange = useCallback((resposta) => {
     const key = String(resposta.perguntaId);
@@ -668,6 +702,8 @@ function AnamneseTab({
       toast.error('Não é possível salvar: roleUserId ausente ou ficha não carregada.');
       return;
     }
+    // F5 em .../editar: campos ainda não carregados; salvar gravaria respostas vazias.
+    if (emRota && editInitRef.current !== editingAnamneseId) return;
 
     const orderedItens = sortFichaItens(ficha);
     const errors = new Set();
@@ -701,13 +737,13 @@ function AnamneseTab({
       setAnamneses((prev) => prev.map((a) => (a.id === editingAnamneseId ? updated : a)));
 
       toast.success('Anamnese atualizada com sucesso!');
-      handleCancelEdit();
+      handleCancelEdit(true);
     } catch (e) {
       toast.error(e.message || 'Erro ao salvar anamnese.');
     } finally {
       setEditSaving(false);
     }
-  }, [editingAnamneseId, fichaByAnId, roleUserId, editingRespostas, editingObservacoes, toast, handleCancelEdit, pacienteId]);
+  }, [editingAnamneseId, fichaByAnId, roleUserId, editingRespostas, editingObservacoes, toast, handleCancelEdit, pacienteId, emRota]);
 
   if (loading) {
     return (
@@ -728,7 +764,10 @@ function AnamneseTab({
     );
   }
 
-  const selected = anamneses.find((a) => a.id === selectedId) || anamneses[0];
+  if (emRota && rota.anamneseId != null && !anamneses.some((a) => String(a.id) === rota.anamneseId)) {
+    return <NaoEncontrado />;
+  }
+  const selected = anamneses.find((a) => String(a.id) === String(selectedId)) || anamneses[0];
   const detalhe = detalhes[selected.id] || selected;
   const rotuloPreenchimento = (an) => {
     const data = (an.dataHora && formatarInstante(an.dataHora, fuso, 'dataHora')) || 'sem data';
@@ -736,7 +775,23 @@ function AnamneseTab({
     return `${data} · ${an.anamneseNome || 'Anamnese'} · ${estado}`;
   };
 
-  if (editingAnamneseId === selected.id) {
+  if (editingAnamneseId != null && String(editingAnamneseId) === String(selected.id)) {
+    if (emRota && editInitRef.current !== editingAnamneseId) {
+      if (String(erroCargaId) === String(selected.id)) {
+        return (
+          <div className="flex flex-col items-center justify-center gap-3 py-12 text-[13px] text-[#64748b]">
+            <span>Não foi possível carregar a anamnese.</span>
+            <button type="button" onClick={handleCancelEdit} className="font-semibold text-slate-500 hover:text-slate-700">Cancelar</button>
+          </div>
+        );
+      }
+      return (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-6 h-6 animate-spin text-[#00a88e]" />
+          <span className="ml-2 text-[#64748b] text-[13px]">Carregando anamnese...</span>
+        </div>
+      );
+    }
     return (
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -806,7 +861,7 @@ function AnamneseTab({
         <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-slate-500">Preenchimentos</span>
         <select
           value={selected.id}
-          onChange={(e) => setSelectedId(e.target.value)}
+          onChange={(e) => (emRota ? irPara(caminhos.pacienteAnamnese(pacienteId, e.target.value)) : setSelectedId(e.target.value))}
           className="w-full max-w-xl rounded-lg border border-slate-200 bg-white px-3 py-2 text-[13px] text-slate-800 outline-none focus:border-[#00a88e]"
         >
           {anamneses.map((an) => (
@@ -867,8 +922,9 @@ function profileProximoAgendamentoCard(p, fuso, agoraMs) {
 export function PatientProfileView({
   selectedPatient,
   patientDetailTab,
-  setPatientDetailTab,
-  setPatientView,
+  rota,
+  irPara,
+  voltarParaLista,
   setSelectedPatientCpf,
   getPatientInitials,
   onStartAttendance,
@@ -1289,29 +1345,6 @@ export function PatientProfileView({
     fuso,
     hojeIso,
   ]);
-
-  useEffect(() => {
-    const defaultTab = canSeeOrcamentos
-      ? 'planos'
-      : (canSeeProntuario
-        ? 'prontuario'
-        : ((canStartAnamnese || canSeeRespostasAnamnese)
-          ? 'anamnese'
-          : (canSeeGaleria
-            ? 'galeria'
-            : 'documentos')));
-
-    if (patientDetailTab === 'timeline') {
-      setPatientDetailTab('avulsos');
-    } else if (
-      patientDetailTab === 'cadastro' ||
-      patientDetailTab === 'atendimento'
-    ) {
-      setPatientDetailTab(defaultTab);
-    } else if (patientDetailTab === 'planos' && !canSeeOrcamentos) {
-      setPatientDetailTab(defaultTab);
-    }
-  }, [patientDetailTab, setPatientDetailTab, canSeeOrcamentos, canSeeProntuario, canStartAnamnese, canSeeRespostasAnamnese, canSeeGaleria]);
 
   const isEditing = Boolean(editing);
 
@@ -2137,8 +2170,7 @@ export function PatientProfileView({
       setInativarMotivo('');
       setInativarSenha('');
       setInativarSenhaErro('');
-      setPatientView('list');
-      setPatientDetailTab('planos');
+      voltarParaLista();
       setSelectedPatientCpf?.(null);
       refreshPatients?.();
     } catch (e) {
@@ -2160,6 +2192,23 @@ export function PatientProfileView({
 
   if (!selectedPatient) return null;
 
+  // Aba do endereço sem permissão (ou 'planos' sem orçamento): troca o endereço sem empilhar.
+  const abaPermitida = {
+    prontuario: canSeeProntuario,
+    anamnese: canStartAnamnese || canSeeRespostasAnamnese,
+    documentos: canSeeDocumentos,
+    avulsos: true,
+    planos: canSeeOrcamentos,
+  }[patientDetailTab];
+  if (!abaPermitida) {
+    const padrao = canSeeOrcamentos ? undefined
+      : canSeeProntuario ? 'prontuario'
+        : (canStartAnamnese || canSeeRespostasAnamnese) ? 'anamnese'
+          : canSeeDocumentos ? 'documentos' : 'avulsos';
+    const destino = patientDetailTab === 'planos' ? padrao : undefined;
+    return <Navigate replace to={caminhos.paciente(rota.pacienteId, destino)} />;
+  }
+
   return (
     <div className="flex flex-col gap-5">
       {detailLoading && (
@@ -2175,8 +2224,7 @@ export function PatientProfileView({
       <ProfileBreadcrumb
         patientName={selectedPatient.nome}
         onBackToList={() => {
-          setPatientView('list');
-          setPatientDetailTab('planos');
+          voltarParaLista();
         }}
       />
 
@@ -2417,7 +2465,7 @@ export function PatientProfileView({
                     type="button"
                     title={title}
                     aria-label={title}
-                    onClick={() => setPatientDetailTab(key)}
+                    onClick={() => irPara(caminhos.paciente(rota.pacienteId, key === 'planos' ? undefined : key))}
                     className={`flex min-h-[44px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap px-2.5 py-2.5 text-[12px] font-semibold transition-colors sm:px-3 sm:text-[12.5px] ${active
                       ? '-mb-px border-b-2 border-[#00a88e] text-[#00a88e]'
                       : 'border-b-2 border-transparent text-[#64748b] hover:text-[#0f172a]'
@@ -2538,7 +2586,7 @@ export function PatientProfileView({
                                     hasObservacao={hasObservacao}
                                     onToggleRetornos={() => toggleProntuarioRetornos(root.id)}
                                     isRetornosExpanded={isExpanded}
-                                    onPress={() => setPatientDetailTab('prontuario')}
+                                    onPress={() => irPara(caminhos.paciente(rota.pacienteId, 'prontuario'))}
                                   />
                                 </ProcedureTimelineEntry>
                                 {isExpanded &&
@@ -2568,7 +2616,7 @@ export function PatientProfileView({
                                           fotosCount={childFotos.length}
                                           hasTermo={Boolean(childAssinatura)}
                                           hasObservacao={Boolean(child.observacao && String(child.observacao).trim())}
-                                          onPress={() => setPatientDetailTab('prontuario')}
+                                          onPress={() => irPara(caminhos.paciente(rota.pacienteId, 'prontuario'))}
                                         />
                                       </ProcedureTimelineEntry>
                                     );
@@ -2581,7 +2629,7 @@ export function PatientProfileView({
                           <div className="pt-1">
                             <button
                               type="button"
-                              onClick={() => setPatientDetailTab('prontuario')}
+                              onClick={() => irPara(caminhos.paciente(rota.pacienteId, 'prontuario'))}
                               className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl border border-[#e2e8f0] bg-white px-4 py-2.5 text-[13px] font-bold text-[#00a88e] shadow-2xs transition-all hover:border-[#cbd5e1] hover:bg-[#f8fafc]"
                             >
                               <span>Ver prontuário completo ({nestedApiProcedures.length} {nestedApiProcedures.length === 1 ? 'procedimento' : 'procedimentos'})</span>
@@ -2988,12 +3036,16 @@ export function PatientProfileView({
                   pacienteSexo={selectedPatient.sexo}
                   pacienteTelefone={selectedPatient.telefone || selectedPatient.celular || ''}
                   roleUserId={roleUserId}
+                  rota={rota}
+                  irPara={irPara}
                 />
               )}
 
               {patientDetailTab === 'planos' && canSeeOrcamentos && (
                 <PlanosTab
                   variant="profile"
+                  planejamentoIdAlvo={rota?.planejamentoId ?? null}
+                  onAbrirPlano={irPara ? (pid) => irPara(caminhos.pacientePlano(selectedPatient.id, pid)) : undefined}
                   pacienteId={selectedPatient?.id ?? null}
                   paciente={selectedPatient}
                   pacienteNome={selectedPatient?.nome || selectedPatient?.nomeCompleto || ''}
@@ -3630,7 +3682,7 @@ export function PatientProfileView({
         }}
         onAjustarPlano={() => {
           closeRelatoModal();
-          setPatientDetailTab('anamnese');
+          irPara(caminhos.paciente(rota.pacienteId, 'anamnese'));
         }}
       />
 

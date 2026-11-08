@@ -501,8 +501,8 @@ describe('useAuthState — testador T1 (B-42 F1)', () => {
 
       expect(result.current.isLoggedIn).toBe(false);
       expect(sessionStorage.getItem(FILA)).toBe(FILA_VALOR);
-      // preferência/layout também ficam
-      expect(sessionStorage.getItem('procedi_config_tab')).toBe('equipe');
+      // chave de tela de Configurações sai na saída; só layout (localStorage) fica
+      expect(sessionStorage.getItem('procedi_config_tab')).toBeNull();
       expect(localStorage.getItem('procedi.sidebar.desktopCollapsed')).toBe('true');
     });
 

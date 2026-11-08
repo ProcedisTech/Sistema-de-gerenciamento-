@@ -4,6 +4,7 @@
  * no aparelho continua lá.
  */
 import { act, screen } from '@testing-library/react';
+import { ultimoRoteador } from '../rotas/montarComRoteador.jsx';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { IDS, agendaDto } from '../encerrar/cenariosEncerrar.js';
@@ -75,7 +76,7 @@ describe('T2: abandonada com a tela fora da consulta', () => {
     const guardadasAntes = entradasGuardadas();
     expect(guardadasAntes.length).toBeGreaterThan(0);
     const patientViewAntes = sessionStorage.getItem('patientView');
-    const activeViewAntes = sessionStorage.getItem('activeView');
+    const caminhoAntes = ultimoRoteador().state.location.pathname;
     const detalhesAntes = srv.leituras.filter((l) => DETALHE.test(l.path.split('?')[0])).length;
 
     estado.dto = consultaDto({ status: 'abandonado' });
@@ -87,7 +88,7 @@ describe('T2: abandonada com a tela fora da consulta', () => {
     expect(srv.leituras.filter((l) => DETALHE.test(l.path.split('?')[0])).length).toBeGreaterThan(detalhesAntes);
     expect(screen.queryByText(new RegExp(BASE.replace('.', '\\.')))).toBeNull();
     expect(sessionStorage.getItem('patientView')).toBe(patientViewAntes);
-    expect(sessionStorage.getItem('activeView')).toBe(activeViewAntes);
+    expect(ultimoRoteador().state.location.pathname).toBe(caminhoAntes);
     expect(entradasGuardadas()).toEqual([]);
     expect(escritasDe(srv, 'POST', /\/encerrar$/)).toEqual([]);
   }, TIMEOUT);

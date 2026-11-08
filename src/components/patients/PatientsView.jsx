@@ -2,6 +2,8 @@ import React from 'react';
 import { PatientProfileView } from './PatientProfileView';
 import { PatientsListView } from './PatientsListView';
 import { PatientCreateView } from './PatientCreateView';
+import NaoEncontrado from '../../rotas/NaoEncontrado.jsx';
+import { caminhos } from '../../rotas/caminhos.js';
 
 export function PatientsView(props) {
   const {
@@ -11,8 +13,9 @@ export function PatientsView(props) {
     selectedPatientCpf,
     setSelectedPatientCpf,
     patientDetailTab,
-    setPatientDetailTab,
-    setPatientView,
+    rota,
+    pacienteNaoEncontrado,
+    irPara,
     getPatientInitials,
     onStartAttendance,
     onAgendarPaciente,
@@ -27,20 +30,41 @@ export function PatientsView(props) {
     perfilInfo,
   } = props;
 
+  // No perfil o endereço manda (id da rota); sem id na rota, cai no CPF guardado.
+  const idRota = patientView === 'profile' && rota?.pacienteId != null ? String(rota.pacienteId) : null;
+  const acha = idRota != null ? (p) => String(p.id) === idRota : (p) => p.cpf === selectedPatientCpf;
   const selectedPatient =
-    patients.find((p) => p.cpf === selectedPatientCpf) ||
-    (Array.isArray(patientListItems)
-      ? patientListItems.find((p) => p.cpf === selectedPatientCpf)
-      : null) ||
+    patients.find(acha) ||
+    (Array.isArray(patientListItems) ? patientListItems.find(acha) : null) ||
     null;
+
+  // Valores da lista guardados pelo hook mesmo fora de /pacientes;.
+  const voltarParaLista = (opcoes) =>
+    irPara(
+      caminhos.pacientes({
+        quickFilter: props.patientQuickFilter === 'todos' ? null : props.patientQuickFilter,
+        statusPlano: props.statusPlanoFilter || null,
+        ordem: props.patientListSortBy,
+        pagina: props.patientListPage,
+        anamneseDesatualizada: props.anamneseDesatualizadaFilter,
+        semAgendamentoFuturo: props.semAgendamentoFuturoFilter,
+        semRetorno: props.semRetornoFilter,
+        ehNovo: props.ehNovoFilter,
+        ehAniversariante: props.ehAniversarianteFilter,
+      }),
+      opcoes,
+    );
+
+  if (patientView === 'profile' && pacienteNaoEncontrado) return <NaoEncontrado />;
 
   if (patientView === 'profile' && selectedPatient) {
     return (
       <PatientProfileView
         selectedPatient={selectedPatient}
         patientDetailTab={patientDetailTab}
-        setPatientDetailTab={setPatientDetailTab}
-        setPatientView={setPatientView}
+        rota={rota}
+        irPara={irPara}
+        voltarParaLista={voltarParaLista}
         getPatientInitials={getPatientInitials}
         onStartAttendance={onStartAttendance}
         onAgendarPaciente={onAgendarPaciente}
@@ -66,13 +90,27 @@ export function PatientsView(props) {
     );
   }
 
+  if (idRota != null) {
+    if (props.pacienteCarregando === false) {
+      return (
+        <div role="alert">
+          <p>Não foi possível carregar o paciente</p>
+          <button type="button" onClick={() => voltarParaLista()}>Voltar</button>
+        </div>
+      );
+    }
+    return <p role="status">Carregando paciente...</p>;
+  }
+
   if (patientView === 'create') {
     return (
       <>
         <PatientsListView {...props} />
         <PatientCreateView
           variant="modal"
-          setPatientView={setPatientView}
+          rota={rota}
+          irPara={irPara}
+          voltarParaLista={voltarParaLista}
           onPatientCreated={onPatientCreated}
         />
       </>

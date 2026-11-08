@@ -11,6 +11,7 @@ import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { IDS, agendaDto } from '../encerrar/cenariosEncerrar.js';
 import { AVISO } from '../../services/avisos/tiposAviso.js';
 import { avisos } from './canalAvisosTeste.jsx';
+import { ultimoRoteador } from '../rotas/montarComRoteador.jsx';
 import {
   ATENDIMENTO_ID,
   TIMEOUT,
@@ -86,7 +87,7 @@ describe('consulta abandonada com a tela aberta (item 2)', () => {
     await abandonarNoServidor(estado);
 
     expect(naTelaDaConsulta()).toBe(false);
-    expect(sessionStorage.getItem('patientView')).toBe('profile');
+    expect(ultimoRoteador().state.location.pathname).toBe(`/pacientes/${IDS.PACIENTE}/avulsos`);
     expect(await screen.findByText(BASE)).toBeTruthy();
     expect(screen.queryByText(/alteraç(ão|ões) feita/)).toBeNull();
     expect(screen.queryByText(TOAST_NAO_ENCONTRADA)).toBeNull();
@@ -107,7 +108,7 @@ describe('consulta abandonada com a tela aberta (item 2)', () => {
     await abandonarNoServidor(estado);
 
     expect(naTelaDaConsulta()).toBe(false);
-    expect(sessionStorage.getItem('patientView')).toBe('profile');
+    expect(ultimoRoteador().state.location.pathname).toBe(`/pacientes/${IDS.PACIENTE}/avulsos`);
     expect(await screen.findByText(`${BASE} 1 alteração feita neste aparelho não chegou ao servidor.`)).toBeTruthy();
     expect(entradasGuardadas()).toEqual([]);
     expect(screen.queryByText(TOAST_NAO_ENCONTRADA)).toBeNull();
@@ -126,7 +127,7 @@ describe('consulta abandonada com a tela aberta (item 2)', () => {
     await abandonarNoServidor(estado);
 
     expect(naTelaDaConsulta()).toBe(false);
-    expect(sessionStorage.getItem('patientView')).toBe('profile');
+    expect(ultimoRoteador().state.location.pathname).toBe(`/pacientes/${IDS.PACIENTE}/avulsos`);
     expect(await screen.findByText(`${BASE} 2 alterações feitas neste aparelho não chegaram ao servidor.`)).toBeTruthy();
     expect(entradasGuardadas()).toEqual([]);
     expect(screen.queryByText(TOAST_NAO_ENCONTRADA)).toBeNull();

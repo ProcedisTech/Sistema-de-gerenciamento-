@@ -22,7 +22,7 @@ vi.mock('../../hooks/useMediaQuery', () => ({
 
 const baseProps = {
   activeView: 'pacientes',
-  setActiveView: () => {},
+  irParaTela: () => {},
   handleLogout: () => {},
   authUser: { id: '1', email: 'maria@x.com' },
   clinicaNome: 'Clínica Teste',

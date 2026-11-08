@@ -27,6 +27,7 @@ import { ProcedimentoSearchInput } from '../agenda/ProcedimentoSearchInput.jsx';
 import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions.js';
 import { useToast } from '../../contexts/useToast.js';
 import { useAviso } from '../../contexts/useAviso.js';
+import NaoEncontrado from '../../rotas/NaoEncontrado.jsx';
 import { PREFIXO_AVISO } from '../../services/avisos/tiposAviso.js';
 import { MENSAGEM_ALTERADO_OUTRO_APARELHO } from '../hooks/useAtendimentoServidor.js';
 import { getApiErrorDetail, planejamentosApi, pacientesGaleriaApi, termosApi, pacientesApi, procedimentosApi } from '../../services/api.js';
@@ -1115,6 +1116,8 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
   onLimparProcedimentosAvaliados,
   onPlanoModificado,
   destinoAvaliacao = null,
+  planejamentoIdAlvo = null, // endereço /planos/:id: abre e destaca esse plano
+  onAbrirPlano,
 }, ref) {
   const { fuso } = useAgoraDaClinica();
   const isConsulta = variant === 'consulta';
@@ -1417,7 +1420,7 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
   const toggleExpandido = useCallback(
     (id, plano) => {
       setExpandidos((prev) => {
-        const nextOpen = !prev[id];
+        const nextOpen = !(prev[id] ?? String(id) === String(planejamentoIdAlvo));
         if (isConsulta && nextOpen && plano) {
           const planoId = String(id);
           if (!hydratedPlanIdsRef.current.has(planoId)) {
@@ -1428,7 +1431,7 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
         return { ...prev, [id]: nextOpen };
       });
     },
-    [catalogoOptions, hydrateFromPlano, isConsulta],
+    [catalogoOptions, hydrateFromPlano, isConsulta, planejamentoIdAlvo],
   );
 
   const handleCriarPlano = useCallback(async () => {
@@ -2819,7 +2822,8 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
           ) : (
             planosFiltradosPorPill.map((plano) => {
               const isAtivo = plano.statusCodigo === 'ativo';
-              const isExpandido = expandidos[plano.id] !== undefined ? expandidos[plano.id] : isAtivo;
+              const isAlvo = planejamentoIdAlvo != null && String(plano.id) === String(planejamentoIdAlvo);
+              const isExpandido = expandidos[plano.id] !== undefined ? expandidos[plano.id] : (isAtivo || isAlvo);
               const statusUi = getPlanoStatusPresentation(plano.statusCodigo, plano.statusNome);
               const itens = Array.isArray(plano.itens) ? plano.itens : [];
               const fotosPlano = fotosPorPlanoId[String(plano.id)] || [];
@@ -2827,12 +2831,13 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
               return (
                 <div
                   key={plano.id}
-                  className={`bg-white rounded-lg border border-slate-200 shadow-2xs transition-all ${isAtivo ? 'border-l-4 border-l-[#00a88e]' : 'border-l-4 border-l-slate-400'
+                  data-plano-alvo={isAlvo ? 'true' : undefined}
+                  className={`bg-white rounded-lg border border-slate-200 shadow-2xs transition-all ${isAlvo ? 'ring-2 ring-[#00a88e]/40 ' : ''}${isAtivo ? 'border-l-4 border-l-[#00a88e]' : 'border-l-4 border-l-slate-400'
                     }`}
                 >
                   {/* CABEÇALHO DO PLANO */}
                   <div
-                    onClick={() => toggleExpandido(plano.id, plano)}
+                    onClick={() => { toggleExpandido(plano.id, plano); if (!isExpandido) onAbrirPlano?.(plano.id); }}
                     className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white cursor-pointer hover:bg-slate-50/50 transition-colors select-none rounded-t-lg"
                   >
                     <div className="space-y-0.5">
@@ -2961,6 +2966,9 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
       </div>
     );
   };
+
+  if (hasLoaded && !loading && !error && planejamentoIdAlvo != null
+    && !planos.some((p) => String(p.id) === String(planejamentoIdAlvo))) return <NaoEncontrado />;
 
   return (
     <div className="flex flex-col gap-4">

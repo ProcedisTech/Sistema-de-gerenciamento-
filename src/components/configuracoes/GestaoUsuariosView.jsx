@@ -29,6 +29,10 @@ import {
 } from "./equipePrototypeUtils";
 import "./equipePrototypeBase.css";
 import "./gestaoEquipe.css";
+import { useNavigate } from "react-router";
+import { useRotaAtual } from "../../rotas/useRotaAtual.js";
+import { caminhos } from "../../rotas/caminhos.js";
+import NaoEncontrado from "../../rotas/NaoEncontrado.jsx";
 import { useAgoraDaClinica } from "../hooks/useAgoraDaClinica.js";
 
 export function GestaoUsuariosView({
@@ -36,10 +40,10 @@ export function GestaoUsuariosView({
   onEquipeInvalidate,
   onNavigateAgenda,
   onSelectPatient,
-  targetUserId,
-  onClearTargetUserId,
   onPerfilAtualizado,
 }) {
+  const rota = useRotaAtual();
+  const navigate = useNavigate();
   const {
     isDono,
     canSeeConfigEquipe,
@@ -62,7 +66,7 @@ export function GestaoUsuariosView({
     apareceNaAgenda,
   } = useOrg();
   const resolvedTarget =
-    targetUserId === "me" ? currentRoleUserId : targetUserId;
+    rota.membroId === "me" ? currentRoleUserId : rota.membroId;
   const selfTarget = Boolean(
     currentRoleUserId &&
     resolvedTarget &&
@@ -80,20 +84,21 @@ export function GestaoUsuariosView({
   const [permissoes, setPermissoes] = useState([]);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteDraft, setInviteDraft] = useState(null);
-  const [activeTab, setActiveTab] = useState("membros"); // 'membros' | 'auditoria' | 'perfis'
+  const activeTab = rota.equipeAba ?? "membros"; // 'membros' | 'auditoria' | 'perfis'
+  const setActiveTab = (aba) =>
+    aba !== activeTab && navigate(caminhos.equipe(aba === "membros" ? undefined : aba));
   const [perfilParaAbrirNaAba, setPerfilParaAbrirNaAba] = useState(null);
 
-  const onEditarPerfilNaAba = useCallback((perfilAcessoId) => {
-    setDetailId(null);
+  const onEditarPerfilNaAba = (perfilAcessoId) => {
     setPerfilParaAbrirNaAba(perfilAcessoId);
     setActiveTab("perfis");
-  }, []);
+  };
 
   // Filtros
   const [searchName, setSearchName] = useState("");
   const [filterLevel, setFilterLevel] = useState("");
   const [loadError, setLoadError] = useState("");
-  const [detailId, setDetailId] = useState(null);
+  const detailId = resolvedTarget ? String(resolvedTarget) : null;
   const [sortOption, setSortOption] = useState("az"); // 'az' | 'za' | 'perfil' | 'atendimentos'
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
@@ -240,12 +245,6 @@ export function GestaoUsuariosView({
     }
   }, [canSeeConfigEquipe, loadData, orgId]);
 
-
-  useEffect(() => {
-    if (!resolvedTarget || (!canSeeConfigEquipe && !selfTarget)) return;
-    setDetailId(String(resolvedTarget));
-    setActiveTab("membros");
-  }, [resolvedTarget, canSeeConfigEquipe, selfTarget]);
 
   const loadSelf = useCallback(
     async (signal) => {
@@ -438,7 +437,7 @@ export function GestaoUsuariosView({
   };
 
   const openDetail = (u) => {
-    setDetailId(u.id);
+    navigate(caminhos.membro(u.id));
     setPeriodo("mes");
   };
   const newProfile = () => {
@@ -545,9 +544,7 @@ export function GestaoUsuariosView({
     </button>
   );
   const backToTeam = () => {
-    setDetailId(null);
-    setActiveTab("membros");
-    onClearTargetUserId?.();
+    navigate(caminhos.equipe());
   };
   const saveAccess = async (person, changes) => {
     if (!canManageUsers || person.perfilAcessoCodigo === "DONO") return;
@@ -647,6 +644,8 @@ export function GestaoUsuariosView({
         </div>
       ) : loading ? (
         <ConfigTableSkeleton rows={5} cols={4} />
+      ) : detailId && !detail ? (
+        <NaoEncontrado />
       ) : detail ? (
         <EquipePessoaView
           key={detail.id}

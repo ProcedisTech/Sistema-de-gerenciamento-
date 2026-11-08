@@ -312,7 +312,7 @@ it("ConfigDetailView mantém breadcrumb Configurações > Meu Perfil e propaga n
       onNavigateAgenda={onNavigateAgenda}
       onBackToHub={onBackToHub}
       onSelectPatient={onSelectPatient}
-      setConfigSection={vi.fn()}
+      irParaSecao={vi.fn()}
     />,
   );
   await screen.findByRole("heading", { name: "Ana Souza" });
@@ -374,15 +374,16 @@ it("propaga seleção do paciente atendido para a aplicação", async () => {
 });
 
 it("sincroniza o deep-link de perfil após a montagem e limpa a seção ao voltar", async () => {
-  const setConfigSection = vi.fn();
-  const view = render(<ConfiguracoesView canSeePerfil configSection={null} setConfigSection={setConfigSection} />);
+  const irParaSecao = vi.fn();
+  const view = render(<ConfiguracoesView canSeePerfil configSection={null} irParaSecao={irParaSecao} />);
   expect(screen.getAllByText("Selecione uma área para configurar").length).toBeGreaterThan(0);
-  view.rerender(<ConfiguracoesView canSeePerfil configSection="perfil" setConfigSection={setConfigSection} />);
+  view.rerender(<ConfiguracoesView canSeePerfil configSection="perfil" irParaSecao={irParaSecao} />);
   await screen.findByRole("heading", { name: "Ana Souza" });
   fireEvent.click(screen.getByRole("button", { name: "Configurações", exact: true }));
-  expect(setConfigSection).toHaveBeenCalledWith(null);
+  expect(irParaSecao).toHaveBeenCalledWith(null);
+  view.rerender(<ConfiguracoesView canSeePerfil configSection={null} irParaSecao={irParaSecao} />);
   expect(screen.getAllByText("Selecione uma área para configurar").length).toBeGreaterThan(0);
-  view.rerender(<ConfiguracoesView canSeePerfil configSection={null} setConfigSection={setConfigSection} />);
-  view.rerender(<ConfiguracoesView canSeePerfil configSection="perfil" setConfigSection={setConfigSection} />);
+  view.rerender(<ConfiguracoesView canSeePerfil configSection={null} irParaSecao={irParaSecao} />);
+  view.rerender(<ConfiguracoesView canSeePerfil configSection="perfil" irParaSecao={irParaSecao} />);
   expect(await screen.findByRole("heading", { name: "Ana Souza" })).toBeInTheDocument();
 });

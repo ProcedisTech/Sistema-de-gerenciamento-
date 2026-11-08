@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ConfigSidebarFlat } from './ConfigSidebarFlat';
 import { ConfigBreadcrumb } from './ConfigBreadcrumb';
 import { CATEGORY_DEFS, filterCategoryItems } from './configHubDefs';
-import { UnsavedChangesModal } from '../shared/UnsavedChangesModal';
 
 // Painéis de conteúdo
 import { AnamneseConfigPublicaPanel, AnamneseFichasHome } from '../anamnese';
@@ -25,7 +24,7 @@ import { authHeadersForFetch } from '../../services/api';
  * @param {object} props
  * @param {string}  props.categoryKey
  * @param {string}  props.configSection
- * @param {(s: string) => void} props.setConfigSection
+ * @param {(s: string | null) => void} props.irParaSecao
  * @param {() => void} props.onBackToHub
  * @param {boolean} props.canSeeAnamnese
  * @param {boolean} props.canSeeProcedimentos
@@ -45,7 +44,7 @@ import { authHeadersForFetch } from '../../services/api';
 export function ConfigDetailView({
   categoryKey,
   configSection,
-  setConfigSection,
+  irParaSecao,
   onBackToHub,
   canSeeAnamnese,
   canSeeProcedimentos,
@@ -75,63 +74,15 @@ export function ConfigDetailView({
       ? configSection
       : visibleItems[0]?.id ?? configSection;
 
-  // ── Guard de alterações não salvas ────────────────────────────────────────
-  // isDirtyHorarios sobrevive à remontagem do painel (key={effectiveSection} está
-  // no <div> interno L90, não neste componente).
-  const [isDirtyHorarios, setIsDirtyHorarios] = useState(false);
-  const [isDirtyFicha, setIsDirtyFicha] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
+  // O aviso de alteração não salva é o do App (useBlocker); aqui só repassamos o "sujo".
   const [fichaDetailLabel, setFichaDetailLabel] = useState(null);
-  const pendingAction = useRef(null);
   const fichasHomeRef = useRef(null);
 
-  const handleDirtyHorariosChange = (dirty) => {
-    setIsDirtyHorarios(dirty);
-    onDirtyHorariosChange?.(dirty);
+  const handleSetConfigSection = (id) => {
+    // Fichas: clicar na seção atual também passa pela guarda do App (ficha aberta/nova suja); o resto fica em irParaSecao.
+    if (id !== configSection || id === 'fichas') irParaSecao(id);
   };
-
-  const handleDirtyFichaChange = (dirty) => {
-    setIsDirtyFicha(dirty);
-    onDirtyFichaChange?.(dirty);
-  };
-
-  const hasUnsavedChanges = isDirtyHorarios || isDirtyFicha;
-
-  /** Intercepta qualquer navegação quando há alterações não salvas. */
-  const guardedNavigate = (action) => {
-    if (hasUnsavedChanges) {
-      pendingAction.current = action;
-      setModalOpen(true);
-    } else {
-      action();
-    }
-  };
-
-  const handleModalContinue = () => {
-    setModalOpen(false);
-    pendingAction.current = null;
-  };
-
-  const handleModalDiscard = () => {
-    setModalOpen(false);
-    setIsDirtyFicha(false);
-    setIsDirtyHorarios(false);
-    onDirtyFichaChange?.(false);
-    onDirtyHorariosChange?.(false);
-    const action = pendingAction.current;
-    pendingAction.current = null;
-    action?.();
-  };
-
-  const applySection = (id) => {
-    if (id === 'fichas') {
-      fichasHomeRef.current?.exitToList?.();
-    }
-    setConfigSection(id);
-  };
-
-  const handleSetConfigSection = (id) => guardedNavigate(() => applySection(id));
-  const handleBackToHub = () => guardedNavigate(() => onBackToHub());
+  const handleBackToHub = () => onBackToHub();
 
   useEffect(() => {
     if (!sectionGuardRef) return undefined;
@@ -143,19 +94,6 @@ export function ConfigDetailView({
 
   return (
     <>
-      <UnsavedChangesModal
-        isOpen={modalOpen}
-        onContinue={handleModalContinue}
-        onDiscard={handleModalDiscard}
-        message={
-          isDirtyFicha && isDirtyHorarios
-            ? 'Você tem alterações não salvas na ficha e no horário de atendimento. Deseja sair sem salvar?'
-            : isDirtyFicha
-              ? 'Você tem alterações não salvas na ficha de anamnese. Deseja sair sem salvar?'
-              : undefined
-        }
-      />
-
       <div className="flex min-h-0 flex-1 flex-col">
         {/* Breadcrumb */}
         {effectiveSection !== 'perfil' && (
@@ -201,8 +139,8 @@ export function ConfigDetailView({
               onEquipeInvalidate={onEquipeInvalidate}
               onPacientesCatalogRefresh={onPacientesCatalogRefresh}
               onDisponibilidadeInvalidate={onDisponibilidadeInvalidate}
-              onDirtyHorariosChange={handleDirtyHorariosChange}
-              onDirtyFichaChange={handleDirtyFichaChange}
+              onDirtyHorariosChange={onDirtyHorariosChange}
+              onDirtyFichaChange={onDirtyFichaChange}
               onFichaDetailLabelChange={setFichaDetailLabel}
               fichasHomeRef={fichasHomeRef}
             />

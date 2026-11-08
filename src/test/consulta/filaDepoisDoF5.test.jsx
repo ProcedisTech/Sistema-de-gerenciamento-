@@ -4,6 +4,8 @@
  * consulta, sem GET de detalhe e sem abrir. A fila de outra pessoa na mesma aba nunca é enviada.
  */
 import { fireEvent, screen } from '@testing-library/react';
+import { ultimoRoteador } from '../rotas/montarComRoteador.jsx';
+import { caminhos } from '../../rotas/caminhos.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import {
@@ -85,7 +87,7 @@ describe('fila da consulta em segundo plano (tela inteira)', () => {
     expect(patches).toHaveLength(1);
     expect(patches[0].body).toEqual({ observacaoExecucao: 'Aplicado 20U na glabela' });
     expect(emConsulta()).toBe(false);
-    expect(sessionStorage.getItem('activeView')).toBe('pacientes');
+    expect(ultimoRoteador().state.location.pathname).toBe(caminhos.pacientes());
     expect(leiturasDoDetalhe(srv)).toHaveLength(0);
     expect(escritasDe(srv, 'POST', ABRIR)).toHaveLength(0);
     expect(sessionStorage.getItem(chaveDaFila(USUARIO))).toBeNull();
