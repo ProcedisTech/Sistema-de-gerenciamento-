@@ -10,6 +10,10 @@ import { Pencil, User, X } from "lucide-react";
 import { PerfilProfissionalPanel } from "./PerfilProfissionalPanel";
 
 export default function UsuarioCadastroModal({
+  pessoa = null,
+  isSelf = true,
+  canManageUsers = false,
+  onAlterarAcesso,
   onClose,
   onSaved,
   onMediaAtualizada,
@@ -119,17 +123,21 @@ export default function UsuarioCadastroModal({
                 id={titleId}
                 className="text-[18px] font-bold text-slate-900 sm:text-[20px]"
               >
-                {readOnly ? "Cadastro do Usuário" : "Editar Cadastro"}
+                {isSelf
+                  ? (readOnly ? "Cadastro do Usuário" : "Editar Cadastro")
+                  : "Cadastro do Colaborador"}
               </h3>
               <p className="text-[13px] font-medium text-slate-500">
-                {readOnly
-                  ? "Visualização dos dados cadastrais"
-                  : "Atualize seus dados pessoais e de contato"}
+                {isSelf
+                  ? (readOnly
+                      ? "Visualização dos dados cadastrais"
+                      : "Atualize seus dados pessoais e de contato")
+                  : `Visualização dos dados cadastrais de ${pessoa?.nomeCompleto || pessoa?.usuarioNome || "colaborador"}`}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {readOnly && (
+            {readOnly && isSelf && (
               <button
                 type="button"
                 onClick={() => setReadOnly(false)}
@@ -153,7 +161,11 @@ export default function UsuarioCadastroModal({
         <div className="min-h-0 flex-1 overflow-y-auto bg-[#f8fbfb] px-5 py-4">
           <PerfilProfissionalPanel
             modal
-            readOnly={readOnly}
+            colaborador={pessoa}
+            isSelf={isSelf}
+            canManageUsers={canManageUsers}
+            onAlterarAcesso={onAlterarAcesso}
+            readOnly={!isSelf ? true : readOnly}
             onCancel={close}
             onBusyChange={setBusy}
             onSignatureOpenChange={setSignatureOpen}

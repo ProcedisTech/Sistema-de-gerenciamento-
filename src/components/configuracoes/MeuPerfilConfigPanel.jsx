@@ -24,6 +24,7 @@ export function MeuPerfilConfigPanel({
     orgId,
     roleUserId,
     roleNome,
+    perfilNome,
     papel,
     apareceNaAgenda,
     permissoes: permissionCodes = [],
@@ -153,6 +154,19 @@ export function MeuPerfilConfigPanel({
     onPerfilAtualizado?.(fields);
   };
 
+  const rawCargo = profile?.data?.cargoNome || roleNome;
+  const safeCargo =
+    rawCargo && !String(rawCargo).toUpperCase().startsWith("CST_")
+      ? rawCargo
+      : "";
+  const rawPerfilNome = profile?.data?.perfilAcessoNome || perfilNome;
+  const safePerfilNome =
+    rawPerfilNome && !String(rawPerfilNome).toUpperCase().startsWith("CST_")
+      ? rawPerfilNome
+      : (papel && !String(papel).toUpperCase().startsWith("CST_")
+          ? papel
+          : "Perfil Personalizado");
+
   return (
     <div className="prototype-equipe">
       {!roleUserId || !profile ? (
@@ -180,9 +194,9 @@ export function MeuPerfilConfigPanel({
             ...profile.data,
             id: roleUserId,
             usuarioId: profile.data.id,
-            roleName: roleNome || profile.data.cargoNome,
+            roleName: safeCargo,
             perfilAcessoCodigo: papel,
-            perfilAcessoNome: papel,
+            perfilAcessoNome: safePerfilNome,
             apareceNaAgenda: profile.data.apareceNaAgenda ?? apareceNaAgenda,
             agendaMultiVer:
               profile.data.agendaMultiVer ??
@@ -194,7 +208,7 @@ export function MeuPerfilConfigPanel({
           hideBreadcrumb={!onBackToHub}
           onPerfilAtualizado={handlePerfilAtualizado}
           orgId={orgId}
-          perfil={{ codigo: papel, nome: papel }}
+          perfil={{ codigo: papel, nome: safePerfilNome }}
           permissoes={catalog}
           permissoesPerfil={profilePermissions}
           loadingPermissoes={!permissions}
@@ -215,7 +229,11 @@ export function MeuPerfilConfigPanel({
           canSeeAgenda={canSeeAgenda}
           canSeeConfigPerfil={canSeeConfigPerfil}
           canSeeConfigAuditoria={canSeeConfigAuditoria}
-          onNavigateAgenda={onNavigateAgenda}
+          onNavigateAgenda={(pessoa) =>
+            onNavigateAgenda?.(pessoa, {
+              onAgendaSaved: () => setReload((value) => value + 1),
+            })
+          }
           onPeriodoChange={setPeriodo}
         />
       )}

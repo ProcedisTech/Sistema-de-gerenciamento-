@@ -71,10 +71,12 @@ const CARGO_DISPLAY_LABELS = {
 
 /** Formata o nome de um Cargo (ex.: "medico") para exibição (ex.: "Médico"). */
 export const formatCargoLabel = (nome) => {
-  if (!nome) return '';
-  const label = CARGO_DISPLAY_LABELS[nome.toUpperCase()];
+  if (!nome || typeof nome !== 'string') return '';
+  const trimmed = nome.trim();
+  if (trimmed.toUpperCase().startsWith('CST_')) return '';
+  const label = CARGO_DISPLAY_LABELS[trimmed.toUpperCase()];
   if (label) return label;
-  return nome.charAt(0).toUpperCase() + nome.slice(1).toLowerCase();
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
 };
 
 /**
@@ -116,4 +118,22 @@ export const criarPerfilComPermissoes = async ({ nome, descricao, permissoes, fe
   }
 
   return perfilCriado;
+};
+
+/**
+ * Atualiza o conjunto de permissões de um perfil de acesso existente (PUT).
+ */
+export const atualizarPermissoesDoPerfil = async ({ perfilId, permissoes, fetchHeaders }) => {
+  const headers = typeof fetchHeaders === 'function' ? await fetchHeaders() : fetchHeaders;
+  const res = await fetch(resolveApiUrl(`/api/v1/perfis-acesso/${perfilId}/permissoes`), {
+    method: 'PUT',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(permissoes || []),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.message || 'Erro ao atualizar as permissões do perfil.');
+  }
+  return true;
 };

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { Loader2, PenLine, Plus, Save, Trash2, User } from 'lucide-react';
+import { Loader2, PenLine, Plus, Save, Shield, Trash2, User } from 'lucide-react';
 import { perfilFotoDisplaySrc as resolveFotoSrc } from '../layout/identityDisplay';
 import { perfilApi, getApiErrorToastMessage } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
@@ -47,14 +47,15 @@ function mapPerfilFromDto(data) {
   const statusPresenca = typeof rawStatus === 'string' && VALID_STATUS.has(rawStatus) ? rawStatus : 'offline';
   return {
     fotoUrl: pick(data, 'fotoUrl', 'foto_url'),
-    nomeCompleto: String(pick(data, 'nomeCompleto', 'nome_completo') ?? '').trim(),
+    nomeCompleto: String(pick(data, 'nomeCompleto', 'nome_completo', 'usuarioNome') ?? '').trim(),
     apelido: String(pick(data, 'apelido') ?? '').trim(),
     telefone: String(pick(data, 'telefone') ?? '').trim(),
     statusPresenca,
     cpf: String(pick(data, 'cpf') ?? '').trim(),
     dataNascimento: String(pick(data, 'dataNascimento', 'data_nascimento') ?? '').trim(),
     estadoCivilId: String(pick(data, 'estadoCivilId', 'estado_civil_id') ?? '').trim(),
-    cargoNome: String(pick(data, 'cargoNome', 'cargo_nome') ?? '').trim(),
+    cargoNome: String(pick(data, 'cargoNome', 'cargo_nome', 'roleName') ?? '').trim(),
+    perfilAcessoNome: String(pick(data, 'perfilAcessoNome', 'perfil_acesso_nome') ?? '').trim(),
     cep: String(pick(data, 'cep') ?? '').trim(),
     logradouro: String(pick(data, 'logradouro') ?? '').trim(),
     numero: String(pick(data, 'numero') ?? '').trim(),
@@ -80,6 +81,10 @@ export function PerfilProfissionalPanel({
   onPerfilAtualizado,
   readOnly = false,
   modal = false,
+  colaborador = null,
+  isSelf = true,
+  canManageUsers = false,
+  onAlterarAcesso = null,
   onCancel,
   onBusyChange,
   onMediaAtualizada,
@@ -116,6 +121,7 @@ export function PerfilProfissionalPanel({
   const [dataNascimentoIso, setDataNascimentoIso] = useState('');
   const [estadoCivilId, setEstadoCivilId] = useState('');
   const [cargoNome, setCargoNome] = useState('');
+  const [perfilAcessoNome, setPerfilAcessoNome] = useState('');
 
   const [cep, setCep] = useState('');
   const [logradouro, setLogradouro] = useState('');
@@ -158,11 +164,47 @@ export function PerfilProfissionalPanel({
   const labelCls = (color) => `text-[13px] font-bold ${color}`;
   const gridGapClass = 'gap-x-6 gap-y-5';
 
+  const applyPerfilData = useCallback((m) => {
+    setNomeCompleto(m.nomeCompleto);
+    setApelido(m.apelido);
+    // Ao carregar, aplicar máscara no número vindo do backend (dígitos puros)
+    const digitsOnly = m.telefone.replace(/\D/g, '');
+    setTelefone(digitsOnly ? formatBrNationalParentheses(digitsOnly) : '');
+    setStatusPresenca(m.statusPresenca);
+    const srv = m.fotoUrl != null && typeof m.fotoUrl === 'string' ? m.fotoUrl.trim() : '';
+    setFotoUrlServidor(srv);
+    setFotoUrlPreview(srv ? resolveFotoSrc(srv) : '');
+
+    setCpf(m.cpf ? maskCPF(m.cpf) : '');
+    setCpfSavedOnServer(Boolean(m.cpf));
+    setCpfUnlocked(false);
+    setDataNascimentoDisplay(isoToDisplayDate(m.dataNascimento));
+    setDataNascimentoIso(m.dataNascimento || '');
+    setEstadoCivilId(m.estadoCivilId || '');
+    setCargoNome(m.cargoNome || '');
+    setPerfilAcessoNome(m.perfilAcessoNome || '');
+    setCep(m.cep);
+    setLogradouro(m.logradouro);
+    setNumero(m.numero);
+    setComplemento(m.complemento);
+    setBairro(m.bairro);
+    setCidade(m.cidade);
+    setUf(m.uf);
+  }, []);
+
   const loadPerfil = useCallback(async (opts = {}) => {
     const silent = !!opts.silent;
     if (!silent) {
       setLoading(true);
       setLoadError('');
+    }
+    if (!isSelf && colaborador) {
+      const m = mapPerfilFromDto(colaborador);
+      if (m) {
+        applyPerfilData(m);
+      }
+      if (!silent) setLoading(false);
+      return;
     }
     try {
       const data = await perfilApi.buscar();
@@ -171,38 +213,16 @@ export function PerfilProfissionalPanel({
         if (!silent) setLoadError('Resposta inválida do servidor.');
         return;
       }
-      setNomeCompleto(m.nomeCompleto);
-      setApelido(m.apelido);
-      // Ao carregar, aplicar máscara no número vindo do backend (dígitos puros)
-      const digitsOnly = m.telefone.replace(/\D/g, '');
-      setTelefone(digitsOnly ? formatBrNationalParentheses(digitsOnly) : '');
-      setStatusPresenca(m.statusPresenca);
-      const srv = m.fotoUrl != null && typeof m.fotoUrl === 'string' ? m.fotoUrl.trim() : '';
-      setFotoUrlServidor(srv);
-      setFotoUrlPreview(srv ? resolveFotoSrc(srv) : '');
-
-      setCpf(m.cpf ? maskCPF(m.cpf) : '');
-      setCpfSavedOnServer(Boolean(m.cpf));
-      setCpfUnlocked(false);
-      setDataNascimentoDisplay(isoToDisplayDate(m.dataNascimento));
-      setDataNascimentoIso(m.dataNascimento || '');
-      setEstadoCivilId(m.estadoCivilId || '');
-      setCargoNome(m.cargoNome || '');
-      setCep(m.cep);
-      setLogradouro(m.logradouro);
-      setNumero(m.numero);
-      setComplemento(m.complemento);
-      setBairro(m.bairro);
-      setCidade(m.cidade);
-      setUf(m.uf);
+      applyPerfilData(m);
     } catch (err) {
       if (!silent) setLoadError(getApiErrorToastMessage(err, 'Falha de rede ao carregar o perfil.'));
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [isSelf, colaborador, applyPerfilData]);
 
   const loadAssinaturaPadrao = useCallback(async () => {
+    if (!isSelf) return;
     try {
       const data = await perfilApi.buscarAssinatura();
       const assinatura = String(data?.assinaturaPadrao ?? data?.assinatura_padrao ?? '').trim();
@@ -210,7 +230,7 @@ export function PerfilProfissionalPanel({
     } catch {
       // ignore
     }
-  }, []);
+  }, [isSelf]);
 
   useEffect(() => {
     loadPerfil();
@@ -432,7 +452,8 @@ export function PerfilProfissionalPanel({
           <ConfigFormSectionsSkeleton sections={4} cardRounded="2xl" />
         </>
       ) : (
-        <fieldset disabled={readOnly || busy} className="min-w-0 space-y-6">
+        <div className="min-w-0 space-y-6">
+          <fieldset disabled={readOnly || busy} className="min-w-0 space-y-6 border-0 p-0 m-0">
           <div className="flex flex-col items-center">
             <button
               type="button"
@@ -708,28 +729,56 @@ export function PerfilProfissionalPanel({
               />
             </div>
           </div>
+        </fieldset>
 
-          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
-            {/* Card 3 — Cargo & Função */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 transition-colors">
-              <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-500 text-[14px] font-bold text-white shadow-sm">
+        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+          {/* Card 3 — Cargo e Perfil de Acesso */}
+          <div className="rounded-2xl border border-[#ddd6fe] bg-white p-6 shadow-sm transition-colors">
+            <div className="mb-4 flex items-center justify-between gap-2.5">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <div className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-full bg-[#7c3aed] text-[13px] sm:text-[14px] font-bold text-white shadow-xs">
                   3
                 </div>
-                <h4 className="text-[18px] font-bold text-slate-700">Cargo &amp; Função</h4>
+                <h4 className="truncate text-[15px] sm:text-[17px] font-extrabold text-[#6d28d9]">
+                  Cargo e Perfil de Acesso
+                </h4>
               </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-[15px] font-bold text-[#0f172a]">
-                  {cargoNome ? formatCargoLabel(cargoNome) : 'Sem cargo atribuído'}
-                </p>
-              </div>
-              <p className="mt-2 text-[12px] font-medium text-[#64748b]">
-                O cargo é definido pela administração da clínica. Apenas o proprietário pode alterá-lo na Gestão de
-                Equipe.
-              </p>
+              {canManageUsers && onAlterarAcesso && (
+                <button
+                  type="button"
+                  onClick={onAlterarAcesso}
+                  aria-label="Alterar Acesso & Permissões"
+                  title="Alterar cargo e permissões na aba Acesso"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border-[1.5px] border-[#7c3aed] bg-[#f5f3ff] px-3 py-1.5 text-[12px] sm:text-[12.5px] font-bold text-[#6d28d9] shadow-xs transition-all hover:bg-[#7c3aed] hover:text-white hover:shadow-sm active:scale-95 cursor-pointer"
+                >
+                  <Shield className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span>Alterar Acesso</span>
+                </button>
+              )}
             </div>
 
-            {/* Card 4 — Identidade Profissional */}
+            <div className="rounded-xl border border-[#e0e7ff] bg-[#fbfbfe] overflow-hidden flex flex-col">
+              <div className="p-3.5 sm:px-4 border-b border-[#ede9fe] flex flex-col items-start gap-1">
+                <span className="text-[11px] font-extrabold text-[#7c3aed] uppercase tracking-wider">Cargo</span>
+                <span className="inline-flex items-center rounded-full border border-slate-300 bg-slate-50 px-3.5 py-1 text-[12.5px] font-bold text-slate-800">
+                  {cargoNome ? formatCargoLabel(cargoNome) : 'Sem cargo atribuído'}
+                </span>
+              </div>
+              <div className="p-3.5 sm:px-4 flex flex-col items-start gap-1">
+                <span className="text-[11px] font-extrabold text-[#7c3aed] uppercase tracking-wider">Perfil de Acesso</span>
+                <span className="inline-flex items-center rounded-full border border-[#ddd6fe] bg-[#f5f3ff] px-3.5 py-1 text-[12.5px] font-bold text-[#6d28d9]">
+                  {perfilAcessoNome || 'Perfil Personalizado'}
+                </span>
+              </div>
+            </div>
+
+            <p className="mt-2.5 text-[12px] font-medium text-slate-500">
+              O cargo e o perfil de acesso são definidos pela administração da clínica. Apenas o proprietário ou administrador pode alterá-los na Gestão de Equipe.
+            </p>
+          </div>
+
+          {/* Card 4 — Identidade Profissional */}
+          <fieldset disabled={readOnly || busy} className="min-w-0 border-0 p-0 m-0">
             <div className="rounded-2xl border border-blue-200 bg-white p-6 transition-colors">
               <div className="mb-6 flex items-center gap-3">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#3b82f6] text-[14px] font-bold text-white shadow-sm">
@@ -799,32 +848,33 @@ export function PerfilProfissionalPanel({
                 ) : null}
               </div>
             </div>
-          </div>
+          </fieldset>
+        </div>
 
-          {!readOnly && (
-            <div className="flex flex-col-reverse items-stretch justify-between gap-3 border-t-[3px] border-[#00a88e]/15 pt-4 sm:flex-row sm:items-center">
-              <button
-                type="button"
-                onClick={handleCancel}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-app-border bg-white px-6 py-3 text-[14px] font-bold text-[#00a88e] shadow-sm outline-none transition hover:border-[#00a88e] hover:bg-[#e6f7f5] sm:w-auto"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={busy}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-transparent bg-[#00a88e] px-6 py-3 text-[14px] font-bold text-white shadow-md outline-none transition hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-              >
-                {saving ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                ) : (
-                  <Save className="h-4 w-4" strokeWidth={2.5} aria-hidden />
-                )}
-                {saving ? 'Salvando…' : 'Salvar alterações'}
-              </button>
-            </div>
-          )}
-        </fieldset>
+        {!readOnly && (
+          <div className="flex flex-col-reverse items-stretch justify-between gap-3 border-t-[3px] border-[#00a88e]/15 pt-4 sm:flex-row sm:items-center">
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-app-border bg-white px-6 py-3 text-[14px] font-bold text-[#00a88e] shadow-sm outline-none transition hover:border-[#00a88e] hover:bg-[#e6f7f5] sm:w-auto"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={busy}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-transparent bg-[#00a88e] px-6 py-3 text-[14px] font-bold text-white shadow-md outline-none transition hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+            >
+              {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <Save className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+              )}
+              {saving ? 'Salvando…' : 'Salvar alterações'}
+            </button>
+          </div>
+        )}
+      </div>
       )}
 
       <div
