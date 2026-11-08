@@ -746,6 +746,8 @@ export const pacientesApi = {
     const raw = await request(`/api/v1/pacientes/inativos?${params.toString()}`);
     return normalizePacientesPage(raw);
   },
+  /** Alias para listInativos */
+  inativos: (opts) => pacientesApi.listInativos(opts),
 };
 
 /**
@@ -1091,6 +1093,20 @@ export const agendasApi = {
       method: 'PATCH',
       body: JSON.stringify({ codigo, ...payload }),
     }),
+
+  /**
+   * Substitui o profissional titular do agendamento com registro de auditoria e notificação.
+   * @param {string} id UUID da agenda
+   * @param {{ novoProfissionalRoleUserId: string, motivo: string }} payload
+   * @param {{ forcar?: boolean }} [opts]
+   */
+  trocarProfissional: (id, payload, opts = {}) => {
+    const qs = opts?.forcar ? '?forcar=true' : '';
+    return request(`/api/v1/agendas/${id}/profissional${qs}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
 
   /**
    * Reagenda um slot (V30): move o agendamento e marca o original como reagendado.

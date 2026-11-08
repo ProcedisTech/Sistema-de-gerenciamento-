@@ -66,6 +66,8 @@ export function OrgProvider({ children }) {
   const [papel, setPapelState] = useState(null);
   /** Nome da role vindo do /me (antes de resolverPapel). */
   const [roleNome, setRoleNomeState] = useState('');
+  /** Nome legível do perfil de acesso vindo do /me (ex.: "Gerente Personalizado", "Dono da Clínica"). */
+  const [perfilNome, setPerfilNomeState] = useState('');
   /** Permissões customizadas ou do perfil, vindas do /me. */
   const [permissoes, setPermissoesState] = useState([]);
   /** Flag de elegibilidade para aparecer na agenda como profissional vinda do perfil de acesso (/me). */
@@ -97,6 +99,7 @@ export function OrgProvider({ children }) {
     setRoleUserIdState('');
     setPapelState(null);
     setRoleNomeState('');
+    setPerfilNomeState('');
     setPermissoesState([]);
     setApareceNaAgendaState(null);
     setFusoHorarioState(null);
@@ -151,6 +154,10 @@ export function OrgProvider({ children }) {
     setRoleNomeState(nome == null ? '' : String(nome).trim());
   }, []);
 
+  const setPerfilNome = useCallback((nome) => {
+    setPerfilNomeState(nome == null ? '' : String(nome).trim());
+  }, []);
+
   const setPermissoes = useCallback((perms) => {
     setPermissoesState(Array.isArray(perms) ? perms : []);
   }, []);
@@ -185,6 +192,7 @@ export function OrgProvider({ children }) {
     setRoleUserIdState('');
     setPapelState(null);
     setRoleNomeState('');
+    setPerfilNomeState('');
     setPermissoesState([]);
     setApareceNaAgendaState(null);
     setFusoHorarioState(null);
@@ -206,6 +214,8 @@ export function OrgProvider({ children }) {
       setPapel,
       roleNome,
       setRoleNome,
+      perfilNome,
+      setPerfilNome,
       permissoes,
       setPermissoes,
       apareceNaAgenda,
@@ -218,7 +228,7 @@ export function OrgProvider({ children }) {
       recarregarContextoOrg,
       clearOrgSession,
     }),
-    [orgId, setOrgId, orgSlug, roleUserId, setRoleUserId, papel, setPapel, roleNome, setRoleNome, permissoes, setPermissoes, apareceNaAgenda, setApareceNaAgenda, contextStatus, fusoHorario, setFusoHorario, contextoNonce, recarregarContextoOrg, clearOrgSession]
+    [orgId, setOrgId, orgSlug, roleUserId, setRoleUserId, papel, setPapel, roleNome, setRoleNome, perfilNome, setPerfilNome, permissoes, setPermissoes, apareceNaAgenda, setApareceNaAgenda, contextStatus, fusoHorario, setFusoHorario, contextoNonce, recarregarContextoOrg, clearOrgSession]
   );
 
   return <OrgContext.Provider value={value}>{children}</OrgContext.Provider>;
@@ -239,6 +249,8 @@ export function useOrg() {
       setPapel: () => {},
       roleNome: '',
       setRoleNome: () => {},
+      perfilNome: '',
+      setPerfilNome: () => {},
       permissoes: [],
       setPermissoes: () => {},
       apareceNaAgenda: null,
