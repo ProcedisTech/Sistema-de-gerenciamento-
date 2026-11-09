@@ -1,4 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router';
+import { useRotaAtual } from '../../rotas/useRotaAtual';
+import { caminhos, lerQueryPacientes } from '../../rotas/caminhos';
 import { applyPatientQuickFilter } from '../patients/patientListFilters.js';
 import {
   pacientesApi,
@@ -16,34 +19,6 @@ import { PREFIXO_AVISO } from '../../services/avisos/tiposAviso.js';
 /** Espera do aviso PACIENTE: avisos juntos dentro dela viram uma rebusca só. */
 const DEBOUNCE_AVISO_PACIENTE_MS = 400;
 
-const ACTIVE_PATIENT_CPF_KEY = 'selectedPatientCpf';
-const ACTIVE_PATIENT_CPF_LEGACY_KEY = 'activePatientCpf';
-const PATIENT_VIEW_KEY = 'patientView';
-const PATIENT_DETAIL_TAB_KEY = 'patientDetailTab';
-
-function readSessionValue(key, fallback) {
-  try {
-    const value = sessionStorage.getItem(key);
-    if (value == null || value === '') return fallback;
-    return value;
-  } catch {
-    return fallback;
-  }
-}
-
-function normalizePatientDetailTab(value) {
-  const tab = String(value ?? '').trim();
-  if (tab === 'timeline') return 'avulsos';
-  if (tab === 'atendimento' || tab === 'cadastro') return 'planos';
-  return tab || 'planos';
-}
-
-function readSelectedPatientCpf() {
-  const current = readSessionValue(ACTIVE_PATIENT_CPF_KEY, null);
-  if (current != null && current !== '') return current;
-  return readSessionValue(ACTIVE_PATIENT_CPF_LEGACY_KEY, null);
-}
-
 export const PATIENT_LIST_PAGE_SIZE = 20;
 
 function buildProfileNavSnapshot(cpf, items, quickFilter, meta, page) {
@@ -56,7 +31,7 @@ function buildProfileNavSnapshot(cpf, items, quickFilter, meta, page) {
   const safeIndex = indexInList >= 0 ? indexInList : 0;
   const globalIndex = page * PATIENT_LIST_PAGE_SIZE + safeIndex + 1;
   return {
-    cpfs: filtered.map((p) => p.cpf).filter(Boolean),
+    ids: filtered.map((p) => p.id).filter((x) => x != null),
     indexInList: safeIndex,
     page,
     totalElements,
@@ -121,9 +96,10 @@ function comparePatientsClient(a, b, sortBy, fuso, hojeIso) {
 export const usePatientState = (opts = {}) => {
   const { authEnabled = false } = opts;
   const { fuso } = useFusoClinica();
+  const rota = useRotaAtual();
+  const navigate = useNavigate();
   const [patients, setPatients] = useState([]);
   const [patientListItems, setPatientListItems] = useState([]);
-  const [patientListPage, setPatientListPage] = useState(0);
   const [patientListLoading, setPatientListLoading] = useState(false);
   const [patientListBump, setPatientListBump] = useState(0);
   /** Bump da rebusca por aviso PACIENTE (separado do `patientListBump`, que liga o loading da lista, do KPI e do perfil). */
@@ -137,31 +113,79 @@ export const usePatientState = (opts = {}) => {
     number: 0,
     totalElements: 0,
   });
-  const [patientQuickFilter, setPatientQuickFilter] = useState('todos');
   const [profileNavSnapshot, setProfileNavSnapshot] = useState(null);
-  const pendingProfileNavRef = useRef(null);
-  /** Mesmos valores que o select da lista (`nome-asc`, `birthday-asc`, …). */
-  const [patientListSortBy, setPatientListSortBy] = useState('nome-asc');
+  // Página, ordem e filtros server-side vêm do endereço (/pacientes?...). Fora de /pacientes (perfil) vale o último lido.
+  const queryRef = useRef(lerQueryPacientes(''));
+  const naListaRef = useRef(true);
+  naListaRef.current = rota.rotaId === 'pacientes';
+  const pacienteRotaRef = useRef(null);
+  pacienteRotaRef.current = rota.pacienteId ?? null;
+  if (naListaRef.current) queryRef.current = rota.query;
+  const q = queryRef.current;
+  const [, setTick] = useState(0);
 
-  // Filtros server-side v1 (só aplicados na rota /pacientes, não em /search)
-  const [statusPlanoFilter, setStatusPlanoFilter] = useState(''); // '' | 'sem_plano' | 'plano_ativo'
-  const [anamneseDesatualizadaFilter, setAnamneseDesatualizadaFilter] = useState(false);
-  const [semRetornoFilter, setSemRetornoFilter] = useState(false);
-  const [semAgendamentoFuturoFilter, setSemAgendamentoFuturoFilter] = useState(false);
-  const [ehNovoFilter, setEhNovoFilter] = useState(false);
-  const [ehAniversarianteFilter, setEhAniversarianteFilter] = useState(false);
+  const escreverQuery = useCallback((nova, { navegar = true } = {}) => {
+    queryRef.current = nova;
+    if (navegar) navigate(caminhos.pacientes(nova), { replace: true });
+    else setTick((t) => t + 1);
+  }, [navigate]);
 
-  const [selectedPatientCpf, _setSelectedPatientCpf] = useState(readSelectedPatientCpf);
-  const [patientView, setPatientView] = useState(() =>
-    readSessionValue(PATIENT_VIEW_KEY, 'list'),
-  );
-  const [patientDetailTab, setPatientDetailTabState] = useState(() =>
-    normalizePatientDetailTab(readSessionValue(PATIENT_DETAIL_TAB_KEY, 'planos')),
-  );
-  const setPatientDetailTab = useCallback((value) => {
-    setPatientDetailTabState((previous) => normalizePatientDetailTab(typeof value === 'function' ? value(previous) : value));
-  }, []);
-  const [patientSearchQuery, setPatientSearchQuery] = useState('');
+  const igual = (x) => x;
+  const patientQuickFilter = q.quickFilter ?? 'todos';
+  const patientListSortBy = q.ordem;
+  const statusPlanoFilter = q.statusPlano ?? '';
+  const anamneseDesatualizadaFilter = q.anamneseDesatualizada;
+  const semRetornoFilter = q.semRetorno;
+  const semAgendamentoFuturoFilter = q.semAgendamentoFuturo;
+  const ehNovoFilter = q.ehNovo;
+  const ehAniversarianteFilter = q.ehAniversariante;
+
+  // Setters estáveis, com a assinatura de useState (valor ou função) sobre um campo da query; trocar filtro/ordem volta à página 0.
+  const {
+    setPatientListPage, setPatientQuickFilter, setPatientListSortBy, setStatusPlanoFilter,
+    setAnamneseDesatualizadaFilter, setSemRetornoFilter, setSemAgendamentoFuturoFilter,
+    setEhNovoFilter, setEhAniversarianteFilter,
+  } = useMemo(() => {
+    const campo = (nome, paraQuery, doQuery, extra) => (v) => {
+      const atual = queryRef.current;
+      const anterior = doQuery(atual[nome]);
+      const novo = typeof v === 'function' ? v(anterior) : v;
+      if (novo === anterior) return;
+      escreverQuery({ ...atual, [nome]: paraQuery(novo), ...(extra ? extra(novo) : null), pagina: 0 });
+    };
+    return {
+      // fora de /pacientes (perfil cruzando página) não navega: escreverQuery só guarda no ref (a frente 2B-3 trata o resto)
+      setPatientListPage: (v) => {
+        const atual = queryRef.current;
+        const pagina = Math.max(0, typeof v === 'function' ? v(atual.pagina) : v);
+        if (pagina !== atual.pagina) escreverQuery({ ...atual, pagina }, { navegar: naListaRef.current });
+      },
+      setPatientQuickFilter: campo('quickFilter', (x) => (x === 'todos' ? null : x), (x) => x ?? 'todos'),
+      // birthday-asc ignora semRetorno/semAgendamentoFuturo no backend: trocar para esse sort limpa os dois
+      setPatientListSortBy: campo('ordem', igual, igual, (o) =>
+        (o === 'birthday-asc' ? { semRetorno: false, semAgendamentoFuturo: false } : null)),
+      setStatusPlanoFilter: campo('statusPlano', (x) => x || null, (x) => x ?? ''), // '' | 'sem_plano' | 'plano_ativo'
+      setAnamneseDesatualizadaFilter: campo('anamneseDesatualizada', Boolean, igual),
+      setSemRetornoFilter: campo('semRetorno', Boolean, igual),
+      setSemAgendamentoFuturoFilter: campo('semAgendamentoFuturo', Boolean, igual),
+      setEhNovoFilter: campo('ehNovo', Boolean, igual),
+      setEhAniversarianteFilter: campo('ehAniversariante', Boolean, igual),
+    };
+  }, [escreverQuery]);
+
+  const [selectedPatientCpf, _setSelectedPatientCpf] = useState(null);
+  const [patientSearchQuery, setPatientSearchQueryRaw] = useState('');
+  // Busca de texto com menos páginas que a do endereço: a página exibida é derivada aqui, sem escrever no endereço.
+  const [limitePagina, setLimitePagina] = useState(null);
+  const patientListPage =
+    limitePagina && limitePagina.de === q.pagina && limitePagina.busca === patientSearchQuery.trim()
+      ? Math.min(q.pagina, limitePagina.ultima)
+      : q.pagina;
+  // trocar a busca de texto volta à página 0 (a busca nunca vai no endereço)
+  const setPatientSearchQuery = useCallback((v) => {
+    setPatientSearchQueryRaw(v);
+    if (queryRef.current.pagina > 0) escreverQuery({ ...queryRef.current, pagina: 0 }, { navegar: naListaRef.current });
+  }, [escreverQuery]);
 
   const refreshPatients = useCallback(async () => {
     if (!authEnabled) return;
@@ -169,7 +193,13 @@ export const usePatientState = (opts = {}) => {
       const pageData = await pacientesApi.search('');
       const lista = pageData.content || [];
       const mapOpts = { fuso, hojeIso: hojeDaClinica(fuso) };
-      setPatients(lista.map((dto) => mapBackendPatient(dto, mapOpts)).filter(Boolean));
+      const nova = lista.map((dto) => mapBackendPatient(dto, mapOpts)).filter(Boolean);
+      // Paciente da rota fora da 1ª página: o salvamento já pôs a cópia nova em `patients`; mantê-la evita rebusca e a lista piscando.
+      setPatients((prev) => {
+        const id = pacienteRotaRef.current;
+        const fica = id != null ? prev.find((p) => String(p?.id) === String(id)) : null;
+        return fica && !nova.some((p) => String(p.id) === String(id)) ? [...nova, fica] : nova;
+      });
     } catch (err) {
       if (err.status === 401) {
         console.warn('[usePatientState] Sessão ausente ou expirada; lista de pacientes não carregada.');
@@ -212,21 +242,6 @@ export const usePatientState = (opts = {}) => {
       }),
     );
   }, []);
-
-  /* Voltar à primeira página ao mudar filtro ou ordenação */
-  useEffect(() => {
-    setPatientListPage(0);
-  }, [patientSearchQuery, patientListSortBy, statusPlanoFilter, anamneseDesatualizadaFilter, semRetornoFilter, semAgendamentoFuturoFilter, ehNovoFilter, ehAniversarianteFilter]);
-
-  /* birthday-asc ignora semRetorno/semAgendamentoFuturo no backend — limpar filtro ao trocar para esse sort */
-  useEffect(() => {
-    if (patientListSortBy === 'birthday-asc' && semRetornoFilter) {
-      setSemRetornoFilter(false);
-    }
-    if (patientListSortBy === 'birthday-asc' && semAgendamentoFuturoFilter) {
-      setSemAgendamentoFuturoFilter(false);
-    }
-  }, [patientListSortBy, semRetornoFilter, semAgendamentoFuturoFilter]);
 
   useEffect(() => {
     if (!authEnabled) {
@@ -329,7 +344,7 @@ export const usePatientState = (opts = {}) => {
         if (pageIdx !== patientListPage) {
           // a busca seguinte (página ajustada) herda o modo silencioso da rebusca por aviso
           if (silencioso) rebuscaSilenciosaRef.current = true;
-          setPatientListPage(pageIdx);
+          setLimitePagina({ de: patientListPage, busca: qTrim, ultima: pageIdx });
           return;
         }
         const start = pageIdx * PATIENT_LIST_PAGE_SIZE;
@@ -379,44 +394,16 @@ export const usePatientState = (opts = {}) => {
   const setSelectedPatientCpf = useCallback((nextCpf) => {
     _setSelectedPatientCpf((prev) => {
       const resolved = typeof nextCpf === 'function' ? nextCpf(prev) : nextCpf;
-      const normalized = resolved != null && String(resolved).trim() !== '' ? String(resolved) : null;
-      try {
-        if (normalized) {
-          sessionStorage.setItem(ACTIVE_PATIENT_CPF_KEY, normalized);
-          sessionStorage.removeItem(ACTIVE_PATIENT_CPF_LEGACY_KEY);
-        } else {
-          sessionStorage.removeItem(ACTIVE_PATIENT_CPF_KEY);
-          sessionStorage.removeItem(ACTIVE_PATIENT_CPF_LEGACY_KEY);
-        }
-      } catch {
-        // ignore
-      }
-      return normalized;
+      return resolved != null && String(resolved).trim() !== '' ? String(resolved) : null;
     });
   }, []);
-
-  useEffect(() => {
-    try {
-      sessionStorage.setItem(PATIENT_VIEW_KEY, patientView || 'list');
-    } catch {
-      // ignore
-    }
-  }, [patientView]);
-
-  useEffect(() => {
-    try {
-      sessionStorage.setItem(PATIENT_DETAIL_TAB_KEY, patientDetailTab || 'planos');
-    } catch {
-      // ignore
-    }
-  }, [patientDetailTab]);
 
   /** Compat: ordenação “aniversário” espelhada para código que ainda lê `patientsListOrder`. */
   const patientsListOrder = patientListSortBy === 'birthday-asc' ? 'birthday_asc' : null;
   const setPatientsListOrder = useCallback((ord) => {
     if (ord === 'birthday_asc') setPatientListSortBy('birthday-asc');
     else setPatientListSortBy('nome-asc');
-  }, []);
+  }, [setPatientListSortBy]);
 
   const captureProfileNavSnapshot = useCallback(
     (cpf) => {
@@ -437,66 +424,78 @@ export const usePatientState = (opts = {}) => {
     [patientListItems, patientQuickFilter, patientListMeta, patientListPage],
   );
 
-  /* Seleção após troca de página na nav do perfil */
-  useEffect(() => {
-    const pending = pendingProfileNavRef.current;
-    if (!pending || !patientListItems.length) return;
-    const filtered = applyPatientQuickFilter(patientListItems, patientQuickFilter);
-    if (!filtered.length) {
-      pendingProfileNavRef.current = null;
-      return;
+  // Mesma chamada e mesmos filtros da lista (efeito acima), para uma página qualquer; devolve { items, meta }.
+  const buscarPagina = useCallback(async (pagina) => {
+    const mapOpts = { fuso, hojeIso: hojeDaClinica(fuso) };
+    const mapear = (pageData) => (pageData.content || []).map((dto) => mapBackendPatient(dto, mapOpts)).filter(Boolean);
+    const qTrim = patientSearchQuery.trim();
+    const isBirthday = patientListSortBy === 'birthday-asc';
+    if (!qTrim) {
+      const pageData = await pacientesApi.list({
+        page: pagina,
+        size: PATIENT_LIST_PAGE_SIZE,
+        order: isBirthday ? 'birthday_asc' : undefined,
+        sort: isBirthday ? undefined : patientListSortToApiParam(patientListSortBy),
+        statusPlano: statusPlanoFilter || undefined,
+        anamneseDesatualizada: anamneseDesatualizadaFilter || undefined,
+        semRetorno: !isBirthday && semRetornoFilter ? true : undefined,
+        semAgendamentoFuturo: !isBirthday && semAgendamentoFuturoFilter ? true : undefined,
+        ehNovo: ehNovoFilter || undefined,
+        ehAniversarianteMes: ehAniversarianteFilter || undefined,
+      });
+      const items = mapear(pageData);
+      return {
+        items,
+        meta: {
+          first: Boolean(pageData.first),
+          last: Boolean(pageData.last),
+          totalPages: typeof pageData.totalPages === 'number' ? pageData.totalPages : 0,
+          number: typeof pageData.number === 'number' ? pageData.number : 0,
+          totalElements: typeof pageData.totalElements === 'number' ? pageData.totalElements : items.length,
+        },
+      };
     }
-    const target =
-      pending === 'first' ? filtered[0] : filtered[filtered.length - 1];
-    if (target?.cpf) {
-      _setSelectedPatientCpf(target.cpf);
-      try {
-        sessionStorage.setItem(ACTIVE_PATIENT_CPF_KEY, target.cpf);
-      } catch {
-        // ignore
-      }
-      setProfileNavSnapshot(
-        buildProfileNavSnapshot(
-          target.cpf,
-          patientListItems,
-          patientQuickFilter,
-          patientListMeta,
-          patientListPage,
-        ),
-      );
-    }
-    pendingProfileNavRef.current = null;
-  }, [patientListItems, patientQuickFilter, patientListMeta, patientListPage]);
+    const todos = mapear(await pacientesApi.search(queryForPacientesSearch(patientSearchQuery)));
+    todos.sort((a, b) => comparePatientsClient(a, b, patientListSortBy, mapOpts.fuso, mapOpts.hojeIso));
+    const totalPages = Math.max(1, Math.ceil(todos.length / PATIENT_LIST_PAGE_SIZE));
+    const start = pagina * PATIENT_LIST_PAGE_SIZE;
+    return {
+      items: todos.slice(start, start + PATIENT_LIST_PAGE_SIZE),
+      meta: { first: pagina === 0, last: pagina >= totalPages - 1, totalPages, number: pagina, totalElements: todos.length },
+    };
+  }, [
+    fuso, patientSearchQuery, patientListSortBy, statusPlanoFilter, anamneseDesatualizadaFilter,
+    semRetornoFilter, semAgendamentoFuturoFilter, ehNovoFilter, ehAniversarianteFilter,
+  ]);
 
+  // Setas do perfil: cada troca de pessoa EMPILHA no histórico, mantendo a aba só quando o endereço já está numa aba.
   const navigateProfilePatient = useCallback(
-    (delta) => {
-      if (!profileNavSnapshot?.cpfs?.length) return;
-      const { cpfs, indexInList } = profileNavSnapshot;
+    async (delta) => {
+      if (!profileNavSnapshot?.ids?.length) return;
+      const { ids, indexInList, page } = profileNavSnapshot;
+      const aba = rota.rotaId === 'pacienteAba' ? rota.patientDetailTab : undefined;
       const newIndex = indexInList + delta;
-      if (newIndex >= 0 && newIndex < cpfs.length) {
-        setSelectedPatientCpf(cpfs[newIndex]);
+      if (newIndex >= 0 && newIndex < ids.length) {
         setProfileNavSnapshot((prev) =>
-          prev
-            ? {
-                ...prev,
-                indexInList: newIndex,
-                globalIndex: prev.page * PATIENT_LIST_PAGE_SIZE + newIndex + 1,
-              }
-            : prev,
-        );
+          prev ? { ...prev, indexInList: newIndex, globalIndex: prev.page * PATIENT_LIST_PAGE_SIZE + newIndex + 1 } : prev);
+        navigate(caminhos.paciente(ids[newIndex], aba));
         return;
       }
-      if (delta < 0 && newIndex < 0 && !patientListMeta.first) {
-        pendingProfileNavRef.current = 'last';
-        setPatientListPage((p) => Math.max(0, p - 1));
-        return;
-      }
-      if (delta > 0 && newIndex >= cpfs.length && !patientListMeta.last) {
-        pendingProfileNavRef.current = 'first';
-        setPatientListPage((p) => p + 1);
+      if (delta < 0 ? patientListMeta.first : patientListMeta.last) return;
+      const novaPagina = Math.max(0, page + (delta < 0 ? -1 : 1));
+      try {
+        const { items, meta } = await buscarPagina(novaPagina);
+        const filtrados = applyPatientQuickFilter(items, patientQuickFilter);
+        const alvo = delta < 0 ? filtrados[filtrados.length - 1] : filtrados[0];
+        if (alvo?.id == null) return;
+        setPatientListPage(novaPagina); // fora de /pacientes só guarda no ref (a lista rebusca igual)
+        setProfileNavSnapshot(buildProfileNavSnapshot(alvo.cpf, items, patientQuickFilter, meta, novaPagina));
+        navigate(caminhos.paciente(alvo.id, aba));
+      } catch (err) {
+        console.warn('[usePatientState] Falha ao buscar a página vizinha do perfil:', err?.message);
       }
     },
-    [profileNavSnapshot, patientListMeta.first, patientListMeta.last, setSelectedPatientCpf],
+    [profileNavSnapshot, rota, navigate, patientListMeta.first, patientListMeta.last, buscarPagina, patientQuickFilter, setPatientListPage],
   );
 
   const profileNav = profileNavSnapshot
@@ -506,7 +505,7 @@ export const usePatientState = (opts = {}) => {
         hasPrev:
           profileNavSnapshot.indexInList > 0 || !patientListMeta.first,
         hasNext:
-          profileNavSnapshot.indexInList < profileNavSnapshot.cpfs.length - 1 ||
+          profileNavSnapshot.indexInList < profileNavSnapshot.ids.length - 1 ||
           !patientListMeta.last,
       }
     : null;
@@ -516,10 +515,6 @@ export const usePatientState = (opts = {}) => {
     setPatients,
     selectedPatientCpf,
     setSelectedPatientCpf,
-    patientView,
-    setPatientView,
-    patientDetailTab,
-    setPatientDetailTab,
     patientSearchQuery,
     setPatientSearchQuery,
     refreshPatients,

@@ -678,7 +678,7 @@ export const pacientesApi = {
     const raw = await request(`/api/v1/pacientes${qs}`);
     return normalizePacientesPage(raw);
   },
-  get: (id) => request(`/api/v1/pacientes/${id}`),
+  get: (id) => request(`/api/v1/pacientes/${encodeURIComponent(String(id))}`),
   listarProcedimentosFeitosRaiz: (pacienteId) =>
     request(`/api/v1/pacientes/${pacienteId}/procedimentos-feitos-raiz`),
   /** Busca textual (nome | CPF | telefone). Normaliza como `list` — array ou Page. */

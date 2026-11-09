@@ -65,6 +65,7 @@ import { useFusoClinica } from '../hooks/useFusoClinica.js';
 import { ModalEscolhaAssinatura } from '../assinaturas/ModalEscolhaAssinatura.jsx';
 import { SolicitarAnamneseModal } from '../anamnese/SolicitarAnamneseModal.jsx';
 import { useToast } from '../../contexts/useToast.js';
+import { caminhos } from '../../rotas/caminhos.js';
 
 function samePatientForSlot(patient, appointment) {
   if (!patient || !appointment) return false;
@@ -513,8 +514,7 @@ export function PatientPreviewPanel({
   detailTitleId,
   closeDetail,
   getPatientInitials,
-  setPatientDetailTab,
-  setPatientView,
+  irPara,
   shellClassName = '',
   previewProcedures = [],
   loadingPreviewProcedures = false,
@@ -567,8 +567,7 @@ export function PatientPreviewPanel({
   const goToPacienteProntuario = () => {
     if (!canSeeProntuario) return;
     if (selectedPatient?.cpf) captureProfileNavSnapshot?.(selectedPatient.cpf);
-    setPatientDetailTab('prontuario');
-    setPatientView('profile');
+    irPara(caminhos.paciente(selectedPatient.id, 'prontuario'));
   };
 
   const handleIniciarAtendimentoClick = () => {
@@ -681,8 +680,7 @@ export function PatientPreviewPanel({
           type="button"
           onClick={() => {
             if (selectedPatient?.cpf) captureProfileNavSnapshot?.(selectedPatient.cpf);
-            setPatientDetailTab('planos');
-            setPatientView('profile');
+            irPara(caminhos.paciente(selectedPatient.id));
           }}
           className={`flex min-h-[42px] w-full items-center justify-center gap-1.5 rounded-xl border-2 border-[#00a88e]/35 bg-[#e6f7f5]/40 px-2 py-2 text-[12px] font-bold text-[#007463] shadow-2xs transition-all hover:border-[#00a88e]/70 hover:bg-[#e6f7f5]/90 active:scale-[0.99] sm:text-[12.5px] ${
             !canStartAnamnese ? 'col-span-2' : ''
@@ -869,10 +867,9 @@ export function PatientsListView({
   setPatientListSortBy,
   patientSearchQuery,
   setPatientSearchQuery,
-  selectedPatientCpf,
   setSelectedPatientCpf,
-  setPatientDetailTab,
-  setPatientView,
+  rota,
+  irPara,
   getPatientInitials,
   onCreatePatient,
   onStartAttendance,
@@ -906,7 +903,7 @@ export function PatientsListView({
   /** Filtros server-side ficam desabilitados enquanto houver texto de busca (rota /search não os suporta). */
   const isSearching = Boolean(patientSearchQuery?.trim());
   /** Abre o resumo lateral/modal só após clique na lista — não reutiliza seleção da jornada. */
-  const [previewPatientCpf, setPreviewPatientCpf] = useState(null);
+  const resumoId = rota?.query?.resumoId ?? null;
   /** Paciente vindo da sidebar quando ainda não está na página atual da lista. */
   const [previewPatientSeed, setPreviewPatientSeed] = useState(null);
   const quickFilter = patientQuickFilter;
@@ -1019,11 +1016,12 @@ export function PatientsListView({
     number: 0,
   };
 
+  const mesmoId = (p) => String(p.id) === String(resumoId);
   const previewPatient =
-    (previewPatientCpf &&
-      (patientListItems.find((p) => p.cpf === previewPatientCpf) ||
-        patients.find((p) => p.cpf === previewPatientCpf) ||
-        (previewPatientSeed?.cpf === previewPatientCpf ? previewPatientSeed : null))) ||
+    (resumoId != null &&
+      (patientListItems.find(mesmoId) ||
+        patients.find(mesmoId) ||
+        (previewPatientSeed && mesmoId(previewPatientSeed) ? previewPatientSeed : null))) ||
     null;
   const previewPatientId = previewPatient?.id ?? null;
 
@@ -1079,19 +1077,24 @@ export function PatientsListView({
 
   const filteredPatientListItems = applyQuickFilter(patientListItems, quickFilter);
 
+  // Resumo = ?resumo=<id> no endereço: abrir e fechar empilham (Voltar fecha).
+  const irParaResumo = (id) => irPara(caminhos.pacientes({ ...rota?.query, resumoId: id }));
+
   const closeDetail = () => {
-    setPreviewPatientCpf(null);
     setPreviewPatientSeed(null);
     setSelectedPatientCpf(null);
-    setPatientDetailTab('planos');
+    irParaResumo(null);
     setPreviewProcedures([]);
     setPreviewAgendaSlot(null);
   };
 
+  const closeDetailRef = useRef(closeDetail);
+  useEffect(() => { closeDetailRef.current = closeDetail; });
+
   const openPatientPreview = (patient, { fromSidebar = false, agendaSlot = null } = {}) => {
-    if (!patient?.cpf) return;
+    if (!patient?.cpf || patient.id == null) return;
     setSelectedPatientCpf(patient.cpf);
-    setPreviewPatientCpf(patient.cpf);
+    irParaResumo(patient.id);
     setPreviewPatientSeed(fromSidebar ? patient : null);
     setPreviewAgendaSlot(agendaSlot);
   };
@@ -1156,15 +1159,12 @@ export function PatientsListView({
     if (!previewPatient) return undefined;
     const onKey = (e) => {
       if (e.key === 'Escape') {
-        setPreviewPatientCpf(null);
-        setPreviewPatientSeed(null);
-        setSelectedPatientCpf(null);
-        setPatientDetailTab('planos');
+        closeDetailRef.current();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [previewPatient, setSelectedPatientCpf, setPatientDetailTab]);
+  }, [previewPatient]);
 
   useEffect(() => {
     if (!previewPatient) return undefined;
@@ -1368,7 +1368,7 @@ export function PatientsListView({
                 </li>
               ) : patientListItems.length === 0 ? null : (
                 filteredPatientListItems.map((patient) => {
-                  const selected = selectedPatientCpf === patient.cpf;
+                  const selected = resumoId != null && String(patient.id) === String(resumoId);
                   return (
                     <li
                       key={patient.id}
@@ -1422,8 +1422,7 @@ export function PatientsListView({
                   detailTitleId={undefined}
                   closeDetail={closeDetail}
                   getPatientInitials={getPatientInitials}
-                  setPatientDetailTab={setPatientDetailTab}
-                  setPatientView={setPatientView}
+                  irPara={irPara}
                   previewProcedures={previewProcedures}
                   loadingPreviewProcedures={loadingPreviewProcedures}
                   onStartAttendance={onStartAttendance}
@@ -1460,8 +1459,7 @@ export function PatientsListView({
                   detailTitleId={desktopTitleId}
                   closeDetail={closeDetail}
                   getPatientInitials={getPatientInitials}
-                  setPatientDetailTab={setPatientDetailTab}
-                  setPatientView={setPatientView}
+                  irPara={irPara}
                   previewProcedures={previewProcedures}
                   loadingPreviewProcedures={loadingPreviewProcedures}
                   onStartAttendance={onStartAttendance}

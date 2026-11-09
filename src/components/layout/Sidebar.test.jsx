@@ -23,7 +23,7 @@ vi.mock('../../hooks/useMediaQuery', () => ({
 
 const baseProps = {
   activeView: 'pacientes',
-  setActiveView: () => {},
+  irParaTela: () => {},
   handleLogout: () => {},
   authUser: { id: '1', email: 'maria@x.com' },
   clinicaNome: 'Clínica Teste',
@@ -148,8 +148,8 @@ describe('Sidebar do tablet (painel aberto)', () => {
 
 describe('Navegação e itens da Sidebar', () => {
   it('renderiza os itens de navegação incluindo Gestão de Equipe e Auditoria', () => {
-    const setActiveView = vi.fn();
-    render(<Sidebar {...baseProps} setActiveView={setActiveView} />);
+    const irParaTela = vi.fn();
+    render(<Sidebar {...baseProps} irParaTela={irParaTela} />);
 
     expect(screen.getByRole('button', { name: 'Pacientes' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Agenda' })).toBeInTheDocument();
@@ -159,7 +159,7 @@ describe('Navegação e itens da Sidebar', () => {
     expect(screen.getByRole('button', { name: 'Configurações' })).toBeInTheDocument();
 
     fireEvent.click(btnAuditoria);
-    expect(setActiveView).toHaveBeenCalledWith('auditoria');
+    expect(irParaTela).toHaveBeenCalledWith('auditoria');
   });
 });
 

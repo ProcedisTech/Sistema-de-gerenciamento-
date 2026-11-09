@@ -2,6 +2,11 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import AppRoot from './components/AppRoot.jsx'
 import { ToastProvider } from './contexts/ToastContext.jsx'
+import { createBrowserRouter } from 'react-router'
+import { RouterProvider } from 'react-router'
+import { flushSync } from 'react-dom'
+import { criarRotas } from './rotas/roteador.jsx'
+import { consumirChavesAntigas } from './rotas/legado.js'
 import './styles/index.css'
 
 const rootEl = document.getElementById('root')
@@ -96,10 +101,14 @@ try {
   // O app inicializou com sucesso: remove a flag de tentativa de reload de chunk
   sessionStorage.removeItem('chunk_reload_attempted');
 
+  const destino = consumirChavesAntigas(window.location.pathname);
+  if (destino) window.history.replaceState(null, '', destino);
+  const roteador = createBrowserRouter(criarRotas(<AppRoot />));
+
   ReactDOM.createRoot(rootEl).render(
     <React.StrictMode>
       <ToastProvider>
-        <AppRoot />
+        <RouterProvider router={roteador} flushSync={flushSync} />
       </ToastProvider>
     </React.StrictMode>,
   )

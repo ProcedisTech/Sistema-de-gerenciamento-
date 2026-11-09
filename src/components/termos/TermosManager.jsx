@@ -19,7 +19,11 @@ import {
   Droplet,
   Camera,
 } from 'lucide-react';
+import { useNavigate } from 'react-router';
 import { termosApi } from '../../services/api';
+import { useRotaAtual } from '../../rotas/useRotaAtual';
+import { caminhos } from '../../rotas/caminhos';
+import NaoEncontrado from '../../rotas/NaoEncontrado';
 import { useToast } from '../../contexts/useToast.js';
 import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
 import { LGPD_TEMPLATE_BRUTO } from '../journey/lgpd/lgpdConsentText';
@@ -192,8 +196,14 @@ export function TermosManager() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [modo, setModo] = useState('lista');
-  const [editingId, setEditingId] = useState(null);
+  const rota = useRotaAtual();
+  const navigate = useNavigate();
+  // O endereço é a fonte: /termos/novo e /termos/:id abrem o editor; 'view' segue em memória.
+  const editingId = rota.termoId;
+  const emEdicao = rota.termoNovo || rota.termoId != null;
+  const hidratadoRef = useRef(null);
+  const rascunhoRef = useRef(null); // edição não salva do termo aberto: sobrevive a Voltar/Avançar
+  const modeloRef = useRef(false); // "a partir de modelo" preenche no clique, antes de chegar em /novo
   const [titulo, setTitulo] = useState('');
   const [conteudo, setConteudo] = useState('');
   const [autoAssinarProfissional, setAutoAssinarProfissional] = useState(false);
@@ -203,6 +213,7 @@ export function TermosManager() {
   const [formErrors, setFormErrors] = useState({});
   const [confirmDeleteRow, setConfirmDeleteRow] = useState(null);
   const [viewingRow, setViewingRow] = useState(null);
+  const modo = emEdicao ? 'edit' : viewingRow ? 'view' : 'lista';
   const [searchQuery, setSearchQuery] = useState('');
   const [menuOpenId, setMenuOpenId] = useState(null);
   const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
@@ -252,6 +263,58 @@ export function TermosManager() {
     load();
   }, [load]);
 
+  const limparForm = () => {
+    setTitulo('');
+    setConteudo('');
+    setAutoAssinarProfissional(false);
+    setNaturezaCodigo(NATUREZA_INSTITUCIONAL);
+    setProcedimentosVinculados([]);
+    setFormErrors({});
+  };
+
+  // O formulário deriva do endereço: /novo começa vazio; fora do editor (lista) nada fica visível.
+  useEffect(() => {
+    if (rota.termoNovo) {
+      hidratadoRef.current = null;
+      if (modeloRef.current) modeloRef.current = false;
+      else limparForm();
+    } else if (rota.termoId == null) {
+      hidratadoRef.current = null;
+      limparForm();
+    }
+  }, [rota.termoNovo, rota.termoId]);
+
+  // F5 / link direto / Avançar em /termos/:id: rascunho desse termo, senão o salvo.
+  useEffect(() => {
+    if (rota.termoId == null) return;
+    if (loading || hidratadoRef.current === String(rota.termoId)) return;
+    const row = items.find((i) => String(i.id) === String(rota.termoId));
+    if (!row) return;
+    hidratadoRef.current = String(rota.termoId);
+    const r = rascunhoRef.current;
+    if (r && r.id === String(rota.termoId)) {
+      setTitulo(r.titulo);
+      setConteudo(r.conteudo);
+      setAutoAssinarProfissional(r.autoAssinarProfissional);
+      setNaturezaCodigo(r.naturezaCodigo);
+      setProcedimentosVinculados(r.procedimentosVinculados);
+      return;
+    }
+    setTitulo(row.titulo ?? row.title ?? '');
+    setConteudo(row.conteudo ?? row.content ?? '');
+    setAutoAssinarProfissional(row.autoAssinarProfissional ?? false);
+    setNaturezaCodigo(row.naturezaCodigo ?? NATUREZA_INSTITUCIONAL);
+    setProcedimentosVinculados((row.procedimentosVinculados ?? []).map((p) => String(p.catalogoProcedimentoSaudeId)));
+  }, [rota.termoId, loading, items]);
+
+  // Guarda o que está digitado no termo aberto (só depois de hidratado).
+  useEffect(() => {
+    if (rota.termoId == null || hidratadoRef.current !== String(rota.termoId)) return;
+    rascunhoRef.current = {
+      id: String(rota.termoId), titulo, conteudo, autoAssinarProfissional, naturezaCodigo, procedimentosVinculados,
+    };
+  }, [rota.termoId, titulo, conteudo, autoAssinarProfissional, naturezaCodigo, procedimentosVinculados]);
+
   const filteredItems = useMemo(
     () =>
       items.filter((item) =>
@@ -274,7 +337,6 @@ export function TermosManager() {
   }, [items, procedimentoOptions]);
 
   const openNew = () => {
-    setEditingId(null);
     setTitulo('');
     setConteudo('');
     setAutoAssinarProfissional(false);
@@ -282,11 +344,11 @@ export function TermosManager() {
     setProcedimentosVinculados([]);
     setFormErrors({});
     setViewingRow(null);
-    setModo('edit');
+    navigate(caminhos.termoNovo());
   };
 
   const openNewWithLgpdTemplate = () => {
-    setEditingId(null);
+    if (!rota.termoNovo) modeloRef.current = true;
     setTitulo('Termo de Consentimento LGPD');
     setConteudo(paragraphizeTemplate(LGPD_TEMPLATE_BRUTO));
     setAutoAssinarProfissional(true);
@@ -294,12 +356,12 @@ export function TermosManager() {
     setProcedimentosVinculados([]);
     setFormErrors({});
     setViewingRow(null);
-    setModo('edit');
+    navigate(caminhos.termoNovo());
   };
 
   const openNewWithTcleToxinaTemplate = () => {
+    if (!rota.termoNovo) modeloRef.current = true;
     const matchingIds = findMatchingProcedimentoIds('TOXINA', procedimentoOptions);
-    setEditingId(null);
     setTitulo('TCLE - Toxina Botulínica');
     setConteudo(paragraphizeTemplate(TCLE_TOXINA_TEMPLATE_BRUTO));
     setAutoAssinarProfissional(true);
@@ -307,15 +369,15 @@ export function TermosManager() {
     setProcedimentosVinculados(matchingIds);
     setFormErrors({});
     setViewingRow(null);
-    setModo('edit');
+    navigate(caminhos.termoNovo());
     if (matchingIds.length > 0) {
       toastSuccess(`Template carregado com ${matchingIds.length} procedimento(s) vinculado(s) automaticamente.`);
     }
   };
 
   const openNewWithTclePreenchimentoTemplate = () => {
+    if (!rota.termoNovo) modeloRef.current = true;
     const matchingIds = findMatchingProcedimentoIds('PREENCHIMENTO', procedimentoOptions);
-    setEditingId(null);
     setTitulo('TCLE - Preenchimento com Ácido Hialurônico');
     setConteudo(paragraphizeTemplate(TCLE_PREENCHIMENTO_TEMPLATE_BRUTO));
     setAutoAssinarProfissional(true);
@@ -323,14 +385,14 @@ export function TermosManager() {
     setProcedimentosVinculados(matchingIds);
     setFormErrors({});
     setViewingRow(null);
-    setModo('edit');
+    navigate(caminhos.termoNovo());
     if (matchingIds.length > 0) {
       toastSuccess(`Template carregado com ${matchingIds.length} procedimento(s) vinculado(s) automaticamente.`);
     }
   };
 
   const openNewWithTermoImagemTemplate = () => {
-    setEditingId(null);
+    if (!rota.termoNovo) modeloRef.current = true;
     setTitulo('Termo de Consentimento de Uso de Imagem');
     setConteudo(paragraphizeTemplate(TERMO_IMAGEM_TEMPLATE_BRUTO));
     setAutoAssinarProfissional(true);
@@ -338,11 +400,12 @@ export function TermosManager() {
     setProcedimentosVinculados([]);
     setFormErrors({});
     setViewingRow(null);
-    setModo('edit');
+    navigate(caminhos.termoNovo());
   };
 
   const openEdit = (row) => {
-    setEditingId(row.id);
+    hidratadoRef.current = String(row.id);
+    rascunhoRef.current = null;
     setTitulo(row.titulo ?? row.title ?? '');
     setConteudo(row.conteudo ?? row.content ?? '');
     setAutoAssinarProfissional(row.autoAssinarProfissional ?? false);
@@ -353,18 +416,20 @@ export function TermosManager() {
     setFormErrors({});
     setViewingRow(null);
     setMenuOpenId(null);
-    setModo('edit');
+    navigate(caminhos.termo(row.id));
   };
 
-  const closeForm = () => {
-    setModo('lista');
-    setEditingId(null);
+  // substituir: só quando vem do salvar (o Voltar não reabre o editor); onClick passa o evento, por isso o === true.
+  const closeForm = (substituir) => {
+    hidratadoRef.current = null;
+    rascunhoRef.current = null;
     setTitulo('');
     setConteudo('');
     setAutoAssinarProfissional(false);
     setNaturezaCodigo(NATUREZA_INSTITUCIONAL);
     setProcedimentosVinculados([]);
     setFormErrors({});
+    navigate(caminhos.configuracoes('termos'), substituir === true ? { replace: true } : undefined);
   };
 
   const handleSave = async () => {
@@ -398,7 +463,7 @@ export function TermosManager() {
         await termosApi.create(body);
         toastSuccess('Termo criado.');
       }
-      closeForm();
+      closeForm(true);
       await load();
     } catch (e) {
       toastError(e?.message || 'Erro ao salvar o termo.');
@@ -429,16 +494,19 @@ export function TermosManager() {
   const openView = (row) => {
     setViewingRow(row);
     setMenuOpenId(null);
-    setModo('view');
   };
 
   const voltarDaView = () => {
-    setModo('lista');
     setViewingRow(null);
   };
 
   const emptyNoData = items.length === 0;
   const emptyFiltered = !emptyNoData && filteredItems.length === 0;
+
+  if (rota.termoId != null) {
+    if (loading) return null;
+    if (!items.some((i) => String(i.id) === String(rota.termoId))) return <NaoEncontrado />;
+  }
 
   if (modo === 'view' && viewingRow) {
     return (

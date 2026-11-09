@@ -1,5 +1,10 @@
 import React, { useRef, useState } from 'react';
 import { buildPacienteCtx } from '../utils/pacienteCtx';
+import { Navigate, useBlocker, useLocation, useNavigate } from 'react-router';
+import { saidaManual } from '../rotas/saidaManual.js';
+import { caminhos } from '../rotas/caminhos';
+import PaginaNaoEncontrada from '../rotas/PaginaNaoEncontrada.jsx';
+import { useChaveDaSessao } from '../rotas/useChaveDaSessao.js';
 import { Bell, CalendarDays, ChevronLeft, ChevronRight, History, Settings, UserCog, Users, X } from 'lucide-react';
 
 // Hooks de estado
@@ -80,6 +85,8 @@ import { evaluateProximoRetornoStep5 } from '../utils/proximoRetornoStep5.js';
 import { PatientsView } from './patients';
 import { ConfiguracoesView, GestaoUsuariosView, AuditoriaView } from './configuracoes';
 import { UnsavedChangesModal } from './shared/UnsavedChangesModal';
+import { useRotaAtual } from '../rotas/useRotaAtual';
+import { usePacientePorId } from '../rotas/usePacientePorId';
 import { AgendaDashboard } from './agenda';
 import { AgendaFormModal } from './agenda/AgendaFormModal.jsx';
 import { AgendaBloqueioModal } from './agenda/AgendaBloqueioModal.jsx';
@@ -94,7 +101,6 @@ import { AnamnesePage } from '../pages/AnamnesePublica/AnamnesePage';
 import { PublicSignatureFlow } from '../pages/PublicSignature/PublicSignatureFlow.jsx';
 import { TermoBloqueioModal } from './termos/TermoBloqueioModal.jsx';
 import { abortarEncerrarPorTermos, bloqueioExecucaoTermos, catalogoIdsDoAtendimento, consentimentosAguardandoExecucao, faltantesDoItem, idsFilaExigida, parseTermosBloqueioError, pfIdNestaSessaoParaCatalogo, sessaoComPfDoCatalogo, titulosFaltantes } from '../utils/termoResolucao.js';
-import { readStoredSection, persistSection, VALID_SECTIONS } from './configuracoes/configSectionStorage';
 import { ProcedureCameraWidget } from './canvas';
 import { criarItemProcedimentoSessao, criarLoteProcedimentosSessao } from '../utils/procedimentoSessaoFactory.js';
 
@@ -251,7 +257,34 @@ function AppRefactoredInner({ onCanalAvisos }) {
   } = usePapel();
   const toast = useToast();
   // ============ ESTADO GLOBAL ============
-  const authState = useAuthState({ setRoleUserId, setOrgId, clearOrgSession });
+  const navigate = useNavigate();
+  const location = useLocation();
+  // navigate é declarado antes do useAuthState; a opção só roda depois (saída em outra aba).
+  const authState = useAuthState({
+    setRoleUserId,
+    setOrgId,
+    clearOrgSession,
+    aoSairPorOutraAba: () => {
+      saidaManual.marcar();
+      navigate(caminhos.entrar(), { replace: true });
+    },
+  });
+  const sairManual = React.useCallback(() => {
+    saidaManual.marcar();
+    navigate(caminhos.entrar(), { replace: true });
+    void authState.handleLogout();
+  }, [navigate, authState.handleLogout]); // eslint-disable-line react-hooks/exhaustive-deps
+  const entrar = React.useCallback(
+    async (e) => {
+      const ok = await authState.handleLogin(e);
+      if (ok && saidaManual.existe()) {
+        saidaManual.limpar();
+        navigate(caminhos.pacientes(), { replace: true });
+      }
+      return ok;
+    },
+    [navigate, authState.handleLogin], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   /** null = deslogado ou pendente; checking = carregando gates; profile | cadastrar-clinica | clinic | ready = pós-login */
   const [postLoginGate, setPostLoginGate] = React.useState(null);
   /** Incrementado após CompletarPerfil para re-rodar descoberta sem loop profile↔checking. */
@@ -291,7 +324,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
           }
           if (meRes.status === 403) {
             toast.error('Sua conta está desativada. Entre em contato com o administrador.');
-            handleLogout();
+            sairManual();
             return;
           }
           setPostLoginGate('ready'); // outros erros, deixa passar
@@ -402,9 +435,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
     return () => { recarregarClinicaGenerationRef.current += 1; };
   }, [orgId]);
   const [perfilInfo, setPerfilInfo] = useState({ nomeCompleto: '', apelido: '', fotoUrl: '' });
-  const [equipeTargetUserId, setEquipeTargetUserId] = React.useState(null);
-  const openingSelfProfile = Boolean(roleUserId && (equipeTargetUserId === 'me' || String(equipeTargetUserId) === String(roleUserId)));
-  const [configSection, setConfigSectionState] = useState(readStoredSection);
 
   // ============ FUNÇÕES DE NAVEGAÇÃO ============
   const [consultaModule, setConsultaModule] = React.useState(null);
@@ -449,33 +479,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
 
   // null | 'hub' | 'anamnese' | 'avaliacao' | 'planejamento' | 'termos' | 'procedimento'
 
-  const [activeView, _setActiveView] = React.useState(() => {
-    try {
-      const v = sessionStorage.getItem('activeView');
-      // @deprecated — substituído por activeView:'consulta'. Remover na v2 após confirmar que nenhum call site usa 'jornada'.
-      if (v === 'jornada' || v === 'consulta') return 'pacientes';
-      if (v === 'anamnese' || v === 'termos') {
-        sessionStorage.setItem('activeView', 'configuracoes');
-        return 'configuracoes';
-      }
-      return v || 'pacientes';
-    } catch {
-      return 'pacientes';
-    }
-  });
-  const [previousView, setPreviousView] = React.useState(null);
-  const setActiveView = React.useCallback((view) => {
-    _setActiveView((prev) => {
-      const next = typeof view === 'function' ? view(prev) : view;
-      try {
-        if (next) sessionStorage.setItem('activeView', String(next));
-        else sessionStorage.removeItem('activeView');
-      } catch {
-        // ignore
-      }
-      return next;
-    });
-  }, []);
+  const rota = useRotaAtual();
+  const configSection = rota.configSection;
+  const openingSelfProfile = Boolean(roleUserId && (rota.membroId === 'me' || String(rota.membroId) === String(roleUserId)));
+  const activeView = rota.activeView;
 
   // --- Session idle timeout ---
   const sessionTimeout = useSessionTimeout({
@@ -484,7 +491,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
     consultaModule,
   });
 
-  const goToView = React.useCallback((view) => {
+  const irParaTela = React.useCallback((view, { guarda, secao } = {}) => {
     // Verificacao de segurança na troca de view
     if (view === 'configuracoes' && !canSeeConfig && configSection !== 'perfil') {
       toast.error('Você não tem permissão para acessar as configurações.');
@@ -498,11 +505,9 @@ function AppRefactoredInner({ onCanalAvisos }) {
       toast.error('Você não tem permissão para acessar o Histórico / Auditoria.');
       return;
     }
-    if (view === 'configuracoes') {
-      setConfigSectionState(null);
-    }
-    setActiveView(view);
-  }, [canSeeConfig, canSeeConfigEquipe, canSeeConfigAuditoria, toast, setActiveView]);
+    const destino = view === 'configuracoes' ? caminhos.configuracoes(secao ?? undefined) : caminhos.tela(view);
+    navigate(destino, guarda ? { state: { guarda: true } } : undefined);
+  }, [canSeeConfig, canSeeConfigEquipe, canSeeConfigAuditoria, configSection, toast, navigate]);
 
   const [notifVersion, setNotifVersion] = useState(0);
   const [journeyTermoTitulo, setJourneyTermoTitulo] = React.useState('');
@@ -559,17 +564,13 @@ function AppRefactoredInner({ onCanalAvisos }) {
   }, []);
 
   // ============ Estados destructurados para facilitar leitura ============
-  const { authReady, isLoggedIn, authUser, handleLogout } = authState;
+  const { authReady, isLoggedIn, authUser } = authState;
   const { currentStep, setCurrentStep, isFinishing, setIsFinishing, journeyId } = journeyState;
   const {
     patients,
     setPatients,
     selectedPatientCpf,
     setSelectedPatientCpf,
-    patientView,
-    setPatientView,
-    patientDetailTab,
-    setPatientDetailTab,
     patientSearchQuery,
     setPatientSearchQuery,
     refreshPatients: fetchPatientsCatalog,
@@ -600,6 +601,14 @@ function AppRefactoredInner({ onCanalAvisos }) {
     profileNav,
     clearProfileNavSnapshot,
   } = patientState;
+  const patientView = rota.patientView ?? 'list';
+  const patientDetailTab = rota.patientDetailTab ?? 'planos';
+  const { paciente: pacienteDaRota, naoEncontrado: pacienteNaoEncontrado, carregando: pacienteCarregando } = usePacientePorId(rota.pacienteId, patients);
+  React.useEffect(() => {
+    if (pacienteDaRota?.cpf && pacienteDaRota.cpf !== selectedPatientCpf) setSelectedPatientCpf(pacienteDaRota.cpf);
+    // Paciente vindo da API (fora da página carregada): entra em `patients` para a PatientsView achá-lo.
+    if (pacienteDaRota?.id != null) setPatients((prev) => (prev.some((x) => String(x?.id) === String(pacienteDaRota.id)) ? prev : [...prev, pacienteDaRota]));
+  }, [pacienteDaRota, selectedPatientCpf, setSelectedPatientCpf, setPatients]);
 
   const kpiState = usePatientsKpi({ authEnabled: authSessionReady, bump: patientListBump });
 
@@ -651,14 +660,14 @@ function AppRefactoredInner({ onCanalAvisos }) {
     (paciente) => {
       const snapshot = buildAgendaPacienteFromRecord(paciente);
       if (!snapshot) return;
-      setActiveView('agenda');
+      navigate(caminhos.agenda(), { flushSync: true });
       agendaSchedule.openCreateModalForPatient(snapshot, {
         tipoAtendimento: TIPO_ATENDIMENTO_CONSULTA,
         semDataInicial: true,
         profissionalRoleUserId: roleUserId,
       });
     },
-    [agendaSchedule, buildAgendaPacienteFromRecord, roleUserId, setActiveView],
+    [agendaSchedule, buildAgendaPacienteFromRecord, roleUserId, navigate],
   );
 
   const handlePlanoConcluidoAposBaixa = React.useCallback(
@@ -2122,22 +2131,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
   // ── Guard de alterações não salvas no Horário de Atendimento ───────────────
   const [isDirtyHorarios, setIsDirtyHorarios] = React.useState(false);
   const [isDirtyFicha, setIsDirtyFicha] = React.useState(false);
-  const [isUnsavedNavModalOpen, setIsUnsavedNavModalOpen] = React.useState(false);
-  const pendingNavAction = useRef(null);
-
-  /**
-   * Substitui goToView nos call sites que podem ocorrer enquanto o usuário
-   * está em Configurações > Horário de Atendimento com alterações não salvas.
-   */
-  const goToViewWithGuard = React.useCallback((view) => {
-    if ((isDirtyHorarios || isDirtyFicha) && activeView === 'configuracoes') {
-      pendingNavAction.current = () => goToView(view);
-      setIsUnsavedNavModalOpen(true);
-      return;
-    }
-    goToView(view);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDirtyHorarios, isDirtyFicha, activeView, canSeeConfig, canSeeConfigEquipe]);
+  // Guarda só na tela de Configurações; POP (voltar/avançar) ou navegação com state.guarda (irParaTela com guarda).
+  const bloqueio = useBlocker(({ nextLocation, historyAction }) =>
+    (isDirtyHorarios || isDirtyFicha) && activeView === 'configuracoes' &&
+    (nextLocation.state?.guarda === true || historyAction === 'POP'));
 
   React.useEffect(() => {
     if (activeView !== 'consulta' || !journeyState.isAgendaRetorno) return;
@@ -2146,64 +2143,21 @@ function AppRefactoredInner({ onCanalAvisos }) {
     }
   }, [activeView, consultaModule, journeyState.isAgendaRetorno]);
 
-  React.useEffect(() => {
-    if (activeView === 'configuracoes' && postLoginGate === 'ready' && contextStatus === 'ready' && !canSeeConfig) {
-      setActiveView('pacientes');
-      try {
-        sessionStorage.setItem('activeView', 'pacientes');
-      } catch {
-        // ignore
-      }
-    }
-    if (activeView === 'gestao-equipe' && postLoginGate === 'ready' && contextStatus === 'ready' && !canSeeConfigEquipe && !openingSelfProfile) {
-      setActiveView('pacientes');
-      try {
-        sessionStorage.setItem('activeView', 'pacientes');
-      } catch {
-        // ignore
-      }
-    }
-    if (activeView === 'auditoria' && postLoginGate === 'ready' && contextStatus === 'ready' && !canSeeConfigAuditoria) {
-      setActiveView('pacientes');
-      try {
-        sessionStorage.setItem('activeView', 'pacientes');
-      } catch {
-        // ignore
-      }
-    }
-  }, [activeView, postLoginGate, contextStatus, canSeeConfig, canSeeConfigEquipe, canSeeConfigAuditoria, openingSelfProfile, setActiveView]);
-
-  const setConfigSection = React.useCallback((section) => {
-    const next = section === null ? null : VALID_SECTIONS.has(section) ? section : 'fichas';
-    setConfigSectionState(next);
-    persistSection(next);
-  }, []);
+  // Troca de seção (ou volta ao hub com null) empilha no histórico, com a guarda de alteração não salva.
+  const irParaSecao = React.useCallback((id) => {
+    const destino = caminhos.configuracoes(id ?? undefined);
+    // Mesmo endereço: troca a entrada em vez de empilhar repetida (a guarda continua valendo).
+    navigate(destino, { state: { guarda: true }, replace: destino === location.pathname });
+  }, [navigate, location.pathname]);
 
   const onOpenClinicaSettings = React.useCallback(() => {
     if (!canSeeConfig) return;
-    setActiveView('configuracoes');
-    setConfigSection('clinica');
-  }, [canSeeConfig, setActiveView, setConfigSection]);
+    navigate(caminhos.configuracoes('clinica'));
+  }, [canSeeConfig, navigate]);
 
   const onOpenPerfilSettings = React.useCallback(() => {
-    setActiveView('configuracoes');
-    setConfigSection('perfil');
-  }, [setActiveView, setConfigSection]);
-
-  /** Migração de `activeView` salvo: jornada/consulta → pacientes; anamnese/termos → configuracoes. */
-  React.useEffect(() => {
-    try {
-      const cur = sessionStorage.getItem('activeView');
-      // @deprecated — substituído por activeView:'consulta'. Remover na v2 após confirmar que nenhum call site usa 'jornada'.
-      if (cur === 'jornada' || cur === 'consulta') {
-        sessionStorage.setItem('activeView', 'pacientes');
-      } else if (cur === 'anamnese' || cur === 'termos') {
-        sessionStorage.setItem('activeView', 'configuracoes');
-      }
-    } catch {
-      /* ignore */
-    }
-  }, []);
+    navigate(caminhos.configuracoes('perfil'));
+  }, [navigate]);
 
   React.useEffect(() => {
     const needsJourneyTermos =
@@ -2509,8 +2463,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
       ? (options.initialModule ?? 'hub')
       : (options.initialModule ?? LEGACY_STEP_TO_MODULE[options.initialStep] ?? 'hub');
     setConsultaModule(mod);
-    setActiveView('consulta');
-    setPatientView('list');
+    navigate(caminhos.consulta(), { replace: activeView === 'consulta' });
     setAlertasClinicosRefreshKey((n) => n + 1);
   };
 
@@ -2631,27 +2584,32 @@ function AppRefactoredInner({ onCanalAvisos }) {
     [handleStartAttendance, pacienteAtual, roleUserId],
   );
 
+  // O CPF nunca vai no endereço: acha o id do paciente pelo CPF.
+  const caminhoPerfilPorCpf = React.useCallback((cpf, aba) => {
+    const alvo = String(cpf || '').replace(/\D/g, '');
+    const achado = alvo && [...patients, ...(patientListItems || []), pacienteAtual].find(
+      (p) => p?.id != null && String(p.cpf || '').replace(/\D/g, '') === alvo);
+    return achado ? caminhos.paciente(achado.id, aba) : caminhos.pacientes();
+  }, [patients, patientListItems, pacienteAtual]);
+
   const onSairConsulta = React.useCallback(() => {
     retornoAntecipadoRef.current = null;
     const sCpf = String(selectedPatientCpf || pacienteAtual?.cpf || '').trim();
+    navigate(caminhoPerfilPorCpf(sCpf, 'avulsos'), { flushSync: true, replace: true });
     setConsultaModule(null);
-    setActiveView('pacientes');
 
     refreshPatientsAndPagedList();
 
     if (sCpf) {
       setSelectedPatientCpf(sCpf);
-      setPatientView('profile');
-      setPatientDetailTab('timeline');
     }
   }, [
-    setActiveView,
+    navigate,
+    caminhoPerfilPorCpf,
     journeyState,
     selectedPatientCpf,
     pacienteAtual?.cpf,
     setSelectedPatientCpf,
-    setPatientView,
-    setPatientDetailTab,
     refreshPatientsAndPagedList,
   ]);
 
@@ -2963,11 +2921,11 @@ function AppRefactoredInner({ onCanalAvisos }) {
 
   const onCancelJourney = React.useCallback(() => {
     setCurrentStep(1);
-    setActiveView('pacientes');
-  }, [setCurrentStep, setActiveView]);
+    navigate(caminhos.pacientes());
+  }, [setCurrentStep, navigate]);
 
   const handleCreatePatientFromPatients = () => {
-    setPatientView('create');
+    navigate(caminhos.pacienteNovo());
   };
 
   const patientNavigationScope = React.useRef(orgId);
@@ -2990,42 +2948,32 @@ function AppRefactoredInner({ onCanalAvisos }) {
       if (patientNavigationScope.current !== orgId || patientNavigationRequest.current !== request) return;
       captureProfileNavSnapshot?.(cpf);
       setSelectedPatientCpf(cpf);
-      setPatientDetailTab('timeline');
-      setPatientView('profile');
-      if (activeView !== 'pacientes') {
-        goToViewWithGuard('pacientes');
-      } else {
-        setActiveView('pacientes');
-      }
+      // Saindo de outra tela, passa pela guarda de alteração não salva (#350: goToViewWithGuard).
+      navigate(patient?.id != null ? caminhos.paciente(patient.id, 'avulsos') : caminhos.pacientes(), { state: { guarda: true } });
     } catch (error) {
       if (patientNavigationScope.current === orgId && patientNavigationRequest.current === request) toast.error(getApiErrorToastMessage(error, 'Não foi possível abrir o histórico do paciente.'));
     }
-  }, [canSeePacientes, patients, patientListItems, orgId, fusoClinica, setPatients, captureProfileNavSnapshot, setSelectedPatientCpf, setPatientDetailTab, setPatientView, activeView, goToViewWithGuard, setActiveView, toast]);
+  }, [canSeePacientes, patients, patientListItems, orgId, fusoClinica, setPatients, captureProfileNavSnapshot, setSelectedPatientCpf, navigate, toast]);
 
   const handleGlobalPatientSelect = React.useCallback(
     (patient) => {
       const cpf = String(patient?.cpf || '').trim();
       if (!cpf) return;
-      if (activeView !== 'pacientes') goToViewWithGuard('pacientes');
       captureProfileNavSnapshot?.(cpf);
       setSelectedPatientCpf(cpf);
-      setPatientDetailTab('planos');
-      setPatientView('profile');
+      navigate(patient?.id != null ? caminhos.paciente(patient.id) : caminhoPerfilPorCpf(cpf), { state: { guarda: true } });
     },
     [
-      activeView,
-      goToViewWithGuard,
+      navigate,
+      caminhoPerfilPorCpf,
       captureProfileNavSnapshot,
       setSelectedPatientCpf,
-      setPatientDetailTab,
-      setPatientView,
     ],
   );
 
   const handleGlobalNovoPaciente = React.useCallback(() => {
-    if (activeView !== 'pacientes') goToViewWithGuard('pacientes');
-    setPatientView('create');
-  }, [activeView, goToViewWithGuard, setPatientView]);
+    navigate(caminhos.pacienteNovo(), { state: { guarda: true } });
+  }, [navigate]);
 
   const handleGlobalAgendamento = React.useCallback(() => {
     agendaSchedule.openCreateModal(agendaSchedule.selectedDay);
@@ -3034,7 +2982,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
   const handleAgendarComProfissional = React.useCallback(
     (pessoa, opts = {}) => {
       if (!pessoa) {
-        setActiveView('agenda');
+        navigate(caminhos.agenda());
         return;
       }
       const roleUserId = String(pessoa?.roleUserId || pessoa?.id || '').trim();
@@ -3043,19 +2991,17 @@ function AppRefactoredInner({ onCanalAvisos }) {
         onAgendaSaved: opts.onAgendaSaved,
       });
     },
-    [agendaSchedule]
+    [agendaSchedule, navigate]
   );
 
   const handleOpenNotificacoes = React.useCallback(() => {
-    if (activeView !== 'notificacoes') {
-      setPreviousView(activeView);
-    }
-    goToViewWithGuard('notificacoes');
-  }, [activeView, goToViewWithGuard]);
+    irParaTela('notificacoes', { guarda: true });
+  }, [irParaTela]);
 
   const handleVoltarNotificacoes = React.useCallback(() => {
-    goToViewWithGuard(previousView || 'pacientes');
-  }, [previousView, goToViewWithGuard]);
+    if (location.key === 'default') navigate(caminhos.pacientes(), { state: { guarda: true } });
+    else navigate(-1);
+  }, [location.key, navigate]);
 
   const handleNotificacoesChanged = React.useCallback(() => {
     setNotifVersion((v) => v + 1);
@@ -3063,19 +3009,17 @@ function AppRefactoredInner({ onCanalAvisos }) {
 
   const handleNavigateToCatalogo = React.useCallback(() => {
     if (!canSeeConfig) return;
-    goToViewWithGuard('configuracoes');
-    setConfigSection('procedimentos');
-  }, [canSeeConfig, goToViewWithGuard, setConfigSection]);
+    irParaTela('configuracoes', { guarda: true, secao: 'procedimentos' });
+  }, [canSeeConfig, irParaTela]);
 
   const handleNavigateToMetodosAssinatura = React.useCallback(() => {
     if (!canSeeConfig) return;
-    goToViewWithGuard('configuracoes');
-    setConfigSection('metodos-assinatura');
-  }, [canSeeConfig, goToViewWithGuard, setConfigSection]);
+    irParaTela('configuracoes', { guarda: true, secao: 'metodos-assinatura' });
+  }, [canSeeConfig, irParaTela]);
 
   const handleNavigateToAgenda = React.useCallback(() => {
-    goToViewWithGuard('agenda');
-  }, [goToViewWithGuard]);
+    irParaTela('agenda', { guarda: true });
+  }, [irParaTela]);
 
   const handleUpdatePatientProfile = (cpfKey, patch) => {
     updatePatientByCpf(cpfKey, (prev) => ({ ...prev, ...patch }));
@@ -3696,7 +3640,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
     setLoteProcedimentosFeitosIds([]);
     setAssinaturasRealizadasIds([]);
     patientState.setSelectedPatientCpf(null);
-    patientState.setPatientView('list');
     setJourneyProcedureDateIso(hojeDaClinica(fusoClinica));
     setQueixaVisivel(true);
     mapeamentoCaptureVistaRef.current = null;
@@ -3750,21 +3693,19 @@ function AppRefactoredInner({ onCanalAvisos }) {
       refreshPatientsAndPagedList();
       if (toastTipo === 'info') toast.info(successMessage);
       else toast.success(successMessage);
-      setActiveView('pacientes');
+      navigate(caminhoPerfilPorCpf(sCpf, 'avulsos'), { flushSync: true, replace: true });
+      setConsultaModule(null);
       resetJourney();
       if (sCpf) {
         setSelectedPatientCpf(sCpf);
       }
-      setPatientView('profile');
-      setPatientDetailTab('timeline');
     },
     [
       agendaSchedule,
       refreshPatientsAndPagedList,
       resetJourney,
-      setActiveView,
-      setPatientDetailTab,
-      setPatientView,
+      navigate,
+      caminhoPerfilPorCpf,
       setSelectedPatientCpf,
       toast,
     ]
@@ -3780,7 +3721,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
     aoConsultaEncerradaRef.current = ({ pacienteCpf }) => {
       if (!emConsultaNaTela || finishJourneyLockRef.current) return;
       const sCpf = String(pacienteCpf || selectedPatientCpf || pacienteAtual?.cpf || '').trim();
-      setConsultaModule(null);
       finalizarAtendimentoNavegacao(sCpf, {
         refreshFalhaNaoBloqueia: true,
         successMessage: 'Consulta encerrada em outro aparelho',
@@ -4325,7 +4265,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
           return;
         }
       }
-      setConsultaModule(null);
       await finalizarAtendimentoNavegacao(sCpf, {
         successMessage: 'Retorno registrado com sucesso.',
         refreshFalhaNaoBloqueia: true,
@@ -4644,8 +4583,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
         }
       }
 
-      setConsultaModule(null);
-      await finalizarAtendimentoNavegacao(sCpf);
+      await finalizarAtendimentoNavegacao(sCpf, { refreshFalhaNaoBloqueia: true });
     },
     [
       registrarResolucaoTermos,
@@ -4934,7 +4872,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
   }
 
   if (!isLoggedIn) {
-    return <LoginForm {...authState} />;
+    return <LoginForm {...authState} handleLogin={entrar} />;
   }
 
   if (
@@ -5009,6 +4947,16 @@ function AppRefactoredInner({ onCanalAvisos }) {
     );
   }
 
+  // Redirecionamentos de rota (declarativos; depois de todos os hooks e dos portões).
+  if (rota.entrar && !saidaManual.existe()) return <Navigate to={caminhos.pacientes()} replace />;
+  if (activeView === 'consulta' && consultaModule == null) return <Navigate to={caminhos.pacientes()} replace />;
+  if (activeView === 'configuracoes' && !canSeeConfig) return <Navigate to={caminhos.pacientes()} replace />;
+  if (activeView === 'gestao-equipe' && !canSeeConfigEquipe && !openingSelfProfile) {
+    return <Navigate to={caminhos.pacientes()} replace />;
+  }
+  if (activeView === 'auditoria' && !canSeeConfigAuditoria) return <Navigate to={caminhos.pacientes()} replace />;
+  if (rota.redirecionar) return <Navigate to={rota.redirecionar} replace />;
+
   const renderGlobalPageSlot = () => {
     switch (activeView) {
       case 'pacientes':
@@ -5033,18 +4981,12 @@ function AppRefactoredInner({ onCanalAvisos }) {
 
       {/* Guard de alterações não salvas no Horário de Atendimento */}
       <UnsavedChangesModal
-        isOpen={isUnsavedNavModalOpen}
-        onContinue={() => {
-          setIsUnsavedNavModalOpen(false);
-          pendingNavAction.current = null;
-        }}
+        isOpen={bloqueio.state === 'blocked'}
+        onContinue={() => bloqueio.reset?.()}
         onDiscard={() => {
-          setIsUnsavedNavModalOpen(false);
           setIsDirtyFicha(false);
           setIsDirtyHorarios(false);
-          const action = pendingNavAction.current;
-          pendingNavAction.current = null;
-          action?.();
+          bloqueio.proceed?.();
         }}
         message={
           isDirtyFicha && isDirtyHorarios
@@ -5058,8 +5000,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
       {/* Sidebar */}
       <Sidebar
         activeView={activeView}
-        setActiveView={goToViewWithGuard}
-        handleLogout={handleLogout}
+        irParaTela={(v) => irParaTela(v, { guarda: true })}
+        handleLogout={sairManual}
         authUser={authUser}
         onRailWidthPxChange={setSidebarRailWidthPx}
         clinicaNome={clinicaInfo.nome}
@@ -6075,8 +6017,11 @@ function AppRefactoredInner({ onCanalAvisos }) {
                       selectedPatientCpf={selectedPatientCpf}
                       setSelectedPatientCpf={setSelectedPatientCpf}
                       patientDetailTab={patientDetailTab}
-                      setPatientDetailTab={setPatientDetailTab}
-                      setPatientView={setPatientView}
+                      rota={rota}
+                      pacienteNaoEncontrado={pacienteNaoEncontrado}
+                      pacienteCarregando={pacienteCarregando}
+                      semRetornoFilter={patientState.semRetornoFilter}
+                      irPara={navigate}
                       patientSearchQuery={patientSearchQuery}
                       setPatientSearchQuery={setPatientSearchQuery}
                       getPatientInitials={getPatientInitials}
@@ -6117,7 +6062,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                       kpi={kpiState}
                       kpiLoading={kpiState.loading}
                       nomeUsuario={perfilInfo.nomeCompleto}
-                      onNavigateToAgenda={() => goToViewWithGuard('agenda')}
+                      onNavigateToAgenda={() => irParaTela('agenda', { guarda: true })}
                       roleUserId={roleUserId}
                       patientQuickFilter={patientQuickFilter}
                       setPatientQuickFilter={setPatientQuickFilter}
@@ -6146,7 +6091,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
                       canSeeAgendaConfig={canSeeConfigAgenda}
                       canSeeEquipe={canSeeConfigEquipe}
                       configSection={configSection}
-                      setConfigSection={setConfigSection}
+                      irParaSecao={irParaSecao}
                       onClinicaAtualizada={(nome, logoUrl) => {
                         setClinicaInfo((prev) => ({
                           ...prev,
@@ -6172,8 +6117,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     <div className="w-full">
                       <GestaoUsuariosView
                         key={`${orgId}-${roleUserId}`}
-                        targetUserId={equipeTargetUserId}
-                        onClearTargetUserId={() => setEquipeTargetUserId(null)}
                         onPerfilAtualizado={(data) => setPerfilInfo((previous) => ({ ...previous, ...data }))}
                         onDisponibilidadeInvalidate={handleDisponibilidadeInvalidate}
                         onEquipeInvalidate={agendaSchedule.refreshEquipe}
@@ -6218,13 +6161,17 @@ function AppRefactoredInner({ onCanalAvisos }) {
                         } : null}
                         onSlotReagendar={handleSlotReagendar}
                         shortcutsBlocked={Boolean(scheduleCancelRow?.agenda)}
+                        agendaIdAlvo={rota.agendaId}
+                        onAbrirDetalhe={(id) => navigate(caminhos.agenda(id))}
+                        onFecharDetalhe={() => navigate(caminhos.agenda())}
                       />
                     </div>
                   </RoleGuard>
                 )}
 
                 {/* @deprecated — 'jornada' legado; 'consulta' reservado para ConsultaHub (render-block). */}
-                {!['jornada', 'consulta', 'pacientes', 'agenda', 'configuracoes', 'gestao-equipe', 'auditoria', 'notificacoes'].includes(activeView) && (
+                {rota.naoEncontrado && <PaginaNaoEncontrada />}
+                {!rota.naoEncontrado && !['jornada', 'consulta', 'pacientes', 'agenda', 'configuracoes', 'gestao-equipe', 'auditoria', 'notificacoes'].includes(activeView) && (
                   <div className="p-6 rounded-2xl border border-app-border bg-app-surface text-[#64748b] font-bold text-[14px]">
                     Visao nao encontrada.
                   </div>
@@ -6238,11 +6185,11 @@ function AppRefactoredInner({ onCanalAvisos }) {
       {!isJornadaView && !isConsultaView ? (
         <MobileNavigation
           activeView={activeView}
-          onGoPacientes={() => goToViewWithGuard('pacientes')}
-          onGoAgenda={() => goToViewWithGuard('agenda')}
-          onGoGestaoEquipe={() => goToViewWithGuard('gestao-equipe')}
-          onGoConfiguracoes={() => goToViewWithGuard('configuracoes')}
-          onLogout={handleLogout}
+          onGoPacientes={() => irParaTela('pacientes', { guarda: true })}
+          onGoAgenda={() => irParaTela('agenda', { guarda: true })}
+          onGoGestaoEquipe={() => irParaTela('gestao-equipe', { guarda: true })}
+          onGoConfiguracoes={() => irParaTela('configuracoes', { guarda: true })}
+          onLogout={sairManual}
         />
       ) : null}
 
@@ -6406,10 +6353,11 @@ export default function App() {
   // O provider fica acima do Inner porque hooks do próprio Inner (useAgendaPage) assinam avisos;
   // o Inner, dono da sessão, informa a clínica e se o canal pode abrir.
   const [canalAvisos, setCanalAvisos] = React.useState({ orgId: null, ativo: false, emConsulta: false });
+  const chave = useChaveDaSessao();
   return (
     <DisponibilidadeRevisionProvider>
       <AvisosProvider orgId={canalAvisos.orgId} ativo={canalAvisos.ativo} emConsulta={canalAvisos.emConsulta}>
-        <AppRefactoredInner onCanalAvisos={setCanalAvisos} />
+        <AppRefactoredInner key={chave} onCanalAvisos={setCanalAvisos} />
       </AvisosProvider>
     </DisponibilidadeRevisionProvider>
   );

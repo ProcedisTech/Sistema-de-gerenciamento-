@@ -18,6 +18,8 @@ const CHAVES_SESSAO_NA_SAIDA = [
   'patientView',
   'patientDetailTab',
   'activeView',
+  'procedi_config_section',
+  'procedi_config_tab',
 ];
 const PREFIXOS_SESSAO_NA_SAIDA = ['procedi_bday_modal_'];
 
@@ -80,10 +82,10 @@ function signOutComLimite(scope, ms) {
 }
 
 /**
- * @param {{ setRoleUserId?: (id: string) => void, setOrgId?: (id: string) => void, clearOrgSession?: () => void }} [options]
+ * @param {{ setRoleUserId?: (id: string) => void, setOrgId?: (id: string) => void, clearOrgSession?: () => void, aoSairPorOutraAba?: () => void }} [options]
  */
 export const useAuthState = (options = {}) => {
-  const { setRoleUserId, clearOrgSession } = options;
+  const { setRoleUserId, clearOrgSession, aoSairPorOutraAba } = options;
   const { success: toastSuccess, info: toastInfo } = useToast();
 
   const [authReady, setAuthReady] = useState(false);
@@ -97,6 +99,8 @@ export const useAuthState = (options = {}) => {
   /** Canal próprio do app entre abas (BroadcastChannel 'procedi-sessao'). */
   const canalSessaoRef = useRef(null);
   const handleLogoutRef = useRef(null);
+  const aoSairPorOutraAbaRef = useRef(aoSairPorOutraAba);
+  aoSairPorOutraAbaRef.current = aoSairPorOutraAba;
   /** Guarda de uma saída: só sai quem está logado e não está saindo. */
   const isLoggedInRef = useRef(false);
   const saindoRef = useRef(false);
@@ -176,7 +180,7 @@ export const useAuthState = (options = {}) => {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         setLoginError(error.message || 'Usuário ou senha incorretos.');
-        return;
+        return false;
       }
       if (data.user) {
         setAuthUser({ id: data.user.id, email: data.user.email });
@@ -184,8 +188,10 @@ export const useAuthState = (options = {}) => {
       }
       setPassword('');
       toastSuccess('Login realizado com sucesso.');
+      return true;
     } catch (err) {
       setLoginError(err?.message || 'Não foi possível conectar. Tente novamente.');
+      return false;
     } finally {
       setLoginSubmitting(false);
     }
@@ -268,6 +274,7 @@ export const useAuthState = (options = {}) => {
         const { data } = await supabase.auth.getSession();
         if (!alive) return;
         if (data?.session?.user?.id === msg.userId) {
+          aoSairPorOutraAbaRef.current?.();
           handleLogoutRef.current?.({ scope: 'local' });
         }
       } catch {

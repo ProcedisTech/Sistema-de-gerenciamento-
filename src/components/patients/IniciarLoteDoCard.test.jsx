@@ -122,8 +122,7 @@ describe('Iniciar no card das 05:00 leva só as 05:00 (Ana 05:00 e 16:00)', () =
         detailTitleId="detail-title"
         closeDetail={vi.fn()}
         getPatientInitials={() => 'A'}
-        setPatientDetailTab={vi.fn()}
-        setPatientView={vi.fn()}
+        irPara={vi.fn()}
         onStartAttendance={onStartAttendance}
         agendaSchedule={{ handleAtualizarStatus: vi.fn(), handleEnviarWhatsApp: vi.fn(), openReagendarModal: vi.fn() }}
         previewAgendaSlot={A05}

@@ -10,6 +10,7 @@ import { limparAmbienteSnapshot } from '../../test/snapshotConsulta.jsx';
 import { IDS, agendaDto, pacienteDto } from '../../test/encerrar/cenariosEncerrar.js';
 import { TIMEOUT, assentarMuito, clicarBotao, montarApp } from '../../test/consulta/appConsulta.jsx';
 import { avisos } from '../../test/consulta/canalAvisosTeste.jsx';
+import { caminhos } from '../../rotas/caminhos.js';
 import { AVISO } from '../../services/avisos/tiposAviso.js';
 
 vi.mock('../../lib/supabaseClient.js', async () => (await import('../../test/encerrar/servidorEncerrarFalso.js')).supabaseFalso());
@@ -82,6 +83,7 @@ async function abrirPerfil({ aba, agendas = [], rotas = [] }) {
     agendas,
     rotas: [['GET', BLOCOS.procedimentos, () => [PROC]], ...rotas],
     sessao: { selectedPatientCpf: pacienteDto.cpf, patientView: 'profile', patientDetailTab: aba },
+    caminho: caminhos.paciente(IDS.PACIENTE, aba),
   });
   await assentarMuito(4);
   // daqui em diante o servidor responde com atraso, para a tela renderizar enquanto a rebusca está em voo

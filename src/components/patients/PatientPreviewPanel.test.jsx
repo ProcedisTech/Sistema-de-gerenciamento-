@@ -51,8 +51,7 @@ function renderPanel(patient) {
       detailTitleId="detail-title"
       closeDetail={vi.fn()}
       getPatientInitials={() => 'MT'}
-      setPatientDetailTab={vi.fn()}
-      setPatientView={vi.fn()}
+      irPara={vi.fn()}
     />,
   );
 }

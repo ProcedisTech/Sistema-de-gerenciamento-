@@ -8,6 +8,7 @@ import { limparAmbienteSnapshot } from '../../test/snapshotConsulta.jsx';
 import { IDS, pacienteDto } from '../../test/encerrar/cenariosEncerrar.js';
 import { TIMEOUT, assentarMuito, montarApp } from '../../test/consulta/appConsulta.jsx';
 import { avisos } from '../../test/consulta/canalAvisosTeste.jsx';
+import { caminhos } from '../../rotas/caminhos.js';
 import { AVISO } from '../../services/avisos/tiposAviso.js';
 
 vi.mock('../../lib/supabaseClient.js', async () => (await import('../../test/encerrar/servidorEncerrarFalso.js')).supabaseFalso());
@@ -38,6 +39,7 @@ async function abrir(estado) {
       })],
     ],
     sessao: { selectedPatientCpf: pacienteDto.cpf, patientView: 'profile', patientDetailTab: 'prontuario' },
+    caminho: caminhos.paciente(IDS.PACIENTE, 'prontuario'),
   });
   await assentarMuito(4);
   vi.stubGlobal('fetch', async (...args) => {

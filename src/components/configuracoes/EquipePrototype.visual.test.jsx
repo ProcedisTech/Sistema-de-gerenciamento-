@@ -2,7 +2,6 @@
 import React from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
-  render,
   screen,
   fireEvent,
   cleanup,
@@ -12,6 +11,7 @@ import {
 import { writeFileSync } from "node:fs";
 import fixtures from "../../test/fixtures/equipePrototype.json";
 import { GestaoUsuariosView } from "./GestaoUsuariosView";
+import { montarComRoteador } from "../../test/rotas/montarComRoteador.jsx";
 vi.mock("../../contexts/OrgContext", () => ({
   useOrg: () => ({ roleUserId: "dono-0" }),
 }));
@@ -134,7 +134,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 it("reproduz o painel com dados do HTML e conserva rascunho durante o editor", async () => {
-  render(<GestaoUsuariosView />);
+  montarComRoteador(<GestaoUsuariosView />, { caminho: "/equipe" });
   await screen.findByRole("button", { name: "Ver Eduarda Prado" });
   await waitFor(() =>
     expect(document.querySelector(".rail").textContent).toMatch(/2 de 5[23]/),
@@ -229,7 +229,7 @@ it("reproduz o painel com dados do HTML e conserva rascunho durante o editor", a
   expect(screen.getByLabelText("Perfil de acesso")).toHaveValue("sec1");
   fireEvent.click(screen.getByRole("button", { name: "Fechar convite" }));
   cleanup();
-  render(<GestaoUsuariosView initialTab="auditoria" />);
+  montarComRoteador(<GestaoUsuariosView />, { caminho: "/equipe/auditoria" });
   await screen.findByRole("button", { name: /Ver detalhes:/ });
   exportView("auditoria");
   fireEvent.click(screen.getByRole("button", { name: /Ver detalhes:/ }));

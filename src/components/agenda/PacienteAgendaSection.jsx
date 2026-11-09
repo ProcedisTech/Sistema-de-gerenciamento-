@@ -94,7 +94,6 @@ export function PacienteAgendaSection({
           variant="modal"
           hostMode="agenda"
           zIndex={240}
-          setPatientView={closeCreateModal}
           onClose={closeCreateModal}
           onSuccess={(patient) => {
             if (patient?.id) onSelect(String(patient.id), patient);

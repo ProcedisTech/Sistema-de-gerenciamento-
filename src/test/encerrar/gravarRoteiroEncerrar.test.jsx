@@ -14,15 +14,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import React from 'react';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { assentar, limparAmbienteSnapshot, prepararAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { criarServidorEncerrarFalso } from './servidorEncerrarFalso.js';
 import { IDS, agendaDto, catalogoClinica, marcar, pacienteDto, tiposProcedimento } from './cenariosEncerrar.js';
 import { PNG_A_BASE64, PNG_B_BASE64, arquivoPng, limparMidia, prepararMidia } from './ambienteMidia.js';
 import { PERMISSOES } from '../../constants/permissoes.js';
-import { ToastProvider } from '../../contexts/ToastContext.jsx';
 import AppRoot from '../../components/AppRoot.jsx';
+import { caminhoDoLegado, montarComRoteador } from '../rotas/montarComRoteador.jsx';
 
 vi.mock('../../lib/supabaseClient.js', async () => (await import('./servidorEncerrarFalso.js')).supabaseFalso());
 
@@ -196,11 +196,7 @@ async function montarApp({ agendas = [], rotas = [], agora = INSTANTE_PADRAO, vi
     rotas: [...rotas, ...rotasBase({ agendas })],
   });
   vi.stubGlobal('fetch', srv.fetchFalso);
-  render(
-    <ToastProvider>
-      <AppRoot />
-    </ToastProvider>,
-  );
+  montarComRoteador(<AppRoot />, { caminho: caminhoDoLegado({ view, sessao: {} }) });
   await assentarMuito(6);
   return srv;
 }
