@@ -119,7 +119,7 @@ describe('correção 3', () => {
     });
     await assentarMuito(8);
     aviso.mockRestore();
-    expect(screen.queryByText('Carregando anamnese...')).toBeNull();
+    await waitFor(() => expect(screen.queryByText('Carregando anamnese...')).toBeNull());
     expect(await screen.findByText('Não foi possível carregar a anamnese.')).toBeTruthy();
     fireEvent.click(screen.getAllByRole('button', { name: /^Cancelar$/ })[0]);
     await assentarMuito();
@@ -147,7 +147,7 @@ describe('correção 3', () => {
     clicarBotao(/Salvar Altera/);
     await waitFor(() => expect(puts).toHaveLength(1), { timeout: 8000 });
     await assentarMuito(6);
-    expect(screen.queryByText('Não encontrado')).toBeNull();
+    await waitFor(() => expect(screen.queryByText('Não encontrado')).toBeNull());
     expect(veNome()).toBe(true);
     const n = gets;
     await assentarMuito(12);

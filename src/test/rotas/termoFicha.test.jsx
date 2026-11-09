@@ -40,11 +40,11 @@ describe('termos e fichas pelo endereço', () => {
   it('Novo termo empilha /termos/novo e Voltar volta à lista', async () => {
     montar(<TermosManager />, '/configuracoes/termos');
     fireEvent.click(await screen.findByRole('button', { name: /Novo Termo/ }));
-    expect(aqui()).toBe('/configuracoes/termos/novo');
+    await waitFor(() => expect(aqui()).toBe('/configuracoes/termos/novo'));
     expect(await screen.findByText('Novo Termo', { selector: 'h2,h3,h1,div,p,span' })).toBeTruthy();
     fireEvent.click(screen.getAllByRole('button', { name: /Voltar/ })[0]);
-    expect(aqui()).toBe('/configuracoes/termos');
-    expect(roteador.state.historyAction).toBe('PUSH');
+    await waitFor(() => expect(aqui()).toBe('/configuracoes/termos'));
+    await waitFor(() => expect(roteador.state.historyAction).toBe('PUSH'));
   });
 
   it('termo inexistente mostra Não encontrado', async () => {
@@ -72,8 +72,8 @@ describe('termos: histórico do navegador', () => {
     await waitFor(() => expect(screen.getByDisplayValue('Termo Sete')).toBeTruthy());
     await act(async () => { await roteador.navigate(-1); });
     await act(async () => { await roteador.navigate(-1); });
-    expect(aqui()).toBe('/configuracoes/termos/novo');
-    expect(screen.queryByDisplayValue('Termo Sete')).toBeNull();
+    await waitFor(() => expect(aqui()).toBe('/configuracoes/termos/novo'));
+    await waitFor(() => expect(screen.queryByDisplayValue('Termo Sete')).toBeNull());
   });
 
   const abrirSete = async () => {
@@ -87,7 +87,7 @@ describe('termos: histórico do navegador', () => {
     const campo = await abrirSete();
     fireEvent.change(campo, { target: { value: 'Termo Sete editado' } });
     await act(async () => { await roteador.navigate(-1); });
-    expect(aqui()).toBe('/configuracoes/termos');
+    await waitFor(() => expect(aqui()).toBe('/configuracoes/termos'));
     await act(async () => { await roteador.navigate(1); });
     expect(await screen.findByDisplayValue('Termo Sete editado')).toBeTruthy();
   });
@@ -96,13 +96,13 @@ describe('termos: histórico do navegador', () => {
     montar(<TermosManager />, '/configuracoes/termos');
     fireEvent.click(await screen.findByRole('button', { name: /Usar Template/ }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /Template LGPD/ }));
-    expect(aqui()).toBe('/configuracoes/termos/novo');
+    await waitFor(() => expect(aqui()).toBe('/configuracoes/termos/novo'));
     fireEvent.click(screen.getByRole('button', { name: /Salvar|Criar/ }));
     await waitFor(() => expect(termosApi.create).toHaveBeenCalled());
     await waitFor(() => expect(aqui()).toBe('/configuracoes/termos'));
-    expect(roteador.state.historyAction).toBe('REPLACE');
+    await waitFor(() => expect(roteador.state.historyAction).toBe('REPLACE'));
     await act(async () => { await roteador.navigate(-1); });
-    expect(aqui()).not.toBe('/configuracoes/termos/novo');
+    await waitFor(() => expect(aqui()).not.toBe('/configuracoes/termos/novo'));
   });
 
   it('salvar descarta o rascunho: Voltar ao termo mostra o salvo', async () => {
@@ -114,7 +114,7 @@ describe('termos: histórico do navegador', () => {
     // salvar substitui o editor no histórico (Voltar não o reabre); reabrir mostra o salvo, não o rascunho
     await screen.findByText('Termo Sete');
     fireEvent.click(screen.getAllByRole('button', { name: 'Editar' })[0]);
-    expect(aqui()).toBe('/configuracoes/termos/7');
+    await waitFor(() => expect(aqui()).toBe('/configuracoes/termos/7'));
     expect(await screen.findByDisplayValue('Termo Sete')).toBeTruthy();
   });
 });

@@ -1,6 +1,6 @@
 // Junção do #350 (equipe/RBAC/auditoria) com as rotas: o App real, só por endereço.
 import React from 'react';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
@@ -52,9 +52,9 @@ describe('junção #350 x rotas', () => {
 
   it('(a) /auditoria sem permissão cai em /pacientes com replace', async () => {
     await montarApp({ caminho: '/auditoria', rotas: rotas(), permissoes: semAuditoria });
-    expect(screen.queryByText('Auditoria da clínica')).not.toBeInTheDocument();
-    expect(local()).toBe('/pacientes');
-    expect(acao()).toBe('REPLACE');
+    await waitFor(() => expect(local()).toBe('/pacientes'));
+    await waitFor(() => expect(screen.queryByText('Auditoria da clínica')).not.toBeInTheDocument());
+    await waitFor(() => expect(acao()).toBe('REPLACE'));
   }, TIMEOUT);
 
   it('(a) item Auditoria da Sidebar empilha (push) em /auditoria', async () => {

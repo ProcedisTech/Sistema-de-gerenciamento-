@@ -1,5 +1,5 @@
 /** "Sair" no menu: vai para /entrar, grava a marca de saída manual, remonta a árvore e o novo login cai em /pacientes. */
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { IDS, agendaDto } from '../encerrar/cenariosEncerrar.js';
@@ -42,7 +42,7 @@ describe('Sair pelo menu', () => {
     });
     await iniciarPeloPaciente();
     expect(emConsulta()).toBe(true);
-    expect(chaves).toEqual(['inicial']);
+    await waitFor(() => expect(chaves).toEqual(['inicial']));
     const r = ultimoRoteador();
     // Dentro da consulta o menu fica escondido: sai dela com "Apenas Sair" (a consulta segue aberta no servidor).
     clicarBotao(/Encerrar consulta/);
@@ -53,20 +53,20 @@ describe('Sair pelo menu', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /Sair do sistema/i })[0]);
     await assentarMuito(8);
 
-    expect(r.state.location.pathname).toBe(caminhos.entrar());
-    expect(sessionStorage.getItem('procedi_saida_manual')).toBe('1');
-    expect(screen.getByText('Entrar no Sistema')).toBeTruthy();
-    expect(chaves).toEqual(['inicial', 'anon']);
+    await waitFor(() => expect(r.state.location.pathname).toBe(caminhos.entrar()));
+    await waitFor(() => expect(sessionStorage.getItem('procedi_saida_manual')).toBe('1'));
+    expect(await screen.findByText('Entrar no Sistema')).toBeTruthy();
+    await waitFor(() => expect(chaves).toEqual(['inicial', 'anon']));
 
     fireEvent.change(screen.getByPlaceholderText('E-mail ou nome cadastrado'), { target: { value: 'usr-1@teste.com' } });
     fireEvent.change(screen.getByPlaceholderText('Sua senha'), { target: { value: 'segredo' } });
     fireEvent.click(screen.getByText('Entrar no Sistema'));
     await assentarMuito(8);
 
-    expect(r.state.location.pathname).toBe(caminhos.pacientes());
-    expect(sessionStorage.getItem('procedi_saida_manual')).toBeNull();
-    expect(screen.queryByText('Entrar no Sistema')).toBeNull();
-    expect(emConsulta()).toBe(false);
-    expect(chaves).toEqual(['inicial', 'anon', 'usr-1']);
+    await waitFor(() => expect(r.state.location.pathname).toBe(caminhos.pacientes()));
+    await waitFor(() => expect(sessionStorage.getItem('procedi_saida_manual')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('Entrar no Sistema')).toBeNull());
+    await waitFor(() => expect(emConsulta()).toBe(false));
+    await waitFor(() => expect(chaves).toEqual(['inicial', 'anon', 'usr-1']));
   }, TIMEOUT);
 });

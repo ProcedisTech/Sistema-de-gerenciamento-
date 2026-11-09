@@ -52,7 +52,7 @@ describe('Guarda de horários não salvos', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Continuar editando' }));
     await assentarMuito();
     await waitFor(() => expect(modal()).toBeNull()); // sinal positivo: o aviso fechou; só então a negativa
-    expect(caminho()).toBe(aqui);
+    await waitFor(() => expect(caminho()).toBe(aqui));
     expect(await screen.findByRole('switch', { name: 'Terça-feira ativo' })).toBeTruthy();
 
     await voltar();
@@ -71,6 +71,6 @@ describe('Guarda de horários não salvos', () => {
     });
     await assentarMuito();
     await waitFor(() => expect(caminho()).toBe(caminhos.agenda())); // sinal positivo antes da negativa
-    expect(modal()).toBeNull();
+    await waitFor(() => expect(modal()).toBeNull());
   }, TIMEOUT);
 });

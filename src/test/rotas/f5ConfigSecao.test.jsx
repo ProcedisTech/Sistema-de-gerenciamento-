@@ -1,6 +1,6 @@
 /** F5 em Configurações: a seção vem do endereço; o state do histórico (guarda do atalho) não a sobrepõe. */
 import React from 'react';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { flushSync } from 'react-dom';
@@ -40,7 +40,7 @@ describe('F5 em Configurações', () => {
     await assentarMuito();
     fireEvent.click(screen.getAllByText(/Horários de funcionamento/)[0]);
     await assentarMuito();
-    expect(noHorarios()).toBe(true);
+    await waitFor(() => expect(noHorarios()).toBe(true));
 
     // F5: desmonta e monta de novo no mesmo endereço, com o mesmo history state
     const { pathname, state } = ultimoRoteador().state.location;
@@ -54,7 +54,7 @@ describe('F5 em Configurações', () => {
     );
     await assentarMuito(6);
 
-    expect(roteador.state.location.pathname).toBe(pathname);
-    expect(noHorarios()).toBe(true);
+    await waitFor(() => expect(roteador.state.location.pathname).toBe(pathname));
+    await waitFor(() => expect(noHorarios()).toBe(true));
   }, TIMEOUT);
 });

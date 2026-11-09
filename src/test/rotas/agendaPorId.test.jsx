@@ -1,5 +1,5 @@
 /** Detalhe do agendamento pelo endereço: abrir empilha /agenda/<id>; F5 reabre; id inexistente mostra "Não encontrado". */
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { IDS, agendaDto } from '../encerrar/cenariosEncerrar.js';
@@ -37,7 +37,7 @@ describe('detalhe do agendamento pelo endereço', () => {
     await assentarMuito(8);
     expect(r.state.location.pathname).toBe('/agenda');
     expect(r.state.historyAction).toBe('PUSH');
-    expect(screen.queryAllByRole('button', { name: FECHAR })).toHaveLength(0);
+    await waitFor(() => expect(screen.queryAllByRole('button', { name: FECHAR })).toHaveLength(0));
 
     fireEvent.click(screen.getAllByRole('button', { name: /^Detalhes: / })[0]);
     await assentarMuito(8);
@@ -52,7 +52,7 @@ describe('detalhe do agendamento pelo endereço', () => {
     const r = ultimoRoteador();
     await r.navigate(caminhos.agenda());
     await assentarMuito(8);
-    expect(screen.queryAllByRole('button', { name: FECHAR })).toHaveLength(0);
+    await waitFor(() => expect(screen.queryAllByRole('button', { name: FECHAR })).toHaveLength(0));
 
     await r.navigate(caminhos.agenda(IDS.AGENDA_1));
     await assentarMuito(8);
@@ -60,14 +60,14 @@ describe('detalhe do agendamento pelo endereço', () => {
     expect(screen.getAllByRole('button', { name: FECHAR }).length).toBeGreaterThan(0);
     await r.navigate(-1);
     await assentarMuito(8);
-    expect(screen.queryAllByRole('button', { name: FECHAR })).toHaveLength(0);
+    await waitFor(() => expect(screen.queryAllByRole('button', { name: FECHAR })).toHaveLength(0));
   }, TIMEOUT);
 
   it('id inexistente (404): "Não encontrado" no lugar do detalhe, sem quebrar', async () => {
     await montarApp({ view: 'agenda', caminho: caminhos.agenda('inexistente'), agendas: [dto], rotas: rota404 });
     await assentarMuito(8);
     expect(screen.getByText('Não encontrado')).toBeTruthy();
-    expect(screen.queryAllByRole('button', { name: FECHAR })).toHaveLength(0);
+    await waitFor(() => expect(screen.queryAllByRole('button', { name: FECHAR })).toHaveLength(0));
   }, TIMEOUT);
 
   it('horário vazio da semana: sem detalhe aberto não empilha /agenda; com detalhe aberto, fecha empilhando', async () => {

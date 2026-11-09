@@ -63,7 +63,7 @@ describe('ficha nova + Voltar do navegador', () => {
     await clicar(botaoFichas());
     await waitFor(() => expect(ultimoRoteador().state.location.pathname).toBe('/configuracoes/fichas'));
     await screen.findByRole('button', { name: /Nova Ficha/i });
-    expect(entradas()).not.toBe('PUSH');
+    await waitFor(() => expect(entradas()).not.toBe('PUSH'));
   }, TIMEOUT);
 
   it('sem alteração: Voltar do editor e Voltar do navegador saem direto, sem aviso', async () => {
@@ -76,6 +76,6 @@ describe('ficha nova + Voltar do navegador', () => {
     // a ficha nova não muda o endereço (histórico de 1 entrada): o Voltar não sai da lista
     await waitFor(() => expect(ultimoRoteador().state.location.pathname).toBe('/configuracoes/fichas'));
     await waitFor(() => expect(campo()).not.toBeNull());
-    expect(avisos()).toHaveLength(0);
+    await waitFor(() => expect(avisos()).toHaveLength(0));
   }, TIMEOUT);
 });

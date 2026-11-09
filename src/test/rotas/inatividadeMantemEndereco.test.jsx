@@ -1,5 +1,5 @@
 /** Saída involuntária (inatividade, auth:expired local): mantém o endereço, não grava a marca e NÃO remonta a árvore. */
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { TIMEOUT, assentarMuito, montarApp } from '../consulta/appConsulta.jsx';
@@ -35,7 +35,7 @@ describe('inatividade mantém o endereço', () => {
     await montarApp({ view: 'agenda' });
     const r = ultimoRoteador();
     expect(r.state.location.pathname).toBe(caminhos.agenda());
-    expect(screen.queryByText('Entrar no Sistema')).toBeNull();
+    await waitFor(() => expect(screen.queryByText('Entrar no Sistema')).toBeNull());
     expect(chaves).toEqual(['inicial']);
     const visitados = [];
     r.subscribe((s) => visitados.push(s.location.pathname));
@@ -44,8 +44,8 @@ describe('inatividade mantém o endereço', () => {
     await assentarMuito(8);
 
     expect(screen.getByText('Entrar no Sistema')).toBeTruthy();
-    expect(r.state.location.pathname).toBe(caminhos.agenda());
-    expect(sessionStorage.getItem('procedi_saida_manual')).toBeNull();
+    await waitFor(() => expect(r.state.location.pathname).toBe(caminhos.agenda()));
+    await waitFor(() => expect(sessionStorage.getItem('procedi_saida_manual')).toBeNull());
     expect(chaves).toEqual(['inicial']);
 
     fireEvent.change(screen.getByPlaceholderText('E-mail ou nome cadastrado'), { target: { value: 'usr-1@teste.com' } });
@@ -53,9 +53,9 @@ describe('inatividade mantém o endereço', () => {
     fireEvent.click(screen.getByText('Entrar no Sistema'));
     await assentarMuito(8);
 
-    expect(screen.queryByText('Entrar no Sistema')).toBeNull();
-    expect(r.state.location.pathname).toBe(caminhos.agenda());
-    expect(visitados).not.toContain('/entrar');
+    await waitFor(() => expect(screen.queryByText('Entrar no Sistema')).toBeNull());
+    await waitFor(() => expect(r.state.location.pathname).toBe(caminhos.agenda()));
+    await waitFor(() => expect(visitados).not.toContain('/entrar'));
     expect(chaves).toEqual(['inicial']); // Inner não remontou
   }, TIMEOUT);
 });

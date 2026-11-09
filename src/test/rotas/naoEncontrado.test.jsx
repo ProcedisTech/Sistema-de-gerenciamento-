@@ -1,5 +1,5 @@
 /** Caminho desconhecido logado: "Página não encontrada" dentro do shell; /entrar logado sem marca volta a /pacientes. */
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { TIMEOUT, assentarMuito, montarApp } from '../consulta/appConsulta.jsx';
@@ -30,8 +30,8 @@ describe('rota desconhecida e /entrar logado', () => {
 
     fireEvent.click(screen.getByText('Ir para Pacientes'));
     await assentarMuito(8);
-    expect(r.state.location.pathname).toBe(caminhos.pacientes());
-    expect(screen.queryByText('Página não encontrada')).toBeNull();
+    await waitFor(() => expect(r.state.location.pathname).toBe(caminhos.pacientes()));
+    await waitFor(() => expect(screen.queryByText('Página não encontrada')).toBeNull());
   }, TIMEOUT);
 
   it('/entrar logado sem marca de saída manual → /pacientes (replace)', async () => {
@@ -41,7 +41,7 @@ describe('rota desconhecida e /entrar logado', () => {
     await r.navigate(caminhos.entrar());
     await assentarMuito(8);
 
-    expect(r.state.location.pathname).toBe(caminhos.pacientes());
-    expect(r.state.historyAction).toBe('REPLACE');
+    await waitFor(() => expect(r.state.location.pathname).toBe(caminhos.pacientes()));
+    await waitFor(() => expect(r.state.historyAction).toBe('REPLACE'));
   }, TIMEOUT);
 });

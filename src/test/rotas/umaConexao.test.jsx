@@ -1,5 +1,5 @@
 /** Navegar pelo menu não remonta o AvisosProvider: um leitor (uma conexão SSE) por aba. */
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { assentarMuito, montarApp, TIMEOUT } from '../consulta/appConsulta.jsx';
@@ -34,10 +34,10 @@ describe('Uma conexão de avisos por aba', () => {
     for (const [nome, caminho] of [[/^Agenda$/, caminhos.agenda()], [/^Equipe$/, caminhos.equipe()], [/^Configurações$/, caminhos.configuracoes()]]) {
       fireEvent.click(screen.getAllByRole('button', { name: nome })[0]);
       await assentarMuito();
-      expect(ultimoRoteador().state.location.pathname).toBe(caminho);
+      await waitFor(() => expect(ultimoRoteador().state.location.pathname).toBe(caminho));
     }
 
-    expect(leitores.criados).toBe(1);
-    expect(leitores.parados).toBe(0);
+    await waitFor(() => expect(leitores.criados).toBe(1));
+    await waitFor(() => expect(leitores.parados).toBe(0));
   }, TIMEOUT);
 });

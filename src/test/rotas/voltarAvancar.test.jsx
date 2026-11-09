@@ -1,5 +1,5 @@
 /** Menu lateral empilha histórico: Voltar/Avançar do navegador andam tela a tela e o app nunca sai. */
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { assentarMuito, montarApp, TIMEOUT } from '../consulta/appConsulta.jsx';
@@ -30,39 +30,39 @@ afterEach(() => {
 describe('Voltar e Avançar entre telas do menu', () => {
   it('Pacientes > Agenda > Equipe > Configurações; voltar volta tela a tela; avançar avança', async () => {
     await montarApp({ view: 'pacientes' });
-    expect(caminho()).toBe(caminhos.pacientes());
+    await waitFor(() => expect(caminho()).toBe(caminhos.pacientes()));
 
     await clicarMenu(/^Agenda$/);
-    expect(caminho()).toBe(caminhos.agenda());
+    await waitFor(() => expect(caminho()).toBe(caminhos.agenda()));
     expect(screen.getAllByText('Dia livre').length).toBeGreaterThan(0);
 
     await clicarMenu(/^Equipe$/);
-    expect(caminho()).toBe(caminhos.equipe());
+    await waitFor(() => expect(caminho()).toBe(caminhos.equipe()));
     expect(await screen.findByLabelText('Filtros rápidos de status')).toBeTruthy();
 
     await clicarMenu(/^Configurações$/);
-    expect(caminho()).toBe(caminhos.configuracoes());
+    await waitFor(() => expect(caminho()).toBe(caminhos.configuracoes()));
     expect(screen.getAllByText('Selecione uma área para configurar').length).toBeGreaterThan(0);
 
     await irPara(-1);
-    expect(caminho()).toBe(caminhos.equipe());
+    await waitFor(() => expect(caminho()).toBe(caminhos.equipe()));
     expect(await screen.findByLabelText('Filtros rápidos de status')).toBeTruthy();
 
     await irPara(-1);
-    expect(caminho()).toBe(caminhos.agenda());
+    await waitFor(() => expect(caminho()).toBe(caminhos.agenda()));
     expect(screen.getAllByText('Dia livre').length).toBeGreaterThan(0);
 
     await irPara(-1);
-    expect(caminho()).toBe(caminhos.pacientes());
+    await waitFor(() => expect(caminho()).toBe(caminhos.pacientes()));
     expect(screen.getAllByText('Próximos aniversários').length).toBeGreaterThan(0);
 
     await irPara(1);
-    expect(caminho()).toBe(caminhos.agenda());
+    await waitFor(() => expect(caminho()).toBe(caminhos.agenda()));
     expect(screen.getAllByText('Dia livre').length).toBeGreaterThan(0);
 
     await irPara(1);
     await irPara(1);
-    expect(caminho()).toBe(caminhos.configuracoes());
+    await waitFor(() => expect(caminho()).toBe(caminhos.configuracoes()));
     expect(screen.getAllByText('Selecione uma área para configurar').length).toBeGreaterThan(0);
   }, TIMEOUT);
 });

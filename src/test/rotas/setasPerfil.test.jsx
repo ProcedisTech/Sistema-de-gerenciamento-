@@ -39,9 +39,9 @@ describe('setas do perfil navegam por endereço', () => {
     await waitFor(() => expect(result.current.patientListItems).toHaveLength(2));
     act(() => result.current.captureProfileNavSnapshot('00000000001'));
     await act(async () => { await result.current.navigateProfilePatient(1); });
-    expect(espiao.loc.pathname).toBe('/pacientes/2');
+    await waitFor(() => expect(espiao.loc.pathname).toBe('/pacientes/2'));
     act(() => espiao.navigate(-1)); // empilhou: voltar leva ao anterior
-    expect(espiao.loc.pathname).toBe('/pacientes/1');
+    await waitFor(() => expect(espiao.loc.pathname).toBe('/pacientes/1'));
   });
 
   it('cruzar página busca a vizinha no clique e vai ao primeiro id dela', async () => {
@@ -53,9 +53,9 @@ describe('setas do perfil navegam por endereço', () => {
     pacientesApi.list.mockResolvedValue(pagina([3, 4], 1, true));
     await act(async () => { await result.current.navigateProfilePatient(1); });
     expect(pacientesApi.list).toHaveBeenCalledWith(expect.objectContaining({ page: 1 }));
-    expect(espiao.loc.pathname).toBe('/pacientes/3');
+    await waitFor(() => expect(espiao.loc.pathname).toBe('/pacientes/3'));
     act(() => espiao.navigate(-1));
-    expect(espiao.loc.pathname).toBe('/pacientes/2');
+    await waitFor(() => expect(espiao.loc.pathname).toBe('/pacientes/2'));
   });
 
   it('falha na busca da página vizinha não navega', async () => {
@@ -66,6 +66,6 @@ describe('setas do perfil navegam por endereço', () => {
     pacientesApi.list.mockRejectedValue(new Error('x'));
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     await act(async () => { await result.current.navigateProfilePatient(1); });
-    expect(espiao.loc.pathname).toBe('/pacientes/2');
+    await waitFor(() => expect(espiao.loc.pathname).toBe('/pacientes/2'));
   });
 });

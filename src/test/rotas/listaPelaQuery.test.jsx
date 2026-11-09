@@ -1,5 +1,5 @@
 import { createElement, useEffect, useState } from 'react';
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import { usePatientState } from '../../components/hooks/usePatientState.js';
@@ -47,7 +47,7 @@ describe('lista de pacientes lida do endereço', () => {
     act(() => m.result.current.setEhNovoFilter(true));
     const loc = m.roteador().state.location;
     expect(loc.pathname + loc.search).toBe('/pacientes?filtro=novos');
-    expect(m.roteador().state.historyAction).toBe('REPLACE');
+    await waitFor(() => expect(m.roteador().state.historyAction).toBe('REPLACE'));
     expect(antes).not.toBe('REPLACE');
     expect(m.result.current.ehNovoFilter).toBe(true);
     expect(m.result.current.patientListPage).toBe(0);

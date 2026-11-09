@@ -1,5 +1,5 @@
 /** Correção 6: paciente que não carrega, plano com busca falhando e encerramento com a recarga da Agenda falhando. */
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { IDS, agendaDto } from '../encerrar/cenariosEncerrar.js';
@@ -47,11 +47,11 @@ describe('Correção 6', () => {
       rotas: [['GET', new RegExp(`^/api/v1/pacientes/${ID_FORA}$`), erro500]],
     });
     await assentarMuito(6);
-    expect(temTexto('Não foi possível carregar o paciente')).toBe(true);
-    expect(temTexto('Carregando paciente')).toBe(false);
+    await waitFor(() => expect(temTexto('Não foi possível carregar o paciente')).toBe(true));
+    await waitFor(() => expect(temTexto('Carregando paciente')).toBe(false));
     clicarBotao(/^Voltar$/);
     await assentarMuito();
-    expect(caminho()).toBe('/pacientes');
+    await waitFor(() => expect(caminho()).toBe('/pacientes'));
   }, TIMEOUT);
 
   it('2) plano do endereço com a busca de planos em erro: não mostra "Não encontrado"', async () => {
@@ -60,7 +60,7 @@ describe('Correção 6', () => {
       rotas: [['GET', /^\/api\/v1\/planejamentos$/, erro500]],
     });
     await assentarMuito(8);
-    expect(screen.queryByText('Não encontrado')).toBeNull();
+    await waitFor(() => expect(screen.queryByText('Não encontrado')).toBeNull());
   }, TIMEOUT);
 
   it('3) encerrar com a recarga da Agenda falhando depois de gravar: sai da consulta para o perfil', async () => {
@@ -87,8 +87,8 @@ describe('Correção 6', () => {
     clicarBotao(/^Finalizar Atendimento$/);
     await assentarMuito(10);
     expect(srv.escritasConsulta.some((e) => /encerrar$/.test(e.path))).toBe(true);
-    expect(emConsulta()).toBe(false);
-    expect(caminho()).not.toBe('/consulta');
-    expect(caminho()).toMatch(new RegExp(`^/pacientes/${IDS.PACIENTE}`));
+    await waitFor(() => expect(emConsulta()).toBe(false));
+    await waitFor(() => expect(caminho()).not.toBe('/consulta'));
+    await waitFor(() => expect(caminho()).toMatch(new RegExp(`^/pacientes/${IDS.PACIENTE}`)));
   }, TIMEOUT);
 });

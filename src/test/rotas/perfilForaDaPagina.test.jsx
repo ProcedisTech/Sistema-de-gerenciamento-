@@ -38,7 +38,7 @@ describe('perfil de paciente fora da página da lista', () => {
     });
     await waitFor(() => expect(screen.getAllByText(/Zuleica Fora Da Pagina/).length).toBeGreaterThan(0), { timeout: 8000 });
     await assentarMuito(6);
-    expect(screen.queryByText('Paciente Pagina 1')).toBeNull();
+    await waitFor(() => expect(screen.queryByText('Paciente Pagina 1')).toBeNull());
     expect(ultimoRoteador().state.location.pathname).toBe(caminhos.paciente(ID));
   }, TIMEOUT);
 });

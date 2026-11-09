@@ -59,8 +59,8 @@ describe('Onda 3 Configurações: lacunas', () => {
     expect(itemLateral).toBeTruthy();
     fireEvent.click(itemLateral);
     await assentarMuito();
-    expect(avisos()).toHaveLength(0);
-    expect(caminho()).toBe('/configuracoes/horarios');
+    await waitFor(() => expect(caminho()).toBe('/configuracoes/horarios'));
+    await waitFor(() => expect(avisos()).toHaveLength(0));
     expect(screen.getByRole('switch', { name: 'Terça-feira ativo' })).toBeTruthy();
   }, TIMEOUT);
 
@@ -69,13 +69,13 @@ describe('Onda 3 Configurações: lacunas', () => {
     await sujar();
     fireEvent.click(screen.getAllByRole('button', { name: 'Abrir dados da clínica' })[0]);
     await assentarMuito();
-    expect(avisos()).toHaveLength(0);
-    expect(caminho()).toBe('/configuracoes/clinica');
-    expect(noHorarios()).toBe(false);
+    await waitFor(() => expect(caminho()).toBe('/configuracoes/clinica'));
+    await waitFor(() => expect(avisos()).toHaveLength(0));
+    await waitFor(() => expect(noHorarios()).toBe(false));
     // ACHADO (documentado, não corrigido): o "sujo" do App não zera ao pular para Clínica sem guarda; Voltar mostra aviso fantasma.
     await voltar();
-    expect(avisos()).toHaveLength(1);
-    expect(caminho()).toBe('/configuracoes/clinica');
+    await waitFor(() => expect(avisos()).toHaveLength(1));
+    await waitFor(() => expect(caminho()).toBe('/configuracoes/clinica'));
     fireEvent.click(screen.getByRole('button', { name: 'Sair sem salvar' }));
     await assentarMuito();
     expect(caminho()).toBe('/configuracoes/horarios');
@@ -83,8 +83,8 @@ describe('Onda 3 Configurações: lacunas', () => {
     await sujar();
     fireEvent.click(screen.getAllByRole('button', { name: 'Abrir perfil do profissional' })[0]);
     await assentarMuito();
-    expect(avisos()).toHaveLength(0);
-    expect(caminho()).toBe('/configuracoes/meu-perfil');
+    await waitFor(() => expect(caminho()).toBe('/configuracoes/meu-perfil'));
+    await waitFor(() => expect(avisos()).toHaveLength(0));
   }, TIMEOUT);
 
   it('4) atalho do catálogo (clique real na notificação) abre /configuracoes/procedimentos; métodos de assinatura idem pelo mesmo irParaTela', async () => {
@@ -101,14 +101,14 @@ describe('Onda 3 Configurações: lacunas', () => {
     fireEvent.click(card);
     await assentarMuito();
     await assentarMuito(4);
-    expect(caminho()).toBe('/configuracoes/procedimentos');
-    expect(naoEhHub()).toBe(true);
+    await waitFor(() => expect(caminho()).toBe('/configuracoes/procedimentos'));
+    await waitFor(() => expect(naoEhHub()).toBe(true));
     // Métodos de assinatura: o handler fica no Step4LGPD (consulta); aqui só o mesmo irParaTela(guarda+secao) via navegação.
     const { caminhos } = await import('../../rotas/caminhos.js');
     act(() => { ultimoRoteador().navigate(caminhos.configuracoes('metodos-assinatura'), { state: { guarda: true } }); });
     await assentarMuito();
-    expect(caminho()).toBe('/configuracoes/metodos-de-assinatura');
-    expect(naoEhHub()).toBe(true);
+    await waitFor(() => expect(caminho()).toBe('/configuracoes/metodos-de-assinatura'));
+    await waitFor(() => expect(naoEhHub()).toBe(true));
   }, TIMEOUT);
 });
 
@@ -129,7 +129,7 @@ describe('Termos: lacunas', () => {
     await screen.findByText('Novo Termo', { selector: 'h2,h3,h1,div,p,span' });
     act(() => { r.navigate(-1); });
     await waitFor(() => expect(r.state.location.pathname).toBe('/configuracoes/termos'));
-    expect(screen.queryByText('Novo Termo', { selector: 'h2,h3,h1' })).toBeNull();
+    await waitFor(() => expect(screen.queryByText('Novo Termo', { selector: 'h2,h3,h1' })).toBeNull());
     act(() => { r.navigate(1); });
     await waitFor(() => expect(r.state.location.pathname).toBe('/configuracoes/termos/novo'));
     expect(await screen.findByText('Novo Termo', { selector: 'h2,h3,h1,div,p,span' })).toBeTruthy();

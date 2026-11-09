@@ -58,7 +58,7 @@ describe('Anamnese por endereço', () => {
     await assentarMuito();
     expect(caminhoAtual()).toBe(caminhos.pacienteAnamnese(P, AN(2)));
     expect(ultimoRoteador().state.historyAction).toBe('PUSH');
-    expect(screen.queryByText('Modificar anamnese')).toBeNull();
+    await waitFor(() => expect(screen.queryByText('Modificar anamnese')).toBeNull());
     await waitFor(() => expect(screen.getByRole('combobox').value).toBe(AN(2)));
   }, TIMEOUT);
 
@@ -77,8 +77,8 @@ describe('Anamnese por endereço', () => {
     const rotas = rotasAnamnese.map((r) => (String(r[1]).includes('AN-') ? ['GET', r[1], async (ctx) => { await segurado; return r[2](ctx); }] : r));
     await montar(caminhos.pacienteAnamnese(P, AN(2), { editar: true }), rotas);
     await assentarMuito();
-    expect(screen.queryByRole('button', { name: /Salvar Altera/ })).toBeNull();
-    expect(screen.queryByText('Modificar anamnese')).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Salvar Altera/ })).toBeNull());
+    await waitFor(() => expect(screen.queryByText('Modificar anamnese')).toBeNull());
     liberar();
     expect(await screen.findByText('Modificar anamnese')).toBeTruthy();
     expect(screen.getByRole('button', { name: /Salvar Altera/ })).toBeTruthy();
@@ -88,7 +88,7 @@ describe('Anamnese por endereço', () => {
     const rotas = rotasAnamnese.map((r) => (String(r[1]).includes('fichas') ? ['GET', r[1], () => ({ status: 500, corpo: { error: 'Erro interno', status: 500 } })] : r));
     await montar(caminhos.pacienteAnamnese(P, AN(2), { editar: true }), rotas);
     expect(await screen.findByText('Não foi possível carregar a anamnese.')).toBeTruthy();
-    expect(screen.queryByText('Carregando anamnese...')).toBeNull();
+    await waitFor(() => expect(screen.queryByText('Carregando anamnese...')).toBeNull());
     fireEvent.click(screen.getAllByRole('button', { name: /^Cancelar$/ })[0]);
     await assentarMuito();
     expect(caminhoAtual()).toBe(caminhos.pacienteAnamnese(P, AN(2)));
@@ -111,7 +111,7 @@ describe('Anamnese por endereço', () => {
   it('anamnese inexistente no endereço mostra Não encontrado', async () => {
     await montar(caminhos.pacienteAnamnese(P, 'AN-99'));
     expect(await screen.findByText('Não encontrado')).toBeTruthy();
-    expect(screen.queryByRole('combobox')).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('combobox')).toBeNull());
   }, TIMEOUT);
 });
 
@@ -130,7 +130,7 @@ describe('Plano por endereço', () => {
   it('plano inexistente no endereço mostra Não encontrado', async () => {
     await montar(caminhos.pacientePlano(P, PLANO(9).id), rotasPlano([PLANO(1), PLANO(2)]));
     expect(await screen.findByText('Não encontrado')).toBeTruthy();
-    expect(document.querySelector('[data-plano-alvo]')).toBeNull();
+    await waitFor(() => expect(document.querySelector('[data-plano-alvo]')).toBeNull());
   }, TIMEOUT);
 
   it('o plano do endereço (fechado por padrão) fecha no 1º clique', async () => {
@@ -138,13 +138,13 @@ describe('Plano por endereço', () => {
     await waitFor(() => expect(document.querySelector('[data-plano-alvo="true"] .rotate-180')).not.toBeNull());
     fireEvent.click(document.querySelector('[data-plano-alvo="true"] div.cursor-pointer.select-none'));
     await assentarMuito();
-    expect(document.querySelector('[data-plano-alvo="true"] .rotate-180')).toBeNull();
+    await waitFor(() => expect(document.querySelector('[data-plano-alvo="true"] .rotate-180')).toBeNull());
   }, TIMEOUT);
 
   it('sem a prop nada é destacado (consulta e perfil sem endereço de plano)', async () => {
     await montar(caminhos.paciente(P), rotasPlano([PLANO(1), PLANO(2)]));
     await assentarMuito();
-    expect(document.querySelector('[data-plano-alvo]')).toBeNull();
+    await waitFor(() => expect(document.querySelector('[data-plano-alvo]')).toBeNull());
   }, TIMEOUT);
 
   it('abrir um plano fechado empilha o endereço do plano', async () => {

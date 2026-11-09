@@ -1,5 +1,5 @@
 /** Encerrar consulta que conclui o plano + "Marcar retorno à clínica" cai na Agenda (flushSync efetivo), não em Pacientes. */
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { IDS, agendaDto } from '../encerrar/cenariosEncerrar.js';
@@ -48,9 +48,9 @@ describe('Retorno à clínica depois de concluir o plano', () => {
       nao.click();
       await assentarMuito(6);
     }
-    expect(screen.getByText('Plano concluído com êxito')).toBeTruthy();
+    expect(await screen.findByText('Plano concluído com êxito')).toBeTruthy();
     clicarBotao(/Marcar retorno à clínica/);
     await assentarMuito(8);
-    expect(ultimoRoteador().state.location.pathname).toBe(caminhos.agenda());
+    await waitFor(() => expect(ultimoRoteador().state.location.pathname).toBe(caminhos.agenda()));
   }, TIMEOUT);
 });

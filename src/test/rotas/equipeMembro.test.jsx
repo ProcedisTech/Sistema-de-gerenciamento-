@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom';
 
@@ -67,9 +67,9 @@ it('clicar num membro empilha /equipe/<id> e Voltar volta à lista', async () =>
   montar('/equipe');
   fireEvent.click(await screen.findByRole('button', { name: 'Ver Bruno Silva' }));
   expect(await screen.findByText('Pessoa: Bruno Silva')).toBeInTheDocument();
-  expect(local()).toBe('/equipe/member');
+  await waitFor(() => expect(local()).toBe('/equipe/member'));
   await act(async () => { await ultimoRoteador().navigate(-1); });
-  expect(local()).toBe('/equipe');
+  await waitFor(() => expect(local()).toBe('/equipe'));
   expect(await screen.findByRole('button', { name: 'Ver Bruno Silva' })).toBeInTheDocument();
 });
 

@@ -61,14 +61,14 @@ describe('Correção 4 — Configurações', () => {
       pos = Math.max(0, pos - 1);
       await ir(-1);
       await waitFor(() => expect(caminho()).toBe(pilha[pos]));
-      expect(avisos()).toHaveLength(0);
+      await waitFor(() => expect(avisos()).toHaveLength(0));
     }
     expect(caminho()).not.toBe(fim);
     for (let i = 0; i < 4; i += 1) {
       pos = Math.min(pilha.length - 1, pos + 1);
       await ir(1);
       await waitFor(() => expect(caminho()).toBe(pilha[pos]));
-      expect(avisos()).toHaveLength(0);
+      await waitFor(() => expect(avisos()).toHaveLength(0));
     }
     expect(caminho()).toBe(fim);
   }, TIMEOUT);
@@ -98,7 +98,7 @@ describe('Correção 4 — Configurações', () => {
     await waitFor(() => expect(campo()).toBeNull());
     await ir(-1);
     await waitFor(() => expect(caminho()).toBe('/configuracoes'));
-    expect(avisos()).toHaveLength(0);
+    await waitFor(() => expect(avisos()).toHaveLength(0));
   }, TIMEOUT);
 
   it('3) depois de "sair sem salvar", Agenda e de volta a Configurações: sem aviso fantasma', async () => {
@@ -108,16 +108,16 @@ describe('Correção 4 — Configurações', () => {
     await waitFor(() => expect(avisos()).toHaveLength(0)); // sinal positivo: o aviso fechou
     await menu(/^Agenda$/);
     await waitFor(() => expect(caminho()).toBe('/agenda'));
-    expect(avisos()).toHaveLength(0);
+    await waitFor(() => expect(avisos()).toHaveLength(0));
     await menu(/^Configurações$/);
     await waitFor(() => expect(caminho()).toBe('/configuracoes'));
-    expect(avisos()).toHaveLength(0);
+    await waitFor(() => expect(avisos()).toHaveLength(0));
     await ir(-1);
     await waitFor(() => expect(caminho()).toBe('/agenda'));
-    expect(avisos()).toHaveLength(0);
+    await waitFor(() => expect(avisos()).toHaveLength(0));
     await ir(1);
     await waitFor(() => expect(caminho()).toBe('/configuracoes'));
-    expect(avisos()).toHaveLength(0);
+    await waitFor(() => expect(avisos()).toHaveLength(0));
   }, TIMEOUT);
 });
 

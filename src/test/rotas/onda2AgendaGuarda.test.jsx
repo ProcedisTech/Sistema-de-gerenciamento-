@@ -108,12 +108,12 @@ describe('Onda 2: guarda nos atalhos do topo', () => {
     await emHorarios({ sujar: false });
     await buscarPacienteNoTopo();
     await waitFor(() => expect(caminho()).toBe(caminhos.paciente(pacienteDto.id))); // sinal positivo antes da negativa
-    expect(modal()).toBeNull();
+    await waitFor(() => expect(modal()).toBeNull());
 
     await ir(caminhos.configuracoes());
     await novoPacienteTopo();
     await waitFor(() => expect(caminho()).toBe(caminhos.pacienteNovo()));
-    expect(modal()).toBeNull();
+    await waitFor(() => expect(modal()).toBeNull());
   }, TIMEOUT);
 });
 

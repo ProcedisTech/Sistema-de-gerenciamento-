@@ -1,5 +1,5 @@
 /** Link direto sem sessão: o endereço fica; o login entra na mesma tela, sem passar por /entrar. */
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { montarApp, assentarMuito, TIMEOUT } from '../consulta/appConsulta.jsx';
@@ -34,9 +34,9 @@ describe('link direto deslogado', () => {
     fireEvent.click(screen.getByText('Entrar no Sistema'));
     await assentarMuito(8);
 
-    expect(screen.queryByText('Entrar no Sistema')).toBeNull();
-    expect(r.state.location.pathname).toBe(caminhos.agenda());
-    expect(visitados).not.toContain('/entrar');
+    await waitFor(() => expect(r.state.location.pathname).toBe(caminhos.agenda()));
+    await waitFor(() => expect(screen.queryByText('Entrar no Sistema')).toBeNull());
+    await waitFor(() => expect(visitados).not.toContain('/entrar'));
     expect(screen.getAllByText('Agenda').length).toBeGreaterThan(0);
   }, TIMEOUT);
 
@@ -56,10 +56,10 @@ describe('link direto deslogado', () => {
     fireEvent.click(screen.getByText('Entrar no Sistema'));
     await assentarMuito(8);
 
-    expect(screen.queryByText('Entrar no Sistema')).toBeNull();
-    expect(r.state.location.pathname).toBe(alvo);
-    expect(r.state.location.pathname).not.toContain(pacienteDto.cpf);
-    expect(visitados).not.toContain('/entrar');
+    await waitFor(() => expect(r.state.location.pathname).toBe(alvo));
+    await waitFor(() => expect(screen.queryByText('Entrar no Sistema')).toBeNull());
+    await waitFor(() => expect(r.state.location.pathname).not.toContain(pacienteDto.cpf));
+    await waitFor(() => expect(visitados).not.toContain('/entrar'));
     expect(screen.getAllByText(pacienteDto.nomeCompleto).length).toBeGreaterThan(0);
     expect(screen.getAllByText('Prontuário').length).toBeGreaterThan(0);
   }, TIMEOUT);

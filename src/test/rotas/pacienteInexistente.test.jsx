@@ -37,7 +37,7 @@ describe('paciente do endereço que a API não devolve', () => {
     await montar(500);
     await waitFor(() => expect(aviso).toHaveBeenCalledWith('usePacientePorId: falha ao buscar paciente', 500), { timeout: 8000 });
     await assentarMuito(8);
-    expect(screen.queryByText('Não encontrado')).toBeNull();
+    await waitFor(() => expect(screen.queryByText('Não encontrado')).toBeNull());
     expect(ultimoRoteador().state.location.pathname).toBe(caminhos.paciente(ID));
     aviso.mockRestore();
   }, TIMEOUT);

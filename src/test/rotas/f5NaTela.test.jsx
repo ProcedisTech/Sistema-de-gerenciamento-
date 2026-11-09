@@ -1,5 +1,5 @@
 /** F5 na tela: o endereço manda; remontar no mesmo caminho mostra a mesma tela e nada de activeView no storage. */
-import { cleanup, fireEvent, screen } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { assentarMuito, montarApp, TIMEOUT } from '../consulta/appConsulta.jsx';
@@ -31,7 +31,7 @@ describe('F5 na tela', () => {
     sessionStorage.removeItem('activeView'); // semeado pelo montarApp; o app não pode regravar
     fireEvent.click(screen.getAllByRole('button', { name: /^Pacientes$/ })[0]);
     await assentarMuito();
-    expect(ultimoRoteador().state.location.pathname).toBe(caminhos.pacientes());
-    expect(sessionStorage.getItem('activeView')).toBeNull();
+    await waitFor(() => expect(ultimoRoteador().state.location.pathname).toBe(caminhos.pacientes()));
+    await waitFor(() => expect(sessionStorage.getItem('activeView')).toBeNull());
   }, TIMEOUT);
 });

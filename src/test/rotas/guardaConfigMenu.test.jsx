@@ -49,7 +49,7 @@ describe('Guarda de horários não salvos ao clicar Configurações no menu', ()
     fireEvent.click(await screen.findByRole('button', { name: 'Continuar editando' }));
     await assentarMuito();
     await waitFor(() => expect(modal()).toBeNull()); // sinal positivo: o aviso fechou; só então a negativa
-    expect(noHorarios()).toBe(true);
+    await waitFor(() => expect(noHorarios()).toBe(true));
     expect(await screen.findByRole('switch', { name: 'Terça-feira ativo' })).toBeTruthy();
 
     menuConfig();
@@ -73,7 +73,7 @@ describe('Guarda de horários não salvos ao clicar Configurações no menu', ()
     fireEvent.click(await screen.findByRole('button', { name: 'Continuar editando' }));
     await assentarMuito();
     await waitFor(() => expect(modal()).toBeNull()); // sinal positivo: o aviso fechou; só então a negativa
-    expect(noHorarios()).toBe(true);
+    await waitFor(() => expect(noHorarios()).toBe(true));
   }, TIMEOUT);
 
   it('(d) sem alteração, Configurações no menu volta ao hub sem modal', async () => {
@@ -82,7 +82,7 @@ describe('Guarda de horários não salvos ao clicar Configurações no menu', ()
     menuConfig();
     await assentarMuito();
     await waitFor(() => expect(noHorarios()).toBe(false)); // sinal positivo antes da negativa
-    expect(modal()).toBeNull();
+    await waitFor(() => expect(modal()).toBeNull());
     await waitFor(() => expect(screen.getAllByText(/Horários, feriados e mensagens/).length).toBeGreaterThan(0));
   }, TIMEOUT);
 });

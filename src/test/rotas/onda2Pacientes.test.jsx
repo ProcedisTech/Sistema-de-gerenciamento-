@@ -1,5 +1,5 @@
 /** Onda 2, Pacientes: Voltar/Avançar, F5, voltar à lista com filtro, filtro substitui, CPF fora do sessionStorage. */
-import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { assentarMuito, montarApp, TIMEOUT } from '../consulta/appConsulta.jsx';
@@ -71,12 +71,12 @@ describe('Onda 2 Pacientes', () => {
     r.subscribe((s) => { if (s.historyAction === 'PUSH') pushes += 1; });
     fireEvent.change(screen.getAllByLabelText('Ordenar lista')[0], { target: { value: 'nome-desc' } });
     await assentarMuito();
-    expect(url()).toBe('/pacientes?ordem=nome-desc');
-    expect(pushes).toBe(0);
-    expect(r.state.historyAction).toBe('REPLACE');
+    await waitFor(() => expect(url()).toBe('/pacientes?ordem=nome-desc'));
+    await waitFor(() => expect(pushes).toBe(0));
+    await waitFor(() => expect(r.state.historyAction).toBe('REPLACE'));
     await irPara(-1); // não há entrada anterior da lista: Voltar não pode cair em ?pagina=2
-    expect(url()).not.toBe('/pacientes?pagina=2');
-    expect(window.history.length).toBe(antes);
+    await waitFor(() => expect(url()).not.toBe('/pacientes?pagina=2'));
+    await waitFor(() => expect(window.history.length).toBe(antes));
   }, TIMEOUT);
 
   it('F5 sem endereço de perfil não reabre paciente antigo nem guarda o CPF no sessionStorage', async () => {
@@ -87,7 +87,7 @@ describe('Onda 2 Pacientes', () => {
     // F5 em /pacientes com as chaves antigas (CPF/perfil/aba) no sessionStorage: elas não mandam mais
     cleanup();
     await montarApp({ caminho: '/pacientes', sessao: { selectedPatientCpf: pacienteDto.cpf, activePatientCpf: pacienteDto.cpf, patientView: 'profile', patientDetailTab: 'prontuario' } });
-    expect(url()).toBe('/pacientes');
-    expect(screen.queryByRole('button', { name: 'Prontuário Eletrônico' })).toBeNull();
+    await waitFor(() => expect(url()).toBe('/pacientes'));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Prontuário Eletrônico' })).toBeNull());
   }, TIMEOUT);
 });

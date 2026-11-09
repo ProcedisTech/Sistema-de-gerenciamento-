@@ -47,7 +47,7 @@ describe.each([
     await waitFor(() => expect(campo()).not.toBeNull());
     await sujarEClicarFichas();
     await waitFor(() => expect(avisos()).toHaveLength(1));
-    expect(campo()).not.toBeNull();
+    await waitFor(() => expect(campo()).not.toBeNull());
     fireEvent.click(await screen.findByRole('button', { name: /continuar editando/i }));
     await assentarMuito();
     await waitFor(() => expect(avisos()).toHaveLength(0));

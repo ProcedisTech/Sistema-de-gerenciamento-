@@ -1,6 +1,6 @@
 /** Resumo do paciente = ?resumo=<id> no endereço (empilha; Voltar fecha); perfil abre por id, sem CPF. */
 import React from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider, useLocation, useNavigate } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom';
@@ -55,15 +55,15 @@ function montar() {
 const caminho = (r) => r.state.location.pathname + r.state.location.search;
 
 describe('lista de pacientes pelo endereço', () => {
-  it('abrir o resumo empilha ?resumo=<id> e Voltar fecha', () => {
+  it('abrir o resumo empilha ?resumo=<id> e Voltar fecha', async () => {
     const router = montar();
     fireEvent.click(screen.getAllByText('Maria Souza')[0]);
     expect(caminho(router)).toBe('/pacientes?resumo=p1');
     expect(screen.getAllByRole('dialog').length).toBeGreaterThan(0);
 
     act(() => { router.navigate(-1); });
-    expect(caminho(router)).toBe('/pacientes');
-    expect(screen.queryAllByRole('dialog')).toHaveLength(0);
+    await waitFor(() => expect(caminho(router)).toBe('/pacientes'));
+    await waitFor(() => expect(screen.queryAllByRole('dialog')).toHaveLength(0));
   });
 
   it('abrir o perfil pela lista vai para /pacientes/<id>, sem CPF no endereço', () => {

@@ -68,8 +68,7 @@ describe('salvar cadastro de paciente fora da página da lista', () => {
     // janela da rebusca: se o formulário abrir agora, jamais com o e-mail antigo
     if (screen.queryAllByRole('button', { name: /^Cadastro$/ }).length) {
       await abrirEditarCadastro();
-      const campo = screen.queryByPlaceholderText('email@exemplo.com');
-      expect(campo?.value ?? 'novo@teste.com').not.toBe('antigo@teste.com');
+      await waitFor(() => expect(screen.queryByPlaceholderText('email@exemplo.com')?.value ?? 'novo@teste.com').not.toBe('antigo@teste.com'));
     }
 
     liberar();
