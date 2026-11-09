@@ -48,19 +48,35 @@ afterEach(() => {
 describe('Correção 4 — Configurações', () => {
   it('1) sem alteração: Voltar/Avançar entre seções e para fora não mostram aviso', async () => {
     await montarApp({ view: 'pacientes', rotas });
-    await menu(/^Configurações$/);
-    fireEvent.click(screen.getAllByText(/Horários, feriados e mensagens/)[0]); await assentarMuito();
-    fireEvent.click(screen.getAllByRole('button', { name: 'Feriados' })[0]); await assentarMuito();
+    const pilhaVista = [caminho()];
+    await menu(/^Configurações$/); pilhaVista.push(caminho());
+    fireEvent.click(screen.getAllByText(/Horários, feriados e mensagens/)[0]); await assentarMuito(); pilhaVista.push(caminho());
+    fireEvent.click(screen.getAllByRole('button', { name: 'Feriados' })[0]); await assentarMuito(); pilhaVista.push(caminho());
     const fim = caminho();
-    for (let i = 0; i < 4; i += 1) { await ir(-1); expect(avisos()).toHaveLength(0); }
+    // pilha montada acima (sem repetidos seguidos); Voltar/Avançar andam sobre ela e param nas pontas
+    const pilha = [...new Set(pilhaVista)];
+    expect(pilha.at(-1)).toBe(fim);
+    let pos = pilha.length - 1;
+    for (let i = 0; i < 4; i += 1) {
+      pos = Math.max(0, pos - 1);
+      await ir(-1);
+      await waitFor(() => expect(caminho()).toBe(pilha[pos]));
+      expect(avisos()).toHaveLength(0);
+    }
     expect(caminho()).not.toBe(fim);
-    for (let i = 0; i < 4; i += 1) { await ir(1); expect(avisos()).toHaveLength(0); }
+    for (let i = 0; i < 4; i += 1) {
+      pos = Math.min(pilha.length - 1, pos + 1);
+      await ir(1);
+      await waitFor(() => expect(caminho()).toBe(pilha[pos]));
+      expect(avisos()).toHaveLength(0);
+    }
     expect(caminho()).toBe(fim);
   }, TIMEOUT);
 
   async function abrirFichaExistenteSuja() {
     await montarApp({ view: 'pacientes', rotas });
     await menu(/^Configurações$/);
+    await waitFor(() => expect(caminho()).toBe('/configuracoes'));
     fireEvent.click(screen.getAllByText(/Fichas|Anamnese/)[0]); await assentarMuito();
     fireEvent.click(await screen.findByText('Ficha Cinco')); await assentarMuito();
     await waitFor(() => expect(caminho()).toBe('/configuracoes/fichas/5'));
@@ -81,6 +97,7 @@ describe('Correção 4 — Configurações', () => {
     await waitFor(() => expect(caminho()).toBe('/configuracoes/fichas'));
     await waitFor(() => expect(campo()).toBeNull());
     await ir(-1);
+    await waitFor(() => expect(caminho()).toBe('/configuracoes'));
     expect(avisos()).toHaveLength(0);
   }, TIMEOUT);
 
@@ -90,11 +107,17 @@ describe('Correção 4 — Configurações', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Sair sem salvar' })); await assentarMuito();
     await waitFor(() => expect(avisos()).toHaveLength(0)); // sinal positivo: o aviso fechou
     await menu(/^Agenda$/);
+    await waitFor(() => expect(caminho()).toBe('/agenda'));
     expect(avisos()).toHaveLength(0);
     await menu(/^Configurações$/);
+    await waitFor(() => expect(caminho()).toBe('/configuracoes'));
     expect(avisos()).toHaveLength(0);
-    await ir(-1); expect(avisos()).toHaveLength(0);
-    await ir(1); expect(avisos()).toHaveLength(0);
+    await ir(-1);
+    await waitFor(() => expect(caminho()).toBe('/agenda'));
+    expect(avisos()).toHaveLength(0);
+    await ir(1);
+    await waitFor(() => expect(caminho()).toBe('/configuracoes'));
+    expect(avisos()).toHaveLength(0);
   }, TIMEOUT);
 });
 
@@ -119,14 +142,15 @@ describe('Correção 4 — Termos: rascunho por id', () => {
     await waitFor(() => expect(aqui()).toBe('/configuracoes/termos'));
     abrir('Termo B');
     const b = await screen.findByDisplayValue('Termo B');
-    expect(screen.queryByDisplayValue('A digitado')).toBeNull(); // B não herda texto de A
+    await waitFor(() => expect(screen.queryByDisplayValue('A digitado')).toBeNull()); // B não herda texto de A
     expect(b).toBeTruthy();
     // Literal: abrir B depois do Voltar corta o Avançar de A; reabrir A mostra o texto salvo (openEdit descarta).
     await nav(-1);
-    expect(screen.queryByDisplayValue('A digitado')).toBeNull();
+    await waitFor(() => expect(aqui()).toBe('/configuracoes/termos'));
+    await waitFor(() => expect(screen.queryByDisplayValue('A digitado')).toBeNull());
     abrir('Termo A');
     expect(await screen.findByDisplayValue('Termo A')).toBeTruthy();
-    expect(screen.queryByDisplayValue('A digitado')).toBeNull();
+    await waitFor(() => expect(screen.queryByDisplayValue('A digitado')).toBeNull());
   });
 
   it('4b) A digitado > vai direto a B pelo endereço > Voltar a A: rascunho de A se perde (1 slot)', async () => {
@@ -135,7 +159,8 @@ describe('Correção 4 — Termos: rascunho por id', () => {
     fireEvent.change(await screen.findByDisplayValue('Termo A'), { target: { value: 'A digitado' } });
     await act(async () => { await roteador.navigate('/configuracoes/termos/8'); });
     expect(await screen.findByDisplayValue('Termo B')).toBeTruthy();
-    expect(screen.queryByDisplayValue('A digitado')).toBeNull();
+    await waitFor(() => expect(aqui()).toBe('/configuracoes/termos/8'));
+    await waitFor(() => expect(screen.queryByDisplayValue('A digitado')).toBeNull());
     await nav(-1);
     await waitFor(() => expect(aqui()).toBe('/configuracoes/termos/7'));
     const achou = await screen.findByDisplayValue(/Termo A|A digitado/);

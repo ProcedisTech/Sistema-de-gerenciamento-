@@ -61,6 +61,8 @@ describe('ficha nova + Voltar do navegador', () => {
     await montarApp({ caminho: '/configuracoes/fichas', rotas });
     const entradas = () => ultimoRoteador().state.historyAction;
     await clicar(botaoFichas());
+    await waitFor(() => expect(ultimoRoteador().state.location.pathname).toBe('/configuracoes/fichas'));
+    await screen.findByRole('button', { name: /Nova Ficha/i });
     expect(entradas()).not.toBe('PUSH');
   }, TIMEOUT);
 
@@ -71,6 +73,9 @@ describe('ficha nova + Voltar do navegador', () => {
     await abrirNovaFicha();
     ultimoRoteador().navigate(-1);
     await assentarMuito();
+    // a ficha nova não muda o endereço (histórico de 1 entrada): o Voltar não sai da lista
+    await waitFor(() => expect(ultimoRoteador().state.location.pathname).toBe('/configuracoes/fichas'));
+    await waitFor(() => expect(campo()).not.toBeNull());
     expect(avisos()).toHaveLength(0);
   }, TIMEOUT);
 });
