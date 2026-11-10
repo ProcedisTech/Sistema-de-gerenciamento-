@@ -28,9 +28,8 @@ export function getConsultaEmAndamento(rows, meuRoleUserId) {
  */
 function aplicarAndamento(actions, andamento) {
   if (!andamento?.emAndamento) return { ...actions, emAndamento: false };
-  const { primaryDisabled: _pd, primaryDisabledReason: _pdr, ...rest } = actions;
   return {
-    ...rest,
+    ...actions,
     primary: andamento.minha ? 'voltar' : null,
     secondary: actions.secondary.filter((a) => a !== 'cancelar' && a !== 'reagendar' && a !== 'transferir'),
     emAndamento: true,
@@ -38,30 +37,23 @@ function aplicarAndamento(actions, andamento) {
   };
 }
 
-const MOTIVO_BLOQUEIO_NAO_TITULAR =
-  'Apenas o profissional titular agendado ou o Dono da clínica podem iniciar este atendimento.';
-
 /**
  * Matriz de ações do Day Rail (Rich card + Next-up).
  * @param {string} status
  * @param {boolean} [canStartAnamnese=true]
  * @param {boolean} [canCancelarAgendamento=true]
  * @param {{ emAndamento: boolean, minha: boolean, atendimentoId: string|null }} [andamento] — de getConsultaEmAndamento
- * @param {{ isTitular?: boolean, isDono?: boolean, canTrocarProfissional?: boolean }} [titularOpts]
- * @returns {{ primary: 'confirmar' | 'iniciar' | 'voltar' | null, primaryDisabled?: boolean, primaryDisabledReason?: string|null, secondary: Array<'anamnese' | 'whatsapp' | 'reagendar' | 'cancelar'>, emAndamento: boolean, atendimentoId?: string|null }}
+ * @returns {{ primary: 'confirmar' | 'iniciar' | 'voltar' | null, secondary: Array<'anamnese' | 'whatsapp' | 'reagendar' | 'cancelar'>, emAndamento: boolean, atendimentoId?: string|null }}
  */
 export function getRailCardActions(
   status,
   canStartAnamnese = true,
   canCancelarAgendamento = true,
   andamento,
-  titularOpts = {},
 ) {
   const s = String(status || '');
   const isPending = s === 'pendente' || s === 'aguardando_confirmacao';
   const isConfirmed = s === 'confirmado';
-  const isTitular = titularOpts?.isTitular !== false;
-  const isDono = Boolean(titularOpts?.isDono);
 
   const secondary = ['anamnese', 'whatsapp', 'reagendar'];
   if ((isPending || isConfirmed) && canCancelarAgendamento) {
@@ -69,11 +61,8 @@ export function getRailCardActions(
   }
 
   const primary = isPending ? 'confirmar' : (isConfirmed && canStartAnamnese) ? 'iniciar' : null;
-  const primaryDisabled = primary === 'iniciar' && !isTitular && !isDono;
-
   return aplicarAndamento({
     primary,
-    ...(primaryDisabled ? { primaryDisabled: true, primaryDisabledReason: MOTIVO_BLOQUEIO_NAO_TITULAR } : {}),
     secondary,
   }, andamento);
 }
@@ -91,14 +80,12 @@ export function getRailPrimaryLabel(primary) {
  * @param {boolean} [canStartAnamnese=true]
  * @param {boolean} [canCancelarAgendamento=true]
  * @param {{ emAndamento: boolean, minha: boolean, atendimentoId: string|null }} [andamento] — de getConsultaEmAndamento(linhasDoGrupo, ...)
- * @param {{ isTitular?: boolean, isDono?: boolean, canTrocarProfissional?: boolean }} [titularOpts]
  */
 export function getGroupedRailCardActions(
   statuses = [],
   canStartAnamnese = true,
   canCancelarAgendamento = true,
   andamento,
-  titularOpts = {},
 ) {
   const list = (statuses || []).map((s) => String(s || ''));
   const hasPending = list.some((s) => s === 'pendente' || s === 'aguardando_confirmacao');
@@ -106,8 +93,6 @@ export function getGroupedRailCardActions(
   const anyActive = list.some((s) =>
     ['pendente', 'aguardando_confirmacao', 'confirmado'].includes(s),
   );
-  const isTitular = titularOpts?.isTitular !== false;
-  const isDono = Boolean(titularOpts?.isDono);
 
   let primary = null;
   if (hasPending) primary = 'confirmar';
@@ -118,11 +103,8 @@ export function getGroupedRailCardActions(
     secondary.push('cancelar');
   }
 
-  const primaryDisabled = primary === 'iniciar' && !isTitular && !isDono;
-
   return aplicarAndamento({
     primary,
-    ...(primaryDisabled ? { primaryDisabled: true, primaryDisabledReason: MOTIVO_BLOQUEIO_NAO_TITULAR } : {}),
     secondary,
   }, andamento);
 }

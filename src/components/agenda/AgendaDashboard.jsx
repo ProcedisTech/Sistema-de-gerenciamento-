@@ -9,7 +9,6 @@ import NaoEncontrado from '../../rotas/NaoEncontrado.jsx';
 import { agendasApi } from '../../services/api.js';
 import { AgendaAdvanceConfirmModal } from './AgendaAdvanceConfirmModal.jsx';
 import { AgendaNovoChoiceModal } from './AgendaNovoChoiceModal.jsx';
-import { DonoAssumirAtendimentoModal } from './DonoAssumirAtendimentoModal.jsx';
 import { ModalEscolhaAssinatura } from '../assinaturas/ModalEscolhaAssinatura.jsx';
 import { SolicitarAnamneseModal } from '../anamnese/SolicitarAnamneseModal.jsx';
 import { AgendaTopbar } from './AgendaTopbar.jsx';
@@ -197,7 +196,6 @@ export function AgendaDashboard({
   const [listDaySummary, setListDaySummary] = React.useState(null);
   const [alvo, setAlvo] = React.useState({ id: null, row: null, erro: false, dia: null });
   const [advancePending, setAdvancePending] = React.useState(null);
-  const [donoTakeoverTarget, setDonoTakeoverTarget] = React.useState(null);
   const [novoChoiceOpen, setNovoChoiceOpen] = React.useState(false);
   const [showEntrance, setShowEntrance] = React.useState(true);
   const [anamneseEscolhaOpen, setAnamneseEscolhaOpen] = React.useState(false);
@@ -205,7 +203,7 @@ export function AgendaDashboard({
   const isDesktop = useMediaQuery('(min-width: 1024px)');
   const isMobile = !isDesktop;
   const toast = useToast();
-  const { canDeleteAgenda, canEncaixarForaDisp: _canEncaixarForaDisp, roleUserId, isDono } = usePapel();
+  const { canDeleteAgenda, canEncaixarForaDisp: _canEncaixarForaDisp, roleUserId } = usePapel();
 
   const closeDaySheet = React.useCallback(() => {
     agenda.closeDaySheet();
@@ -258,7 +256,6 @@ export function AgendaDashboard({
           listDaySummary ||
           agendaIdAlvo ||
           advancePending ||
-          donoTakeoverTarget ||
           novoChoiceOpen,
       ),
     [
@@ -269,7 +266,6 @@ export function AgendaDashboard({
       listDaySummary,
       agendaIdAlvo,
       advancePending,
-      donoTakeoverTarget,
       novoChoiceOpen,
     ],
   );
@@ -542,23 +538,6 @@ export function AgendaDashboard({
       return;
     }
 
-    const isNonTitular = Boolean(
-      appointment.profissionalRoleUserId &&
-        roleUserId &&
-        String(appointment.profissionalRoleUserId) !== String(roleUserId),
-    );
-
-    if (isNonTitular) {
-      if (!isDono) {
-        toast.error(
-          'Apenas o profissional titular agendado ou o Dono da clínica podem iniciar este atendimento.',
-        );
-        return;
-      }
-      setDonoTakeoverTarget({ ...appointment, _actionTarget: target, _actionItems: items });
-      return;
-    }
-
     const patient = patients.find((item) => samePatient(item, appointment));
     if (patient && typeof onStartAttendance === 'function') {
       onStartAttendance(patient, {
@@ -587,46 +566,7 @@ export function AgendaDashboard({
       return;
     }
     window.alert('Para iniciar atendimento, vincule este agendamento a um paciente cadastrado no sistema.');
-  }, [agenda, isDono, onSlotReagendar, onStartAttendance, onVoltarConsulta, patients, roleUserId, toast]);
-
-  const handleConfirmDonoTakeover = React.useCallback(() => {
-    const modalTarget = donoTakeoverTarget;
-    setDonoTakeoverTarget(null);
-    if (!modalTarget) return;
-
-    const items = modalTarget._actionItems || resolveActionAppointments(modalTarget._actionTarget || modalTarget);
-    const appointment = items[0] || modalTarget;
-
-    const patient = patients.find((item) => samePatient(item, appointment));
-    if (patient && typeof onStartAttendance === 'function') {
-      onStartAttendance(patient, {
-        procedimentoNome: appointment.procedimentoNome,
-        agendaId: appointment.agendaId,
-        catalogoProcedimentoSaudeId: appointment.catalogoProcedimentoSaudeId || '',
-        data: appointment.data,
-        horaInicio: appointment.horaInicio,
-        fromAgendaSlot: true,
-        assumidoPorDono: true,
-        tipoProcedimentoCodigo:
-          appointment.tipoProcedimentoCodigo ?? appointment.rawSlot?.tipoProcedimentoCodigo ?? '',
-        procedimentoFeitoOrigemId:
-          appointment.procedimentoFeitoOrigemId ?? appointment.rawSlot?.procedimentoFeitoOrigemId ?? null,
-        isAgendaRetorno:
-          String(appointment.tipoProcedimentoCodigo ?? appointment.rawSlot?.tipoProcedimentoCodigo ?? '')
-            .toLowerCase() === 'retorno',
-        planejamentoItemId: appointment.planejamentoItemId ?? null,
-        lote: loteDasLinhas(
-          items.filter((a) => {
-            const nome = a.tipoProcedimento?.nome || a.procedimentoNome || '';
-            const isPlaceholder = !nome || /^Procedimento\s*\d*$/i.test(String(nome).trim());
-            return Boolean((a.catalogoProcedimentoSaudeId && String(a.catalogoProcedimentoSaudeId).trim()) || (!isPlaceholder && String(nome).trim()));
-          })
-        ),
-      });
-      return;
-    }
-    window.alert('Para iniciar atendimento, vincule este agendamento a um paciente cadastrado no sistema.');
-  }, [donoTakeoverTarget, onStartAttendance, patients]);
+  }, [agenda, onSlotReagendar, onStartAttendance, onVoltarConsulta, patients, roleUserId, toast]);
 
   const resolveWeekTarget = React.useCallback(
     (appt) => {
@@ -984,14 +924,6 @@ export function AgendaDashboard({
         onClose={() => setAdvancePending(null)}
         onConfirm={handleConfirmAdvance}
         isSubmitting={agenda.submittingReagendar}
-      />
-
-      <DonoAssumirAtendimentoModal
-        isOpen={Boolean(donoTakeoverTarget)}
-        appointment={donoTakeoverTarget}
-        donoNome={profissionalNome || 'Dono da Clínica'}
-        onClose={() => setDonoTakeoverTarget(null)}
-        onConfirm={handleConfirmDonoTakeover}
       />
 
       <AgendaNovoChoiceModal

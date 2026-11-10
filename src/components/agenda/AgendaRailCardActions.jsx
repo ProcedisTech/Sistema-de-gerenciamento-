@@ -14,10 +14,7 @@ const BTN_CANCEL = `${BTN_SECONDARY} text-status-danger-ink hover:bg-status-dang
 
 const BTN_CANCEL_COMPACT = `${BTN_SECONDARY_COMPACT} text-status-danger-ink hover:bg-status-danger-bg`;
 
-function primaryButtonClass(heightClass, disabled = false) {
-  if (disabled) {
-    return `inline-flex ${heightClass} w-full cursor-not-allowed items-center justify-center gap-1.5 rounded-xl border border-ink-200 bg-ink-100 px-3 text-[13px] font-medium text-ink-400 opacity-80 ${BTN_FOCUS}`;
-  }
+function primaryButtonClass(heightClass) {
   return `inline-flex ${heightClass} w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-br from-vivid-teal-500 to-vivid-teal-600 px-3 text-[13px] font-medium text-white shadow-agenda-glow transition-all duration-150 ease-out motion-reduce:transition-none hover:-translate-y-px hover:brightness-[1.06] ${BTN_FOCUS}`;
 }
 
@@ -77,11 +74,10 @@ export function AgendaRailCardActions({
   onReagendar,
   onCancelar,
 }) {
-  const { primary, primaryDisabled = false, primaryDisabledReason = null, secondary } = actions;
+  const { primary, secondary } = actions;
   const primaryLabel = getRailPrimaryLabel(primary);
 
   function handlePrimary() {
-    if (primaryDisabled) return;
     if (primary === 'voltar' && typeof onVoltarConsulta === 'function') {
       onVoltarConsulta(actions.atendimentoId);
       return;
@@ -101,9 +97,7 @@ export function AgendaRailCardActions({
         <button
           type="button"
           onClick={handlePrimary}
-          disabled={primaryDisabled}
-          title={primaryDisabled && primaryDisabledReason ? primaryDisabledReason : undefined}
-          className={primaryButtonClass(primaryHeightClass, primaryDisabled)}
+          className={primaryButtonClass(primaryHeightClass)}
         >
           {primary === 'confirmar' ? (
             <Check className={`${primaryIconClass} shrink-0`} aria-hidden />

@@ -44,7 +44,7 @@ export function AgendaAppointmentCardRich({
   onOpenSlotDetail,
   submittingRemoverBloqueioId,
 }) {
-  const { canStartAnamnese, canDeleteAgenda, roleUserId, isDono } = usePapel();
+  const { canStartAnamnese, canDeleteAgenda, roleUserId } = usePapel();
   const { fuso } = useFusoClinica();
   const atendimentoId = appointment?.atendimentoId;
   const atendimentoStatusCodigo = appointment?.atendimentoStatusCodigo;
@@ -130,14 +130,7 @@ export function AgendaAppointmentCardRich({
 
   const stripe = getRailStripeClass(appointment);
   const canCancelar = Boolean(canDeleteAgenda && onCancelar);
-  const isTitular =
-    !appointment.profissionalRoleUserId ||
-    !roleUserId ||
-    String(appointment.profissionalRoleUserId) === String(roleUserId);
-  const actions = getRailCardActions(appointment.status, canStartAnamnese, canCancelar, andamento, {
-    isTitular,
-    isDono,
-  });
+  const actions = getRailCardActions(appointment.status, canStartAnamnese, canCancelar, andamento);
   const foiSubstituido = Boolean(
     appointment.profissionalOriginalNome &&
       appointment.profissionalOriginalNome !== appointment.profissionalNome,

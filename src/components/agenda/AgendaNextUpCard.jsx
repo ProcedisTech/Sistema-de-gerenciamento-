@@ -23,7 +23,7 @@ export function AgendaNextUpCard({
   onCancelar,
   onOpenSlotDetail,
 }) {
-  const { canStartAnamnese, canDeleteAgenda, roleUserId, isDono } = usePapel();
+  const { canStartAnamnese, canDeleteAgenda, roleUserId } = usePapel();
   const atendimentoId = appointment?.atendimentoId;
   const atendimentoStatusCodigo = appointment?.atendimentoStatusCodigo;
   const atendimentoAnfitriaoRoleUserId = appointment?.atendimentoAnfitriaoRoleUserId;
@@ -39,14 +39,7 @@ export function AgendaNextUpCard({
 
   const countdown = formatCountdown(appointment.horaInicio, nowMinutes);
   const canCancelar = Boolean(canDeleteAgenda && onCancelar);
-  const isTitular =
-    !appointment.profissionalRoleUserId ||
-    !roleUserId ||
-    String(appointment.profissionalRoleUserId) === String(roleUserId);
-  const actions = getRailCardActions(appointment.status, canStartAnamnese, canCancelar, andamento, {
-    isTitular,
-    isDono,
-  });
+  const actions = getRailCardActions(appointment.status, canStartAnamnese, canCancelar, andamento);
   const foiSubstituido = Boolean(
     appointment.profissionalOriginalNome &&
       appointment.profissionalOriginalNome !== appointment.profissionalNome,

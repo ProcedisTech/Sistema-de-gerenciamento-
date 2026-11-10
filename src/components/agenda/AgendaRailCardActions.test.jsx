@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { AgendaRailCardActions } from './AgendaRailCardActions.jsx';
+import { getRailCardActions } from '../../utils/agendaCardActions.js';
 
 describe('AgendaRailCardActions', () => {
   const mockAppointment = {
@@ -113,5 +114,22 @@ describe('AgendaRailCardActions — consulta em andamento (Camada 2)', () => {
     );
     expect(screen.queryByText('Em andamento')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Iniciar atendimento' })).toBeInTheDocument();
+  });
+
+  it('não titular: "Iniciar atendimento" habilitado e chama onIniciarAtendimento direto, sem modal', () => {
+    const onIniciar = vi.fn();
+    const naoTitular = { id: 'appt-1', status: 'confirmado', profissionalRoleUserId: 'outro' };
+    render(
+      <AgendaRailCardActions
+        appointment={naoTitular}
+        actions={getRailCardActions('confirmado', true, true, { emAndamento: false, minha: false, atendimentoId: null })}
+        onIniciarAtendimento={onIniciar}
+      />
+    );
+    const btn = screen.getByRole('button', { name: /iniciar atendimento/i });
+    expect(btn).toBeEnabled();
+    fireEvent.click(btn);
+    expect(onIniciar).toHaveBeenCalledWith(naoTitular);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
