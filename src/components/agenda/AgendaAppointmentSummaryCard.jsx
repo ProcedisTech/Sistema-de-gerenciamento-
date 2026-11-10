@@ -126,7 +126,7 @@ export function AgendaAppointmentSummaryCard({
   const isBloqueio = appointment.tipo === 'bloqueio' && appointment.status !== 'cancelado';
   const isReagendado = appointment.status === 'reagendado';
   const isNoShow = appointment.status === 'cancelado' && isAgendaNoShow(appointment);
-  const { canStartAnamnese, roleUserId, isDono } = usePapel();
+  const { canStartAnamnese, roleUserId } = usePapel();
   const { fuso } = useFusoClinica();
   const atendimentoId = appointment?.atendimentoId;
   const atendimentoStatusCodigo = appointment?.atendimentoStatusCodigo;
@@ -224,19 +224,6 @@ export function AgendaAppointmentSummaryCard({
     : STATUS_BADGE_CLASSES[appointment.status] || STATUS_BADGE_CLASSES.pendente;
 
   const isPanel = variant === 'panel' || variant === 'highlight';
-  const isTitular =
-    !appointment.profissionalRoleUserId ||
-    !roleUserId ||
-    String(appointment.profissionalRoleUserId) === String(roleUserId);
-  const isIniciarAction =
-    !andamento.emAndamento &&
-    appointment.status !== 'pendente' &&
-    appointment.status !== 'aguardando_confirmacao' &&
-    appointment.status !== 'cancelado';
-  const primaryBlockedNonTitular = isIniciarAction && !isTitular && !isDono;
-  const primaryBlockedTitle = primaryBlockedNonTitular
-    ? 'Apenas o profissional titular agendado ou o Dono da clínica podem iniciar este atendimento.'
-    : undefined;
   const foiSubstituido = Boolean(
     appointment.profissionalOriginalNome &&
       appointment.profissionalOriginalNome !== appointment.profissionalNome,
@@ -247,7 +234,6 @@ export function AgendaAppointmentSummaryCard({
     : showPrimaryActionButton(appointment.status, canStartAnamnese);
   const rotuloVoltar = andamento.emAndamento ? 'Voltar à consulta' : null;
   const handlePrincipal = () => {
-    if (primaryBlockedNonTitular) return;
     if (andamento.emAndamento && andamento.minha && typeof onVoltarConsulta === 'function') {
       onVoltarConsulta(andamento.atendimentoId);
       return;
@@ -355,13 +341,7 @@ export function AgendaAppointmentSummaryCard({
                   <button
                     type="button"
                     onClick={handlePrincipal}
-                    disabled={primaryBlockedNonTitular}
-                    title={primaryBlockedTitle}
-                    className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors duration-150 ${
-                      primaryBlockedNonTitular
-                        ? 'cursor-not-allowed bg-slate-100 text-slate-400 border border-slate-200'
-                        : styles.primary
-                    }`}
+                    className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors duration-150 ${styles.primary}`}
                   >
                     {rotuloVoltar || panelActionLabel(appointment.status)}
                   </button>
@@ -452,13 +432,7 @@ export function AgendaAppointmentSummaryCard({
                   <button
                     type="button"
                     onClick={handlePrincipal}
-                    disabled={primaryBlockedNonTitular}
-                    title={primaryBlockedTitle}
-                    className={`rounded-md px-2 py-1 text-[10px] font-bold transition-colors ${
-                      primaryBlockedNonTitular
-                        ? 'cursor-not-allowed bg-slate-100 text-slate-400 border border-slate-200'
-                        : styles.primary
-                    }`}
+                    className={`rounded-md px-2 py-1 text-[10px] font-bold transition-colors ${styles.primary}`}
                   >
                     {rotuloVoltar || compactActionLabel(appointment.status)}
                   </button>
@@ -582,13 +556,7 @@ export function AgendaAppointmentSummaryCard({
                 <button
                   type="button"
                   onClick={handlePrincipal}
-                  disabled={primaryBlockedNonTitular}
-                  title={primaryBlockedTitle}
-                  className={`${BTN_ACTION} rounded-lg px-3 py-2 text-[11px] font-bold transition-colors ${
-                    primaryBlockedNonTitular
-                      ? 'cursor-not-allowed bg-slate-100 text-slate-400 border border-slate-200'
-                      : styles.primary
-                  }`}
+                  className={`${BTN_ACTION} rounded-lg px-3 py-2 text-[11px] font-bold transition-colors ${styles.primary}`}
                 >
                   {rotuloVoltar || actionLabel(appointment.status)}
                 </button>

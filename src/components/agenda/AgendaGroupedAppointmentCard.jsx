@@ -45,7 +45,7 @@ export function AgendaGroupedAppointmentCard({
 }) {
   const appointments = group?.appointments || [];
   const primary = appointments[0];
-  const { canStartAnamnese, canDeleteAgenda, roleUserId, isDono } = usePapel();
+  const { canStartAnamnese, canDeleteAgenda, roleUserId } = usePapel();
   const andamento = useMemo(
     () => getConsultaEmAndamento(group?.appointments || [], roleUserId),
     [group?.appointments, roleUserId],
@@ -55,16 +55,11 @@ export function AgendaGroupedAppointmentCard({
   const badge = getGroupedStatusBadgePresentation(appointments);
   const stripe = getGroupedRailStripeClass(appointments);
   const canCancelar = Boolean(canDeleteAgenda && onCancelar);
-  const isTitular =
-    !primary.profissionalRoleUserId ||
-    !roleUserId ||
-    String(primary.profissionalRoleUserId) === String(roleUserId);
   const actions = getGroupedRailCardActions(
     appointments.map((a) => a.status),
     canStartAnamnese,
     canCancelar,
     andamento,
-    { isTitular, isDono },
   );
   const foiSubstituido = Boolean(
     primary.profissionalOriginalNome &&

@@ -153,56 +153,17 @@ describe('agendaCardActions — consulta em andamento (Camada 2)', () => {
     });
   });
 
-  it('titularOpts: não inclui transferir e secondary contém apenas ações essenciais', () => {
+  it('não titular continua habilitado: iniciar sem primaryDisabled, sem transferir', () => {
     const semAnd = { emAndamento: false, minha: false, atendimentoId: null };
-    const r = getRailCardActions('confirmado', true, true, semAnd, { isTitular: true });
-    expect(r.secondary).not.toContain('transferir');
+    const r = getRailCardActions('confirmado', true, true, semAnd);
+    expect(r.primary).toBe('iniciar');
     expect(r.secondary).toEqual(['anamnese', 'whatsapp', 'reagendar', 'cancelar']);
     expect(r.primaryDisabled).toBeUndefined();
-  });
+    expect(r.primaryDisabledReason).toBeUndefined();
 
-  it('titularOpts: desabilita primary=iniciar quando isTitular=false e isDono=false, mas mantém confirmar habilitado', () => {
-    const semAnd = { emAndamento: false, minha: false, atendimentoId: null };
-    const confirmadoNaoTitular = getRailCardActions('confirmado', true, true, semAnd, {
-      isTitular: false,
-      isDono: false,
-    });
-    expect(confirmadoNaoTitular.primary).toBe('iniciar');
-    expect(confirmadoNaoTitular.primaryDisabled).toBe(true);
-    expect(confirmadoNaoTitular.primaryDisabledReason).toMatch(/profissional titular agendado ou o Dono/i);
-
-    const pendenteNaoTitular = getRailCardActions('pendente', true, true, semAnd, {
-      isTitular: false,
-      isDono: false,
-    });
-    expect(pendenteNaoTitular.primary).toBe('confirmar');
-    expect(pendenteNaoTitular.primaryDisabled).toBeUndefined();
-
-    const grupoNaoTitular = getGroupedRailCardActions(['confirmado', 'confirmado'], true, true, semAnd, {
-      isTitular: false,
-      isDono: false,
-    });
-    expect(grupoNaoTitular.primary).toBe('iniciar');
-    expect(grupoNaoTitular.primaryDisabled).toBe(true);
-    expect(grupoNaoTitular.secondary).not.toContain('transferir');
-  });
-
-  it('titularOpts: mantém primary=iniciar habilitado quando isDono=true mesmo sendo isTitular=false', () => {
-    const semAnd = { emAndamento: false, minha: false, atendimentoId: null };
-    const donoEmAgendaDeColega = getRailCardActions('confirmado', true, true, semAnd, {
-      isTitular: false,
-      isDono: true,
-    });
-    expect(donoEmAgendaDeColega.primary).toBe('iniciar');
-    expect(donoEmAgendaDeColega.primaryDisabled).toBeFalsy();
-    expect(donoEmAgendaDeColega.primaryDisabledReason).toBeUndefined();
-
-    const grupoDonoEmAgendaDeColega = getGroupedRailCardActions(['confirmado', 'confirmado'], true, true, semAnd, {
-      isTitular: false,
-      isDono: true,
-    });
-    expect(grupoDonoEmAgendaDeColega.primary).toBe('iniciar');
-    expect(grupoDonoEmAgendaDeColega.primaryDisabled).toBeFalsy();
-    expect(grupoDonoEmAgendaDeColega.primaryDisabledReason).toBeUndefined();
+    const g = getGroupedRailCardActions(['confirmado', 'confirmado'], true, true, semAnd);
+    expect(g.primary).toBe('iniciar');
+    expect(g.primaryDisabled).toBeUndefined();
+    expect(g.secondary).not.toContain('transferir');
   });
 });
