@@ -71,7 +71,7 @@ import {
   termoAssinaturaApi,
   termosApi,
 } from '../services/api';
-import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA } from '../utils/pacienteGaleria.js';
+import { ehFotoReferenciaAvaliacao, formatGaleriaLegendaForUpload, GALERIA_CATEGORIA } from '../utils/pacienteGaleria.js';
 import { isRealUuid, itemIdByCatalogoFromAttendanceOptions } from '../utils/planejamentoDraftUtils.js';
 import { normalizeListaPlanos, enriquecerPlanosComCatalogo } from '../utils/planejamentoNormalize.js';
 import { useProcedimentosOptions } from '../hooks/useProcedimentosOptions.js';
@@ -2022,23 +2022,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
           const currentAtendId = consultaServidor.atual?.id || atendimentoIdConsultaRef.current;
 
           const filtradas = itens
-            .filter((f) => {
-              const code = String(f.tipoFotoCodigo || f.categoria || '').toUpperCase();
-              const leg = String(f.legenda || f.descricaoLegenda || '').toUpperCase();
-              const isAvaliacaoFoto = (
-                code === 'AVALIACAO' ||
-                code === 'MAPA' ||
-                code === 'PLANEJAMENTO' ||
-                leg.includes('AVALIAÇÃO') ||
-                leg.includes('AVALIACAO')
-              );
-              if (!isAvaliacaoFoto) return false;
-
-              const fotoAtendId = f.atendimentoId || f.atendimento?.id;
-
-              // Puxa estritamente fotos de avaliação realizadas NESSA consulta (atendimento atual), sem puxar de outras
-              return Boolean(currentAtendId && fotoAtendId && String(fotoAtendId) === String(currentAtendId));
-            })
+            .filter((f) => ehFotoReferenciaAvaliacao(f, currentAtendId))
             .map((f) => ({
               ...f,
               id: f.id || f.fotoId,

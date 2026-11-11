@@ -429,3 +429,17 @@ export function formatPacienteGaleriaError(err) {
   }
   return base || 'Erro ao usar a galeria.';
 }
+
+/** Foto de referência da avaliação no atendimento; a foto da vista do mapa sobe como MAPA e não conta. */
+export function ehFotoReferenciaAvaliacao(foto, atendimentoId) {
+  if (!foto || !atendimentoId) return false;
+  const fotoAtendId = foto.atendimentoId || foto.atendimento?.id;
+  if (!fotoAtendId || String(fotoAtendId) !== String(atendimentoId)) return false;
+  const code = String(foto.tipoFotoCodigo || foto.categoria || '').toUpperCase();
+  if (code === 'MAPA') return false;
+  const tipoMapa = String(foto.mapaOverlay?.tipoMapaCodigo || '').toLowerCase();
+  if (tipoMapa === 'procedimento' || tipoMapa === 'retorno') return false;
+  if (code === 'AVALIACAO' || code === 'PLANEJAMENTO') return true;
+  const leg = String(foto.legenda || foto.descricaoLegenda || '').toUpperCase();
+  return leg.includes('AVALIAÇÃO') || leg.includes('AVALIACAO');
+}
