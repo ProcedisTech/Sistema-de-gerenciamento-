@@ -304,8 +304,20 @@ export function PlanoItemCard({
                 </>
               )}
               {(() => {
-                const dataRealizada = item.sessaoRealizada?.dataAgendamento || item.sessaoAtiva?.dataAgendamento || (isRealizado ? (item.dataPlanejada || _visitaData) : null);
-                const horaRealizada = item.sessaoRealizada?.horaInicio || item.sessaoAtiva?.horaInicio || (isRealizado ? _visitaHora : null);
+                const dataRealizada =
+                  item.dataRealizacao ||
+                  item.realizadoEm ||
+                  item.sessaoRealizada?.dataRealizacao ||
+                  item.sessaoRealizada?.realizadoEm ||
+                  item.sessaoRealizada?.dataAgendamento ||
+                  item.sessaoAtiva?.dataAgendamento ||
+                  (isRealizado ? (item.dataPlanejada || _visitaData) : null);
+                const horaRealizada =
+                  item.horaRealizacao ||
+                  item.sessaoRealizada?.horaRealizacao ||
+                  item.sessaoRealizada?.horaInicio ||
+                  item.sessaoAtiva?.horaInicio ||
+                  (isRealizado ? _visitaHora : null);
 
                 if (isRealizado && dataRealizada) {
                   return (

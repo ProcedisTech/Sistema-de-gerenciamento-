@@ -138,6 +138,7 @@ export function MapeamentoFullscreenOverlay({
   procedimentoArmado,
   onArmar,
   onAdicionarProcedimento,
+  onRemoverProcedimento,
   procedimentosUsados = [],
   procedimentosIniciais = [],
   planoContexto,
@@ -540,8 +541,9 @@ export function MapeamentoFullscreenOverlay({
         prev.filter((pt) => !matchProcId(pt, procId))
       );
       setIsDirty(true);
+      onRemoverProcedimento?.(procId);
     },
-    [activeProcedimentoId, onArmar]
+    [activeProcedimentoId, onArmar, onRemoverProcedimento]
   );
 
   const matchProcId = (p, targetId) => {
@@ -847,8 +849,8 @@ export function MapeamentoFullscreenOverlay({
           const ptCatId = isRealUuid(pt.catalogoProcedimentoSaudeId)
             ? pt.catalogoProcedimentoSaudeId
             : isRealUuid(pt.catalogoId)
-            ? pt.catalogoId
-            : null;
+              ? pt.catalogoId
+              : null;
 
           let procIndex = procedimentosPayload.findIndex(
             (proc) =>
@@ -869,23 +871,23 @@ export function MapeamentoFullscreenOverlay({
             corHex: pt.corHex || pt.cor || (ptCatId ? corParaProcedimento(ptCatId) : COR_PADRAO_AVALIACAO),
             vertices: pt.vertices?.length
               ? pt.vertices.map((v, i) => ({
-                  ordem: i + 1,
-                  posX: clampCoord(v.posX ?? v.x),
-                  posY: clampCoord(v.posY ?? v.y),
-                }))
+                ordem: i + 1,
+                posX: clampCoord(v.posX ?? v.x),
+                posY: clampCoord(v.posY ?? v.y),
+              }))
               : [{
-                  ordem: 1,
-                  posX: clampCoord(pt.posX),
-                  posY: clampCoord(pt.posY),
-                }],
+                ordem: 1,
+                posX: clampCoord(pt.posX),
+                posY: clampCoord(pt.posY),
+              }],
           };
         });
 
         const effectivePlanItemId =
           destino === 'plano'
             ? (procedimentosPayload.find((p) => isRealUuid(p.planejamentoItemId))?.planejamentoItemId ||
-               listaProcedimentosEnriquecida.find((p) => isRealUuid(p.planejamentoItemId))?.planejamentoItemId ||
-               null)
+              listaProcedimentosEnriquecida.find((p) => isRealUuid(p.planejamentoItemId))?.planejamentoItemId ||
+              null)
             : null;
         const effectivePlanId = destino === 'plano' ? (planoContexto?.id || itensCriadosPorCatalogo?.planoId || null) : null;
 
@@ -1270,11 +1272,10 @@ export function MapeamentoFullscreenOverlay({
                   if (typeof onSelectCapturedPhoto === 'function') onSelectCapturedPhoto(idx);
                   if (typeof setEditingIndex === 'function') setEditingIndex(idx);
                 }}
-                className={`relative h-12 w-12 rounded-xl overflow-hidden border-2 transition-all cursor-pointer ${
-                  idx === activeIndex
+                className={`relative h-12 w-12 rounded-xl overflow-hidden border-2 transition-all cursor-pointer ${idx === activeIndex
                     ? 'border-teal-500 scale-105 shadow-md'
                     : 'border-transparent opacity-70 hover:opacity-100'
-                }`}
+                  }`}
                 title={`Foto ${idx + 1}`}
               >
                 <MapeamentoFotoThumbnail

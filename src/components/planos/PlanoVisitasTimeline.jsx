@@ -74,7 +74,11 @@ function PlanoVisitaGaleria({
 
     const matchesVisit = (f) => {
       const fAgId = f.agendaId ? String(f.agendaId).trim() : null;
-      const fPfId = f.procedimentoFeitoId ? String(f.procedimentoFeitoId).trim() : null;
+      let fPfId = f.procedimentoFeitoId ? String(f.procedimentoFeitoId).trim() : null;
+      if (!fPfId && f.mapaOverlay?.procedimentos && Array.isArray(f.mapaOverlay.procedimentos)) {
+        const pWithPf = f.mapaOverlay.procedimentos.find((p) => p.procedimentoFeitoId);
+        if (pWithPf) fPfId = String(pWithPf.procedimentoFeitoId).trim();
+      }
       const fData = String(f.dataISO || f.dataReferencia || '').slice(0, 10);
 
       if (fAgId && visitAgendaIds.size > 0) {
@@ -82,6 +86,16 @@ function PlanoVisitaGaleria({
       }
       if (fPfId && visitPfIds.size > 0) {
         return visitPfIds.has(fPfId);
+      }
+      if (f.matchedItemId && visita.itens?.length > 0) {
+        const itemMatch = visita.itens.some((it) => {
+          const rawId = String(it.id || it.planejamentoItemId || it.tempId || '');
+          const baseItemId = String(it.planejamentoItemId || it.id || '').replace(/_retorno$/, '');
+          const isRet = Boolean(it.isRetorno || it.tipo === 'retorno' || rawId.endsWith('_retorno'));
+          const key = isRet ? `${baseItemId}_retorno` : baseItemId;
+          return f.matchedItemId === key;
+        });
+        if (itemMatch) return true;
       }
       if (fData && visita.data) {
         return fData === visita.data;
@@ -104,17 +118,30 @@ function PlanoVisitaGaleria({
     });
 
     (fotosDoPlano || []).forEach((f) => {
+      const tipoMapaOverlay = String(f.mapaOverlay?.tipoMapaCodigo || '').toLowerCase().trim();
+      const isMapaProcOuRetorno = tipoMapaOverlay === 'procedimento' || tipoMapaOverlay === 'retorno';
+      const fotoIsRetorno = Boolean(f.isRetorno || tipoMapaOverlay === 'retorno');
+
+      // Se a visita for pura de avaliação (itens vazios), bloqueia estritamente fotos clínicas de procedimentos ou retorno
+      if (visita.isAvaliacaoVisita) {
+        const cat = String(f.categoria || '').toLowerCase().trim();
+        if (cat === 'antes' || cat === 'pos_imediato' || cat === 'depois' || isMapaProcOuRetorno || fotoIsRetorno) {
+          return;
+        }
+      }
+
       const isFotoAvaliacao =
-        f.categoria === 'avaliacao' ||
-        String(f.tipoFotoCodigo || '').toUpperCase() === 'AVALIACAO' ||
-        Boolean(f.isAvaliacao);
+        !isMapaProcOuRetorno &&
+        !fotoIsRetorno &&
+        (f.categoria === 'avaliacao' ||
+          (String(f.tipoFotoCodigo || '').toUpperCase() === 'AVALIACAO' && f.categoria !== 'mapa') ||
+          Boolean(f.isAvaliacao));
 
       const isDataOuAvaliacaoMatch =
         matchesVisit(f) ||
         (Boolean(visita.isAvaliacaoVisita) && isFotoAvaliacao);
 
       if (isDataOuAvaliacaoMatch) {
-        const fotoIsRetorno = Boolean(f.isRetorno);
         if (fotoIsRetorno === isVisitaRetorno) {
           // Se a foto já tiver um matchedItemId específico, só descarta se NÃO for foto de avaliação
           if (f.matchedItemId && !isFotoAvaliacao && !visita.isAvaliacaoVisita) {
@@ -356,22 +383,91 @@ export function PlanoVisitasTimeline({
     const semData = [];
     const gruposPorData = new Map();
 
+    const resolverExecucaoReal = ({ agendaId, procedimentoFeitoId, basePlanejamentoItemId, isRetorno }) => {
+      const pfEncontrado = (procedimentosFeitos || []).find((pf) => {
+        const pfId = String(pf.id || pf.procedimentoFeitoId || '').trim();
+        if (procedimentoFeitoId && pfId === String(procedimentoFeitoId).trim()) return true;
+
+        const pfAgId = String(pf.agendaId || pf.agenda?.id || '').trim();
+        if (agendaId && pfAgId && pfAgId === String(agendaId).trim()) return true;
+
+        const pfPlanItemId = pf.planejamentoItemId ? String(pf.planejamentoItemId).replace(/_retorno$/, '').trim() : null;
+        if (basePlanejamentoItemId && pfPlanItemId && pfPlanItemId === basePlanejamentoItemId) {
+          const pfIsRet = Boolean(pf.isRetoque || pf.procedimentoFeitoOrigemId || String(pf.tipoProcedimentoCodigo || '').toLowerCase() === 'retorno');
+          if (Boolean(isRetorno) === pfIsRet) return true;
+        }
+        return false;
+      });
+
+      if (!pfEncontrado) return null;
+
+      const dataReal = pfEncontrado.criadoEm ? diaDoInstante(pfEncontrado.criadoEm, fuso) : null;
+      let horaReal = null;
+      if (pfEncontrado.horaInicio) {
+        horaReal = String(pfEncontrado.horaInicio).slice(0, 5);
+      } else if (pfEncontrado.criadoEm) {
+        try {
+          const dt = new Date(pfEncontrado.criadoEm);
+          horaReal = dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: fuso });
+        } catch {
+          horaReal = String(pfEncontrado.criadoEm).slice(11, 16);
+        }
+      }
+
+      return {
+        procedimentoFeitoId: String(pfEncontrado.id || pfEncontrado.procedimentoFeitoId || '').trim(),
+        dataReal,
+        horaReal,
+      };
+    };
+
     itens.forEach((item) => {
+      const sessaoRealizadaItem = item.sessaoRealizada || (Array.isArray(item.sessoes) ? item.sessoes.find((s) => String(s.statusCodigo).toLowerCase() === 'realizado' && !isSessaoRetorno(s)) : null);
+      const sessaoAtivaItem = item.sessaoAtiva || (Array.isArray(item.sessoes) ? item.sessoes.find((s) => !isSessaoRetorno(s) && String(s.statusCodigo).toLowerCase() !== 'realizado') : null);
+
       const isRealizado = isItemFinalizado(item.statusItem ?? item.statusItemNome);
+      const basePlanejamentoItemId = String(item.planejamentoItemId || item.id || '').replace(/_retorno$/, '').trim();
+      const execReal = isRealizado ? resolverExecucaoReal({
+        agendaId: sessaoRealizadaItem?.agendaId || sessaoAtivaItem?.agendaId || item.agendaId,
+        procedimentoFeitoId: sessaoRealizadaItem?.procedimentoFeitoId || item.procedimentoFeitoId,
+        basePlanejamentoItemId,
+        isRetorno: false,
+      }) : null;
+
+      const dataRealExecucao = execReal?.dataReal || item.dataRealizacao || item.realizadoEm || item.dataAtendimento;
+      const horaRealExecucao = execReal?.horaReal || item.horaRealizacao;
+
       const dataIso =
-        item.sessaoAtiva?.dataAgendamento ||
-        item.sessaoRealizada?.dataAgendamento ||
-        item.dataPlanejada ||
-        (isRealizado ? (item.dataRealizacao || item.realizadoEm || item.dataAtendimento || hojeIso) : null);
+        (isRealizado && dataRealExecucao)
+          ? dataRealExecucao
+          : (sessaoAtivaItem?.dataAgendamento ||
+             sessaoRealizadaItem?.dataAgendamento ||
+             item.dataPlanejada ||
+             (isRealizado ? hojeIso : null));
       const dataKey = dataIso ? String(dataIso).slice(0, 10) : null;
 
+      const itemEnriquecido = {
+        ...item,
+        dataRealizacao: dataRealExecucao || item.dataRealizacao,
+        horaRealizacao: horaRealExecucao || item.horaRealizacao,
+        procedimentoFeitoId: execReal?.procedimentoFeitoId || item.procedimentoFeitoId || sessaoRealizadaItem?.procedimentoFeitoId || null,
+        sessaoRealizada: sessaoRealizadaItem ? {
+          ...sessaoRealizadaItem,
+          dataRealizacao: dataRealExecucao || sessaoRealizadaItem.dataRealizacao,
+          horaRealizacao: horaRealExecucao || sessaoRealizadaItem.horaRealizacao,
+          procedimentoFeitoId: execReal?.procedimentoFeitoId || sessaoRealizadaItem.procedimentoFeitoId || null,
+        } : (item.sessaoRealizada || null),
+        sessaoAtiva: sessaoAtivaItem || item.sessaoAtiva || null,
+      };
+
       if (!dataKey) {
-        semData.push(item);
+        semData.push(itemEnriquecido);
       } else {
         if (!gruposPorData.has(dataKey)) {
           gruposPorData.set(dataKey, {
             data: dataKey,
             dataHoraInicio:
+              (isRealizado && horaRealExecucao) ||
               item.sessaoAtiva?.horaInicio ||
               item.sessaoRealizada?.horaInicio ||
               item.horaInicio ||
@@ -380,11 +476,10 @@ export function PlanoVisitasTimeline({
             itens: [],
           });
         }
-        gruposPorData.get(dataKey).itens.push(item);
+        gruposPorData.get(dataKey).itens.push(itemEnriquecido);
       }
 
       // VÍNCULO DE RETORNO DO PLANO (PADRÃO A: VISITA DEDICADA)
-      const basePlanejamentoItemId = String(item.planejamentoItemId || item.id || '').replace(/_retorno$/, '').trim();
       let sessoesRetorno = (Array.isArray(item.sessoes) && item.sessoes.length > 0)
         ? item.sessoes.filter(isSessaoRetorno)
         : [];
@@ -413,15 +508,35 @@ export function PlanoVisitasTimeline({
       }
 
       sessoesRetorno.forEach((sessaoRetorno, sIdx) => {
-        const retornoDataIso = sessaoRetorno?.dataAgendamento;
-        if (!retornoDataIso) return;
-        const retornoKey = String(retornoDataIso).slice(0, 10);
         const isRetornoRealizado =
           String(sessaoRetorno?.statusCodigo).toLowerCase() === 'realizado' ||
           Boolean(sessaoRetorno?.dataRealizacao) ||
           Boolean(sessaoRetorno?.horaRealizacao) ||
           sessaoRetorno === item.sessaoRetornoRealizada;
         const isPaiRealizado = isItemFinalizado(item.statusItem ?? item.statusItemNome);
+
+        const retExecReal = isRetornoRealizado ? resolverExecucaoReal({
+          agendaId: sessaoRetorno?.agendaId || item.agendaId,
+          procedimentoFeitoId: sessaoRetorno?.procedimentoFeitoId || item.sessaoRetornoRealizada?.procedimentoFeitoId,
+          basePlanejamentoItemId,
+          isRetorno: true,
+        }) : null;
+
+        const dataRealRetorno = retExecReal?.dataReal || sessaoRetorno?.dataRealizacao;
+        const horaRealRetorno = retExecReal?.horaReal || sessaoRetorno?.horaRealizacao;
+
+        const retornoDataIso = (isRetornoRealizado && dataRealRetorno)
+          ? dataRealRetorno
+          : sessaoRetorno?.dataAgendamento;
+        if (!retornoDataIso) return;
+        const retornoKey = String(retornoDataIso).slice(0, 10);
+
+        const sessaoRetornoEnriquecida = {
+          ...sessaoRetorno,
+          dataRealizacao: dataRealRetorno || sessaoRetorno?.dataRealizacao,
+          horaRealizacao: horaRealRetorno || sessaoRetorno?.horaRealizacao,
+          procedimentoFeitoId: retExecReal?.procedimentoFeitoId || sessaoRetorno?.procedimentoFeitoId || null,
+        };
 
         const retornoItem = {
           ...item,
@@ -434,13 +549,16 @@ export function PlanoVisitasTimeline({
           statusItem: isRetornoRealizado ? 'finalizado' : 'agendado',
           statusItemNome: isRetornoRealizado ? 'Finalizado' : 'Agendado',
           dataPlanejada: retornoDataIso,
-          horaInicio: sessaoRetorno.horaInicio,
+          dataRealizacao: dataRealRetorno || item.dataRealizacao,
+          horaRealizacao: horaRealRetorno || item.horaRealizacao,
+          horaInicio: (isRetornoRealizado && horaRealRetorno) ? horaRealRetorno : sessaoRetorno.horaInicio,
           sessaoAtiva: isRetornoRealizado ? null : sessaoRetorno,
-          sessaoRealizada: isRetornoRealizado ? sessaoRetorno : null,
+          sessaoRealizada: isRetornoRealizado ? sessaoRetornoEnriquecida : null,
           sessaoRetornoAtiva: null,
           sessaoRetornoRealizada: null,
           agendaId: sessaoRetorno?.agendaId || item.agendaId || null,
           procedimentoFeitoId:
+            retExecReal?.procedimentoFeitoId ||
             sessaoRetorno?.procedimentoFeitoId ||
             (isRetornoRealizado ? item.sessaoRetornoRealizada?.procedimentoFeitoId : null) ||
             null,
@@ -466,14 +584,14 @@ export function PlanoVisitasTimeline({
 
         const retSessionKey = sessaoRetorno?.agendaId
           ? `ag_${sessaoRetorno.agendaId}`
-          : 'dia';
+          : (retExecReal?.procedimentoFeitoId ? `pf_${retExecReal.procedimentoFeitoId}` : `item_${basePlanejamentoItemId}`);
         const groupKey = `${retornoKey}_ret_${retSessionKey}`;
 
         if (!gruposPorData.has(groupKey)) {
           gruposPorData.set(groupKey, {
             key: groupKey,
             data: retornoKey,
-            dataHoraInicio: sessaoRetorno.horaInicio || null,
+            dataHoraInicio: (isRetornoRealizado && horaRealRetorno) ? horaRealRetorno : (sessaoRetorno.horaInicio || null),
             isRetornoVisita: true,
             agendaId: sessaoRetorno?.agendaId || null,
             itens: [],
@@ -497,7 +615,8 @@ export function PlanoVisitasTimeline({
       const cat = String(f.categoria || '').toLowerCase().trim();
       const cod = String(f.tipoFotoCodigo || '').toUpperCase().trim();
       const tipoMapa = String(f.mapaOverlay?.tipoMapaCodigo || '').toLowerCase().trim();
-      return cat === 'avaliacao' || cod === 'AVALIACAO' || Boolean(f.isAvaliacao) || tipoMapa === 'avaliacao' || (Boolean(f.mapaOverlay) && tipoMapa !== 'procedimento' && tipoMapa !== 'retorno');
+      if (f.isRetorno || tipoMapa === 'retorno' || tipoMapa === 'procedimento') return false;
+      return cat === 'avaliacao' || cod === 'AVALIACAO' || Boolean(f.isAvaliacao) || tipoMapa === 'avaliacao';
     });
 
     if (fotosDeAvaliacao.length > 0) {
@@ -520,16 +639,16 @@ export function PlanoVisitasTimeline({
       }
 
       if (dataAvaliacao) {
-        if (!gruposPorData.has(dataAvaliacao)) {
-          gruposPorData.set(dataAvaliacao, {
+        const evalKey = `${dataAvaliacao}_avaliacao`;
+        if (!gruposPorData.has(evalKey)) {
+          gruposPorData.set(evalKey, {
+            key: evalKey,
             data: dataAvaliacao,
-            dataHoraInicio: horaAvaliacao || null,
+            dataHoraInicio: horaAvaliacao || '00:00',
             isAvaliacaoVisita: true,
             tituloVisita: 'Avaliação Clínica & Mapeamento',
             itens: [],
           });
-        } else {
-          gruposPorData.get(dataAvaliacao).temAvaliacao = true;
         }
       }
     }
@@ -537,10 +656,12 @@ export function PlanoVisitasTimeline({
     const visitas = Array.from(gruposPorData.values()).sort((a, b) => {
       const cmp = a.data.localeCompare(b.data);
       if (cmp !== 0) return cmp;
+      if (a.isAvaliacaoVisita && !b.isAvaliacaoVisita) return -1;
+      if (!a.isAvaliacaoVisita && b.isAvaliacaoVisita) return 1;
       return String(a.dataHoraInicio || '').localeCompare(String(b.dataHoraInicio || ''));
     });
     return { poolSemData: semData, visitasAgrupadas: visitas };
-  }, [itens, fotosDoPlano, fotosPorPlanejamentoItemId, plano, fuso, hojeIso]);
+  }, [itens, fotosDoPlano, fotosPorPlanejamentoItemId, plano, fuso, hojeIso, procedimentosFeitos]);
 
   // Tempo total e valor do pool sem data
   const duracaoSemData = useMemo(() => {

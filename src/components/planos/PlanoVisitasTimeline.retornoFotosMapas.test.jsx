@@ -223,4 +223,108 @@ describe('Correção de Fotos e Mapas em Retornos de Planos', () => {
     expect(screen.getByText(/Retorno Clínico · Sutura de Ferida/i)).toBeInTheDocument();
     expect(screen.getByText(/Retorno Clínico · Drenagem de Abscesso/i)).toBeInTheDocument();
   });
+
+  it('isola mapa de retorno desenhado sobre foto facial de avaliacao na visita de retorno e nao na visita de avaliacao', () => {
+    const plano = {
+      id: 'plano-1',
+      criadoEm: '2026-11-02T10:00:00Z',
+      itens: [
+        {
+          id: 'item-1',
+          catalogoNome: 'Biópsia de Pele',
+          statusItem: 'finalizado',
+          sessoes: [
+            {
+              id: 'sessao-pai',
+              tipoProcedimentoCodigo: 'procedimento',
+              dataAgendamento: '2026-11-02',
+              horaInicio: '10:00',
+              statusCodigo: 'realizado',
+              procedimentoFeitoId: 'pf-pai',
+            },
+            {
+              id: 'sessao-ret-1',
+              tipoProcedimentoCodigo: 'retorno',
+              dataAgendamento: '2026-11-02',
+              horaInicio: '16:00',
+              statusCodigo: 'realizado',
+              agendaId: 'agenda-ret-1',
+              procedimentoFeitoId: 'pf-ret-1',
+            },
+          ],
+        },
+      ],
+    };
+
+    const fotosDoPlano = [
+      {
+        id: 'foto-facial-avaliacao',
+        categoria: 'avaliacao',
+        tipoFotoCodigo: 'AVALIACAO',
+        dataISO: '2026-11-02',
+        url: 'https://exemplo.com/facial.jpg',
+      },
+      {
+        id: 'mapa-retorno',
+        categoria: 'mapa',
+        dataISO: '2026-11-02',
+        isRetorno: true,
+        matchedItemId: 'item-1_retorno',
+        mapaOverlay: {
+          tipoMapaCodigo: 'retorno',
+          procedimentos: [{ procedimentoFeitoId: 'pf-ret-1' }],
+        },
+        url: 'https://exemplo.com/mapa-ret.jpg',
+      },
+    ];
+
+    render(<PlanoVisitasTimeline plano={plano} fotosDoPlano={fotosDoPlano} />);
+
+    // Deve exibir o cabeçalho de Mapa de Retorno na visita de Retorno
+    expect(screen.getByText(/Mapa de Retorno/i)).toBeInTheDocument();
+    // E deve haver a seção de Avaliação Clínica
+    expect(screen.getByText(/Avaliação Clínica & Mapeamento/i)).toBeInTheDocument();
+  });
+
+  it('posiciona visitas antecipadas na data real de execucao e exibe Realizado em data real no card', () => {
+    const plano = {
+      id: 'plano-1',
+      criadoEm: '2026-11-01T10:00:00Z',
+      itens: [
+        {
+          id: 'item-1',
+          catalogoNome: 'Drenagem de Abscesso',
+          statusItem: 'finalizado',
+          sessoes: [
+            {
+              id: 'sessao-futura',
+              tipoProcedimentoCodigo: 'procedimento',
+              dataAgendamento: '2026-11-15',
+              horaInicio: '08:00',
+              statusCodigo: 'realizado',
+              agendaId: 'agenda-futura',
+              procedimentoFeitoId: 'pf-exec-1',
+            },
+          ],
+        },
+      ],
+    };
+
+    const procedimentosFeitos = [
+      {
+        id: 'pf-exec-1',
+        agendaId: 'agenda-futura',
+        criadoEm: '2026-11-02T14:30:00Z',
+        horaInicio: '11:30',
+      },
+    ];
+
+    render(<PlanoVisitasTimeline plano={plano} fotosDoPlano={[]} procedimentosFeitos={procedimentosFeitos} />);
+
+    // Deve exibir agrupado na data real de execucao (02/11/2026) e NÃO no dia 15 de nov
+    expect(screen.getByText(/Visita 1 ·/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 de nov/i)).toBeInTheDocument();
+    expect(screen.queryByText(/15 de nov/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Realizado em 02\/11\/2026 às 11:30/i)).toBeInTheDocument();
+  });
 });
