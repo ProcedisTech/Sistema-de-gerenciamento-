@@ -373,7 +373,11 @@ export function MapeamentoFullscreenToolbar({
         <div className={`flex flex-1 flex-col gap-2.5 py-2.5 ${collapsed ? 'items-center px-0.5' : 'px-2.5'}`}>
           {/* SELETOR DE MODO / FERRAMENTAS (PONTO, TRAÇO, BORRACHA) */}
           {!collapsed ? (
-            <div className="mx-0.5 rounded-xl border border-slate-200 bg-slate-100/90 p-1 flex items-center gap-1 shadow-2xs">
+            <div
+              data-testid="mapa-ferramentas-barra"
+              className="mx-0.5 rounded-xl border border-slate-200 bg-slate-100/90 p-1 grid grid-cols-3 gap-1 shadow-2xs"
+            >
+              {/* Ícone em cima e nome embaixo: "Borracha" não cabe ao lado do ícone em 240 px (passava 17 px da borda). */}
               {FERRAMENTAS.map(({ id, label, shortcut, Icon: _Icon }) => {
                 const isActive = modo === id;
                 return (
@@ -381,7 +385,7 @@ export function MapeamentoFullscreenToolbar({
                     key={id}
                     type="button"
                     onClick={() => setModo?.(id)}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                    className={`min-w-0 flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-lg text-[11px] font-bold leading-none transition-all cursor-pointer ${
                       isActive
                         ? id === 'borracha'
                           ? 'bg-rose-500 text-white shadow-xs'
@@ -391,7 +395,7 @@ export function MapeamentoFullscreenToolbar({
                     title={`${label} (${shortcut})`}
                   >
                     <_Icon className="h-3.5 w-3.5 shrink-0" />
-                    <span>{label}</span>
+                    <span className="whitespace-nowrap">{label}</span>
                   </button>
                 );
               })}
