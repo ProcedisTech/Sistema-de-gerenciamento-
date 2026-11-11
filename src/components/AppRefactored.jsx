@@ -169,6 +169,8 @@ import {
   textoDasFotosNaoEnviadas,
   textoDoApenasSair,
   textoRetornoSemEncerrar,
+  perguntasDaSessao,
+  indiceAtivoSemMarcador,
 } from './consulta/consultaServidor.js';
 import { urlDeReservaDaFoto } from './consulta/mergeFotosPorId.js';
 import { cardDoAtalho, loteDasLinhas } from '../utils/loteAgendasDoPaciente.js';
@@ -213,25 +215,6 @@ function revokeBlobUrlIfAny(url) {
       // ignore
     }
   }, 1000);
-}
-
-/**
- * Nomes das perguntas depois do encerrar ("Salvar como padrão?" e "Catálogo") e o "já vinculado ao catálogo", pela
- * regra de hoje: todos os itens da sessão (inclusive o item só com nome); sem itens, o procedimento da jornada.
- */
-function perguntasDaSessao({ procedimentosSessao, nomeProcedimento, nomeProcedimentoCatalogoId }) {
-  const sessao = Array.isArray(procedimentosSessao) ? procedimentosSessao : [];
-  const nomesArray = sessao.length > 0
-    ? sessao.map(p => String(p.procedimentoNome || p.nomeProcedimento || '').trim()).filter(Boolean)
-    : [String(nomeProcedimento || '').trim()].filter(Boolean);
-  return {
-    nomesUnicos: [...new Set(nomesArray)],
-    jaVinculadoAoCatalogo: (snapshotNome) =>
-      sessao.some(
-        p => (p.procedimentoNome === snapshotNome || p.nomeProcedimento === snapshotNome) &&
-             (p.nomeProcedimentoCatalogoId || p.catalogoProcedimentoSaudeId)
-      ) || (nomeProcedimento === snapshotNome && nomeProcedimentoCatalogoId),
-  };
 }
 
 function AppRefactoredInner({ onCanalAvisos }) {
@@ -1508,6 +1491,12 @@ function AppRefactoredInner({ onCanalAvisos }) {
         itemAtivoRef.current = { itemId: anterior.itemId, indice: novo };
         return;
       }
+    }
+    const alvo = indiceAtivoSemMarcador(sessao, indice);
+    if (alvo !== indice) {
+      journeyState.setActiveProcedureIndex(alvo);
+      itemAtivoRef.current = { itemId: sessao[alvo]?.itemId ?? null, indice: alvo };
+      return;
     }
     itemAtivoRef.current = { itemId: itemIdAtual, indice };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- só a sessão e o índice
