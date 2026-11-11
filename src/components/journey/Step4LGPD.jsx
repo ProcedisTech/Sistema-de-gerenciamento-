@@ -30,7 +30,7 @@ import {
   organizacaoApi,
 } from '../../services/api';
 import { ProcedimentoSearchInput } from '../agenda/ProcedimentoSearchInput.jsx';
-import { ehRotuloDeTela } from '../consulta/consultaServidor.js';
+import { ehLinhaConsultaSemCatalogo, ehRotuloDeTela } from '../consulta/consultaServidor.js';
 import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
 import { TermoVisualizacao } from '../termos/TermoVisualizacao';
 import { resolveApiUrl } from '../../config/apiEnv';
@@ -2202,6 +2202,8 @@ export function Step4Procedimento({
     });
   }, [procsIdsKey, resolucao, onValidarTermosCatalogo, procedimentosSelecionados, procedimentosSessao]);
 
+  const procedimentosSessaoMapa = useMemo(() => (Array.isArray(procedimentosSessao) ? procedimentosSessao.filter((l) => !ehLinhaConsultaSemCatalogo(l)) : procedimentosSessao), [procedimentosSessao]);
+
   const itensPlanoPendentes = useMemo(() => {
     const rawItens = journeyPlanejamentoCtx?.itens || journeyPlanejamentoCtx?.planejamentoItens || [];
     if (!Array.isArray(rawItens) || rawItens.length === 0) {
@@ -3072,7 +3074,7 @@ export function Step4Procedimento({
             procedimentoFeitoId={procedimentoFeitoId}
             catalogoId={catalogoId}
             nomeProcedimento={nomeProcedimento}
-            procedimentosSessao={procedimentosSessao}
+            procedimentosSessao={procedimentosSessaoMapa}
             onMudarCorProcedimento={handleMudarCorProcedimento}
             planejamentoItemId={planejamentoItemId}
             planejamentoId={planejamentoId}
