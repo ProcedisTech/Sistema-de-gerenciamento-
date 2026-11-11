@@ -24,6 +24,7 @@ import { VistaChipsBar, VistaAtivaHeader } from '../mapeamento/VistaChipsBar.jsx
 import { MapeamentoFullscreenOverlay } from '../mapeamento/MapeamentoFullscreenOverlay.jsx';
 import { UnidadeMedidaSelect } from '../mapeamento/UnidadeMedidaSelect.jsx';
 import { corParaProcedimento } from '../../../constants/mapeamentoPaletaCores.js';
+import { ehRotuloDeTela } from '../../consulta/consultaServidor.js';
 
 function EscolherVistaMapaModal({ open, vistasDisponiveis, onSelect, onClose, hasFoto, countPontosVista }) {
   if (!open) return null;
@@ -114,6 +115,8 @@ export function MapaAplicacaoPanel({
   onPrepareCapture,
   onEnsureProcedimento,
   onMudarCorProcedimento,
+  onAdicionarProcedimento,
+  onRemoverProcedimento,
   disabled = false,
   disabledHint = 'Preencha o nome do procedimento (com item do catálogo) para habilitar o mapa.',
 }) {
@@ -145,8 +148,10 @@ export function MapaAplicacaoPanel({
 
     if (Array.isArray(procedimentosSessao) && procedimentosSessao.length > 0) {
       const validos = procedimentosSessao.filter((p) => {
+        if (p?.nomeSoDeTela === true) return false;
         const cid = p.catalogoProcedimentoSaudeId || p.nomeProcedimentoCatalogoId || p.catalogoId;
         const nome = p.nomeProcedimento || p.procedimentoNome || p.nome;
+        if (!cid && ehRotuloDeTela(nome)) return false;
         return Boolean((cid && String(cid).trim()) || (nome && String(nome).trim() && !isPlaceholder(nome)));
       });
       if (validos.length > 0) {
@@ -492,7 +497,7 @@ export function MapaAplicacaoPanel({
     setVistaModalOpen(false);
   };
 
-  if (isPanelDisabled) {
+  if (isPanelDisabled && !fullscreenOpen) {
     return (
       <div className="mb-6 rounded-2xl border border-dashed border-[#cbd5e1] bg-[#f8fafc] p-6 text-center">
         <MapPin className="mx-auto h-8 w-8 text-[#94a3b8]" strokeWidth={1.5} />
@@ -552,11 +557,10 @@ export function MapaAplicacaoPanel({
                     key={proc.id}
                     type="button"
                     onClick={() => setProcedimentoArmadoId(proc.id)}
-                    className={`inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-bold transition-all shadow-xs cursor-pointer ${
-                      isArmado
+                    className={`inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-bold transition-all shadow-xs cursor-pointer ${isArmado
                         ? 'border-2 text-slate-900 bg-white ring-2 ring-teal-500/20 shadow-md'
                         : 'border border-slate-200 bg-slate-50 text-slate-600 hover:bg-white hover:text-slate-900'
-                    }`}
+                      }`}
                     style={isArmado ? { borderColor: cor } : {}}
                   >
                     <span
@@ -695,6 +699,8 @@ export function MapaAplicacaoPanel({
         procedimentoArmado={procedimentoArmado}
         hideProcedimentoPicker={false}
         onArmar={(proc) => setProcedimentoArmadoId(proc?.id)}
+        onAdicionarProcedimento={onAdicionarProcedimento}
+        onRemoverProcedimento={onRemoverProcedimento}
         procedimentosUsados={listaProcedimentosSessao}
         pontosVista={gruposPontos}
         gruposSessao={gruposSessao}

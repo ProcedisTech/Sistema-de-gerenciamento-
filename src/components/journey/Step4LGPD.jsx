@@ -760,7 +760,7 @@ export function Step3Termos({
 
   const assinadosCarregadosRef = useRef(null);
   const carregarAssinadosLegado = useCallback(() => {
-    if (!atendimentoId || !pacienteId) return () => {};
+    if (!atendimentoId || !pacienteId) return () => { };
     let cancelled = false;
     termoAssinaturaApi.listarPorPaciente(pacienteId)
       .then((lista) => {
@@ -2240,7 +2240,11 @@ export function Step4Procedimento({
 
   const lastValidatedKeyRef = useRef('');
   useEffect(() => {
-    if (!procsIdsKey || typeof onValidarTermosCatalogo !== 'function') return;
+    if (!procsIdsKey) {
+      lastValidatedKeyRef.current = '';
+      return;
+    }
+    if (typeof onValidarTermosCatalogo !== 'function') return;
     if (lastValidatedKeyRef.current === procsIdsKey && resolucao !== null) return;
     lastValidatedKeyRef.current = procsIdsKey;
     const ids = procsIdsKey.split(',').filter(Boolean);
@@ -2307,14 +2311,24 @@ export function Step4Procedimento({
       });
   }, [journeyPlanejamentoCtx, procedimentosSessao, procedimentoSearchOptions]);
 
+  const ehSlotInicialVazio = React.useCallback((slot) => {
+    if (!slot) return true;
+    const temCat = Boolean(String(slot.catalogoProcedimentoSaudeId || slot.nomeProcedimentoCatalogoId || slot.catalogoId || '').trim());
+    const temPlan = Boolean(String(slot.planejamentoItemId || '').trim());
+    if (temCat || temPlan) return false;
+    if (slot.nomeSoDeTela === true) return true;
+    const nome = String(slot.nomeProcedimento || slot.procedimentoNome || slot.nome || '').trim();
+    return !nome || /^Procedimento\s*\d*$/i.test(nome) || ehRotuloDeTela(nome);
+  }, []);
+
   const handleAdicionarItemDoPlano = React.useCallback(async (itemPlano) => {
     const safeCatId = itemPlano.catalogoProcedimentoSaudeId
       ? String(itemPlano.catalogoProcedimentoSaudeId)
       : null;
     const jaExiste = (procedimentosSessao || []).some(
       (p) => (safeCatId && String(p.catalogoProcedimentoSaudeId || p.catalogoId) === safeCatId) ||
-             (itemPlano.planejamentoItemId && String(p.planejamentoItemId) === String(itemPlano.planejamentoItemId)) ||
-             String(p.id) === String(itemPlano.id),
+        (itemPlano.planejamentoItemId && String(p.planejamentoItemId) === String(itemPlano.planejamentoItemId)) ||
+        String(p.id) === String(itemPlano.id),
     );
     if (jaExiste) return;
     const novoItem = criarItemProcedimentoSessao(
@@ -2329,12 +2343,10 @@ export function Step4Procedimento({
       (procedimentosSessao || []).length,
       procedimentosSessao || [],
     );
-    const isFirstEmpty = (procedimentosSessao || []).length === 1 &&
-      !(procedimentosSessao[0].catalogoProcedimentoSaudeId || procedimentosSessao[0].nomeProcedimentoCatalogoId || procedimentosSessao[0].catalogoId) &&
-      (!procedimentosSessao[0].nomeProcedimento || /^Procedimento\s*\d*$/i.test(String(procedimentosSessao[0].nomeProcedimento).trim()));
+    const isFirstEmpty = (procedimentosSessao || []).length === 1 && ehSlotInicialVazio(procedimentosSessao[0]);
     const itemFinal = isFirstEmpty && procedimentosSessao[0]?.itemId
-      ? { ...novoItem, itemId: procedimentosSessao[0].itemId }
-      : novoItem;
+      ? { ...novoItem, itemId: procedimentosSessao[0].itemId, nomeSoDeTela: false }
+      : { ...novoItem, nomeSoDeTela: false };
     const novaLista = isFirstEmpty
       ? [itemFinal]
       : [...(procedimentosSessao || []), itemFinal];
@@ -2367,8 +2379,27 @@ export function Step4Procedimento({
       const novaLista = (procedimentosSessao || []).filter(
         (p) => String(p.catalogoProcedimentoSaudeId || p.catalogoId || p.id) !== procId,
       );
+      const slotBase = (procedimentosSessao || [])[0];
+      const listaFinal = novaLista.length === 0 && slotBase?.itemId
+        ? [{
+          itemId: slotBase.itemId,
+          agendaId: slotBase.agendaId ?? null,
+          isAgendaRetorno: Boolean(slotBase.isAgendaRetorno),
+          legado: false,
+          observacoesExecucao: slotBase.observacoesExecucao ?? '',
+          orient: null,
+          catalogoProcedimentoSaudeId: null,
+          nomeProcedimentoCatalogoId: null,
+          catalogoId: null,
+          planejamentoItemId: null,
+          nomeProcedimento: '',
+          procedimentoNome: '',
+          nome: '',
+          nomeSoDeTela: true,
+        }]
+        : novaLista;
       if (typeof setProcedimentosSessao === 'function') {
-        setProcedimentosSessao(novaLista);
+        setProcedimentosSessao(listaFinal);
       }
       if (novaLista.length > 0) {
         const primeiro = novaLista[0];
@@ -2392,7 +2423,7 @@ export function Step4Procedimento({
           .filter((id) => id && id !== 'undefined' && id !== 'null');
         await onValidarTermosCatalogo(todosIds, novaLista.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
           abrirModal: false,
-          procedimentosSessaoOverride: novaLista,
+          procedimentosSessaoOverride: listaFinal,
         });
       }
       return;
@@ -2424,18 +2455,16 @@ export function Step4Procedimento({
       (procedimentosSessao || []).length,
       procedimentosSessao || [],
     );
-    const isFirstEmpty = (procedimentosSessao || []).length === 1 &&
-      !(procedimentosSessao[0].catalogoProcedimentoSaudeId || procedimentosSessao[0].nomeProcedimentoCatalogoId || procedimentosSessao[0].catalogoId) &&
-      (!procedimentosSessao[0].nomeProcedimento || /^Procedimento\s*\d*$/i.test(String(procedimentosSessao[0].nomeProcedimento).trim()));
+    const isFirstEmpty = (procedimentosSessao || []).length === 1 && ehSlotInicialVazio(procedimentosSessao[0]);
     const itemFinal = isFirstEmpty && procedimentosSessao[0]?.itemId
-      ? { ...novoItem, itemId: procedimentosSessao[0].itemId }
-      : novoItem;
+      ? { ...novoItem, itemId: procedimentosSessao[0].itemId, nomeSoDeTela: false }
+      : { ...novoItem, nomeSoDeTela: false };
     const novaLista = isFirstEmpty
       ? [itemFinal]
       : [
-          ...(procedimentosSessao || []),
-          itemFinal,
-        ];
+        ...(procedimentosSessao || []),
+        itemFinal,
+      ];
     if (typeof setProcedimentosSessao === 'function') {
       setProcedimentosSessao(novaLista);
     }
@@ -2476,8 +2505,27 @@ export function Step4Procedimento({
       const matchNome = String(p.nomeProcedimento || p.nome || '').trim().toLowerCase() === pid.trim().toLowerCase();
       return !(matchCat || matchItem || matchUid || matchId || matchNome);
     });
+    const slotBase = (procedimentosSessao || [])[0];
+    const listaFinal = novaLista.length === 0 && slotBase?.itemId
+      ? [{
+        itemId: slotBase.itemId,
+        agendaId: slotBase.agendaId ?? null,
+        isAgendaRetorno: Boolean(slotBase.isAgendaRetorno),
+        legado: false,
+        observacoesExecucao: slotBase.observacoesExecucao ?? '',
+        orient: null,
+        catalogoProcedimentoSaudeId: null,
+        nomeProcedimentoCatalogoId: null,
+        catalogoId: null,
+        planejamentoItemId: null,
+        nomeProcedimento: '',
+        procedimentoNome: '',
+        nome: '',
+        nomeSoDeTela: true,
+      }]
+      : novaLista;
     if (typeof setProcedimentosSessao === 'function') {
-      setProcedimentosSessao(novaLista);
+      setProcedimentosSessao(listaFinal);
     }
     if (novaLista.length > 0) {
       const primeiro = novaLista[0];
@@ -2496,7 +2544,7 @@ export function Step4Procedimento({
         .filter((id) => id && id !== 'undefined' && id !== 'null');
       await onValidarTermosCatalogo(todosIds, novaLista.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
         abrirModal: false,
-        procedimentosSessaoOverride: novaLista,
+        procedimentosSessaoOverride: listaFinal,
       });
     }
   }, [procedimentosSessao, setProcedimentosSessao, onValidarTermosCatalogo, gravarProcedimentoCatalogo]);
@@ -2517,12 +2565,10 @@ export function Step4Procedimento({
       (procedimentosSessao || []).length,
       procedimentosSessao || [],
     );
-    const isFirstEmpty = (procedimentosSessao || []).length === 1 &&
-      !(procedimentosSessao[0].catalogoProcedimentoSaudeId || procedimentosSessao[0].nomeProcedimentoCatalogoId || procedimentosSessao[0].catalogoId) &&
-      (!procedimentosSessao[0].nomeProcedimento || /^Procedimento\s*\d*$/i.test(String(procedimentosSessao[0].nomeProcedimento).trim()));
+    const isFirstEmpty = (procedimentosSessao || []).length === 1 && ehSlotInicialVazio(procedimentosSessao[0]);
     const itemFinal = isFirstEmpty && procedimentosSessao[0]?.itemId
-      ? { ...novoItem, itemId: procedimentosSessao[0].itemId }
-      : novoItem;
+      ? { ...novoItem, itemId: procedimentosSessao[0].itemId, nomeSoDeTela: false }
+      : { ...novoItem, nomeSoDeTela: false };
     const novaLista = isFirstEmpty
       ? [itemFinal]
       : [...(procedimentosSessao || []), itemFinal];
@@ -2690,6 +2736,18 @@ export function Step4Procedimento({
       setLaneMenuOpen(true);
     }
   };
+
+  const handleAdicionarProcedimentoDoMapa = React.useCallback((proc) => {
+    if (!proc) return;
+    const catId = String(proc.catalogoProcedimentoSaudeId || proc.catalogoId || proc.id || '').trim();
+    const nome = String(proc.nome || proc.nomeProcedimento || '').trim();
+    if (!catId && !nome) return;
+    handleToggleProcedimento({
+      id: catId,
+      nome: nome,
+      unidadeMedida: proc.unidadeMedida,
+    });
+  }, [handleToggleProcedimento]);
 
   return (
     <div className="min-w-0">
@@ -2979,9 +3037,9 @@ export function Step4Procedimento({
                 foto?.mapaOverlay ||
                 (temPontos
                   ? {
-                      pontos: foto.pontos,
-                      procedimentos: foto.procedimentosMapeados || foto.procedimentos || [],
-                    }
+                    pontos: foto.pontos,
+                    procedimentos: foto.procedimentosMapeados || foto.procedimentos || [],
+                  }
                   : null);
               const totalPontos = foto?.pontos?.length || foto?.mapaOverlay?.pontos?.length || 0;
 
@@ -3124,6 +3182,8 @@ export function Step4Procedimento({
             nomeProcedimento={nomeProcedimento}
             procedimentosSessao={procedimentosSessao}
             onMudarCorProcedimento={handleMudarCorProcedimento}
+            onAdicionarProcedimento={handleAdicionarProcedimentoDoMapa}
+            onRemoverProcedimento={handleRemoverProcedimento}
             planejamentoItemId={planejamentoItemId}
             planejamentoId={planejamentoId}
             procedimentosComPontos={procedimentosComPontos}

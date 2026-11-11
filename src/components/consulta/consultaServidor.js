@@ -253,7 +253,7 @@ export function mesclarSessao(sessao, itensServidor, pendente) {
     out.push(nova);
   });
   const mapeados = new Set(mapa.filter(Boolean));
-  const novos = itens.filter((i) => !mapeados.has(i.id));
+  const novos = itens.filter((i) => !mapeados.has(i.id) && !pendente(`item:${i.id}:remover`));
   if (novos.length > 0) {
     mudou = true;
     out.push(...novos.map(linhaDoItemServidor));
@@ -283,6 +283,7 @@ export function mesclarSessao(sessao, itensServidor, pendente) {
 export function diferencasDosItens(sessao, mapa, base) {
   const alterar = [];
   const criar = [];
+  const remover = [];
   (Array.isArray(sessao) ? sessao : []).forEach((linha, idx) => {
     const mem = camposDaLinhaSessao(linha);
     const itemId = mapa[idx];
@@ -320,7 +321,15 @@ export function diferencasDosItens(sessao, mapa, base) {
       });
     }
   });
-  return { alterar, criar };
+  if (Array.isArray(sessao) && sessao.length > 0 && base instanceof Map) {
+    const usados = new Set((Array.isArray(mapa) ? mapa : []).filter(Boolean).map(String));
+    for (const itemId of base.keys()) {
+      if (itemId != null && !usados.has(String(itemId))) {
+        remover.push(String(itemId));
+      }
+    }
+  }
+  return { alterar, criar, remover };
 }
 
 /** `true` se a linha precisa de ao menos 1 orientação marcada (decisão 7): item com catálogo ou retorno, não legado. */

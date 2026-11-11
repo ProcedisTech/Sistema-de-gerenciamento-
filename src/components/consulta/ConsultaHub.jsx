@@ -108,9 +108,9 @@ export function ConsultaHub({
   getPatientInitials,
   catalogoIds = [],
   exigirFilaVinculo = true,
-  nomeProcedimento,
-  atoJaIniciado = false,
-  onTermosBloqueio,
+  _nomeProcedimento,
+  _atoJaIniciado = false,
+  _onTermosBloqueio,
   /** `termos[]` da consulta (releitura do servidor); sem ele a resolução vale como veio. */
   termosDaConsulta = [],
   /** Id da consulta atual: a resolução só aceita assinatura feita nesta consulta. */
@@ -184,18 +184,6 @@ export function ConsultaHub({
 
   const handleSelectModule = (id) => {
     if (!isCardAllowed(id)) {
-      return;
-    }
-    if (
-      id === 'procedimento' &&
-      exigirFilaVinculo &&
-      !atoJaIniciado &&
-      temFaltantes(resolucaoEfetiva)
-    ) {
-      onTermosBloqueio?.({
-        nomeProcedimento: nomeProcedimento || 'procedimento',
-        faltantes: resolucaoEfetiva.faltantes,
-      });
       return;
     }
     onSelectModule?.(id);

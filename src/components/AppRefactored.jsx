@@ -221,7 +221,7 @@ function perguntasDaSessao({ procedimentosSessao, nomeProcedimento, nomeProcedim
     jaVinculadoAoCatalogo: (snapshotNome) =>
       sessao.some(
         p => (p.procedimentoNome === snapshotNome || p.nomeProcedimento === snapshotNome) &&
-             (p.nomeProcedimentoCatalogoId || p.catalogoProcedimentoSaudeId)
+          (p.nomeProcedimentoCatalogoId || p.catalogoProcedimentoSaudeId)
       ) || (nomeProcedimento === snapshotNome && nomeProcedimentoCatalogoId),
   };
 }
@@ -666,24 +666,54 @@ function AppRefactoredInner({ onCanalAvisos }) {
   );
 
   const handleAgendarPlanoItem = React.useCallback(
-    (paciente, item, onSaved) => {
-      const catId = String(item?.catalogoProcedimentoSaudeId || item?.catalogoId || '').trim();
-      if (!paciente?.id || !roleUserId || !catId) return;
-      const planejamentoItemId = String(item.planejamentoItemId ?? item.id ?? '').trim();
-      if (!isRealUuid(planejamentoItemId)) {
-        toast.error('Salve o plano antes de agendar este procedimento.');
+    (paciente, itemOuItens, onSavedOuOpts) => {
+      if (!paciente?.id || !roleUserId || !itemOuItens) return;
+      const itens = Array.isArray(itemOuItens) ? itemOuItens : [itemOuItens];
+      const itensValidos = itens.filter((it) => {
+        const catId = String(it?.catalogoProcedimentoSaudeId || it?.catalogoId || '').trim();
+        const planItemId = String(it?.planejamentoItemId ?? it?.id ?? '').trim();
+        return catId && isRealUuid(planItemId);
+      });
+
+      if (itensValidos.length === 0) {
+        toast.error('Salve o plano antes de agendar os procedimentos.');
         return;
       }
-      const targetData = item?.dataPlanejada || item?.data || null;
+
+      const catalogoProcedimentoSaudeIds = itensValidos.map((it) =>
+        String(it.catalogoProcedimentoSaudeId || it.catalogoId).trim()
+      );
+
+      const mapaPorCatalogo = {};
+      const planejamentoItensLote = [];
+      for (const it of itensValidos) {
+        const catId = String(it.catalogoProcedimentoSaudeId || it.catalogoId).trim();
+        const planItemId = String(it.planejamentoItemId ?? it.id).trim();
+        const agendaIdOrigem = it?.sessaoAtiva?.agendaId || null;
+        mapaPorCatalogo[catId] = planItemId;
+        planejamentoItensLote.push({
+          catalogoProcedimentoSaudeId: catId,
+          planejamentoItemId: planItemId,
+          agendaIdOrigem,
+        });
+      }
+
+      const primeiroItem = itensValidos[0];
+      const targetData = primeiroItem?.dataPlanejada || primeiroItem?.data || null;
+
+      const callbackOnSaved =
+        typeof onSavedOuOpts === 'function'
+          ? onSavedOuOpts
+          : (typeof onSavedOuOpts?.onAgendaSaved === 'function' ? onSavedOuOpts.onAgendaSaved : null);
+
       agendaSchedule.openCreateModalForPatient(buildAgendaPacienteFromRecord(paciente), {
-        catalogoProcedimentoSaudeIds: [catId],
-        planejamentoItemId,
-        planejamentoItemIdPorCatalogo: {
-          [catId]: planejamentoItemId,
-        },
+        catalogoProcedimentoSaudeIds,
+        planejamentoItemId: itensValidos.length === 1 ? String(primeiroItem.planejamentoItemId ?? primeiroItem.id).trim() : null,
+        planejamentoItemIdPorCatalogo: mapaPorCatalogo,
+        planejamentoItensLote,
         data: targetData,
         profissionalRoleUserId: roleUserId,
-        onAgendaSaved: onSaved,
+        onAgendaSaved: callbackOnSaved,
       });
     },
     [agendaSchedule, buildAgendaPacienteFromRecord, roleUserId, toast],
@@ -1510,10 +1540,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
   const consultaAtualServidor = consultaServidor.atual;
   const consultaDasFotos =
     activeView === 'consulta' &&
-    consultaModule != null &&
-    consultaAtualServidor &&
-    pacienteAtual?.id != null &&
-    String(consultaAtualServidor.pacienteId) === String(pacienteAtual.id)
+      consultaModule != null &&
+      consultaAtualServidor &&
+      pacienteAtual?.id != null &&
+      String(consultaAtualServidor.pacienteId) === String(pacienteAtual.id)
       ? consultaAtualServidor
       : null;
   /** Etapa 3: o encerrar vai pela rota única, com a consulta da tela no servidor; sem ela, nada é gravado. */
@@ -1542,13 +1572,27 @@ function AppRefactoredInner({ onCanalAvisos }) {
     }
     return true;
   }, [consultaEncerraNoServidor, esperarFilaAvaliacao, toast]);
-  const itemDoProcedimentoAtivo = React.useMemo(
-    () =>
-      mapearItensDaSessao(journeyState.procedimentosSessao, consultaAtualServidor?.itens)[
-        journeyState.activeProcedureIndex ?? 0
-      ] ?? null,
-    [journeyState.procedimentosSessao, consultaAtualServidor?.itens, journeyState.activeProcedureIndex],
-  );
+  const itemDoProcedimentoAtivo = React.useMemo(() => {
+    const itens = consultaAtualServidor?.itens;
+    if (!Array.isArray(itens) || itens.length === 0) return null;
+    const sessao = Array.isArray(journeyState.procedimentosSessao) ? journeyState.procedimentosSessao : [];
+    const mapaItens = mapearItensDaSessao(sessao, itens);
+    const idxAtivo = journeyState.activeProcedureIndex ?? 0;
+    const linhaAtiva = sessao[idxAtivo];
+    const linhaAtivaValida = linhaAtiva && !linhaAtiva.nomeSoDeTela && (
+      linhaAtiva.catalogoProcedimentoSaudeId || linhaAtiva.nomeProcedimentoCatalogoId || linhaAtiva.catalogoId || linhaAtiva.planejamentoItemId || (linhaAtiva.nomeProcedimento && !ehRotuloDeTela(linhaAtiva.nomeProcedimento))
+    );
+    if (linhaAtivaValida && mapaItens[idxAtivo]) {
+      return mapaItens[idxAtivo];
+    }
+    const idxPrimeiroValido = sessao.findIndex((p) => p && !p.nomeSoDeTela && (
+      p.catalogoProcedimentoSaudeId || p.nomeProcedimentoCatalogoId || p.catalogoId || p.planejamentoItemId || (p.nomeProcedimento && !ehRotuloDeTela(p.nomeProcedimento))
+    ));
+    if (idxPrimeiroValido >= 0 && mapaItens[idxPrimeiroValido]) {
+      return mapaItens[idxPrimeiroValido];
+    }
+    return mapaItens[idxAtivo] ?? itens.find((it) => it?.catalogoProcedimentoSaudeId || it?.planejamentoItemId)?.id ?? itens[0]?.id ?? null;
+  }, [journeyState.procedimentosSessao, consultaAtualServidor?.itens, journeyState.activeProcedureIndex]);
   const avisarErroFoto = React.useCallback((mensagem) => toast.error(mensagem), [toast]);
   const envioFotos = useEnvioFotosConsulta({
     consulta: consultaDasFotos,
@@ -1695,10 +1739,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
       destinoAvaliacao === 'avulso'
         ? null
         : (planejamentoId ||
-           prevPh?.planejamentoId ||
-           journeyState.journeyPlanejamentoCtx?.id ||
-           journeyState.journeyPlanejamentoCtx?.planejamentoId ||
-           null);
+          prevPh?.planejamentoId ||
+          journeyState.journeyPlanejamentoCtx?.id ||
+          journeyState.journeyPlanejamentoCtx?.planejamentoId ||
+          null);
     const resolvedPlanItemId = destinoAvaliacao === 'avulso' ? null : (planejamentoItemId || prevPh?.planejamentoItemId || null);
 
     if (resolvedMapaId) {
@@ -2532,8 +2576,9 @@ function AppRefactoredInner({ onCanalAvisos }) {
         pacienteId: patient.id,
         agendaIds,
         agendaClicadaId: options.agendaId ?? null,
-        catalogoProcedimentoSaudeId: options.agendaId ? null : catalogo,
-        nomeLivre: options.agendaId || catalogo ? null : (String(options.procedimentoNome || '').trim() || null),
+        catalogoProcedimentoSaudeId: catalogo ?? null,
+        planejamentoItemId: options.planejamentoItemId ?? options.lote?.[0]?.planejamentoItemId ?? null,
+        nomeLivre: catalogo ? null : (String(options.procedimentoNome || '').trim() || null),
         tipoProcedimentoCodigo: wantsRetorno ? 'retorno' : null,
         procedimentoFeitoOrigemId: options.procedimentoFeitoOrigemId ?? null,
         modulo,
@@ -5748,12 +5793,12 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     fotosAvaliacao={fotosAvaliacaoParaProcedimento}
                     onProcedureFotoCategoriaSync={cameraState.setProcedureFotoCategoria}
                     onProcedureAnnotatePhoto={openProcedurePhotoAnnotation}
-                          urlArquivoReserva={urlArquivoReservaDaFoto}
+                    urlArquivoReserva={urlArquivoReservaDaFoto}
                     mapaState={mapaAplicacaoState}
                     roleUserId={roleUserId}
                     procedimentoFeitoId={loteProcedimentosFeitosIds[0]}
                     planejamentoItemId={resolvePlanejamentoItemId(
-                        journeyState.nomeProcedimentoCatalogoId,
+                      journeyState.nomeProcedimentoCatalogoId,
                     )}
                     planejamentoId={journeyState.journeyPlanejamentoCtx?.planejamentoId ?? null}
                     procedimentosComPontos={

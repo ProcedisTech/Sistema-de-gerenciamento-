@@ -59,7 +59,7 @@ const MENSAGEM_ALTERADO_OUTRO_APARELHO = 'Alterado em outro aparelho';
 /** F2: ao sair do campo em que a pessoa mexeu, o local venceu o remoto em espera (PATCH do local saiu). */
 const MENSAGEM_SOBRESCREVEU_OUTRO_APARELHO = 'Sua alteração sobrescreveu a de outro aparelho';
 const MENSAGEM_NAO_ENTROU_ALTERACAO = 'Sua alteração não foi salva: a consulta foi atualizada. Confira e digite novamente.';
-const MENSAGEM_NAO_SALVOU_ALTERACAO ='Não foi possível salvar sua alteração. O texto continua na tela, mas o servidor guardou a versão do outro aparelho.';
+const MENSAGEM_NAO_SALVOU_ALTERACAO = 'Não foi possível salvar sua alteração. O texto continua na tela, mas o servidor guardou a versão do outro aparelho.';
 
 /** F7: prefixo da guarda, por pessoa e consulta, das alterações que o servidor recusou por consulta encerrada. */
 const PREFIXO_NAO_ENTRARAM = 'procedi_consulta_naoentraram_';
@@ -693,7 +693,7 @@ export function useAtendimentoServidor({
     if (opcoes?.retentativa !== true) controle.tentativas = 0;
     let dto = null;
     let refeitas = 0;
-    for (;;) {
+    for (; ;) {
       const antes = filasRef.current.get(at.id)?.enviosConcluidos?.() ?? 0;
       try {
         dto = await atendimentosApi.detalhe(at.id);
@@ -928,6 +928,8 @@ export function useAtendimentoServidor({
               ? atendimentosApi.alterarItem(id, existenteNoServidor, dados.corpo)
               : atendimentosApi.novoItem(id, dados.corpo);
           }
+          case 'itemRemover':
+            return atendimentosApi.removerItem(id, dados.itemId);
           default:
             // Tipo que não existe mais (ex.: envio de orientação guardado no sessionStorage por uma versão
             // anterior): sai da fila sem chamar o servidor.
@@ -969,12 +971,23 @@ export function useAtendimentoServidor({
         }
         if (entrada.tipo === 'itemNovo' && res?.id) {
           const at = atualRef.current;
+          const sessao = valoresRef.current.procedimentosSessao;
+          const indice = entrada.dados?.indice;
+          const linha = Array.isArray(sessao) ? sessao[indice] : null;
+          // Se o usuário removeu o procedimento enquanto o POST estava em voo:
+          if (!linha) {
+            filasRef.current.get(id)?.enfileirar({
+              chave: `item:${res.id}:remover`,
+              grupo: `item:${res.id}`,
+              tipo: 'itemRemover',
+              dados: { itemId: res.id },
+              debounceMs: 0,
+            });
+            return;
+          }
           if (at?.id === id && !(at.itens || []).some((i) => i.id === res.id)) {
             baseItensRef.current.set(res.id, camposDoItemServidor(res));
             definirAtual({ ...at, itens: [...(at.itens || []), res] });
-            const sessao = valoresRef.current.procedimentosSessao;
-            const indice = entrada.dados?.indice;
-            const linha = Array.isArray(sessao) ? sessao[indice] : null;
             if (linha) {
               // O que a linha já tinha e o POST não leva (observação digitada, `orient` carregada antes do item
               // nascer) sai agora, sem espera: ainda dentro do mesmo esvaziar e antes de qualquer rebusca
@@ -1126,6 +1139,12 @@ export function useAtendimentoServidor({
     });
     enfileirarAlteracoes(fila, alterar);
     const ehRetorno = String(at?.tipoProcedimentoCodigo || '').toLowerCase() === 'retorno';
+    const indicesCriar = new Set(itens.criar.map((c) => c.indice));
+    for (let i = 0; i < 20; i++) {
+      if (!indicesCriar.has(i) && fila.temPendente(`item:novo:${i}`)) {
+        fila.descartar(`item:novo:${i}`);
+      }
+    }
     for (const novo of itens.criar) {
       let catId = novo.catalogoProcedimentoSaudeId || null;
       if (ehRetorno && at?.procedimentoFeitoOrigemId && String(catId) === String(at.procedimentoFeitoOrigemId)) {
@@ -1144,6 +1163,25 @@ export function useAtendimentoServidor({
           corpo,
         },
         debounceMs: DEBOUNCE_TEXTO_MS,
+      });
+    }
+    for (const itemId of itens.remover || []) {
+      fila.descartar(`item:${itemId}:`);
+      baseItensRef.current.delete(itemId);
+      baseItensRef.current.delete(String(itemId));
+      fila.enfileirar({
+        chave: `item:${itemId}:remover`,
+        grupo: `item:${itemId}`,
+        tipo: 'itemRemover',
+        dados: { itemId },
+        debounceMs: 0,
+      });
+    }
+    if ((itens.remover || []).length > 0) {
+      const removidosSet = new Set(itens.remover.map(String));
+      definirAtual({
+        ...at,
+        itens: (at.itens || []).filter((i) => !removidosSet.has(String(i.id))),
       });
     }
   }, [emConsulta, atualId, versaoBase, procedimentosSessao, enfileirarAlteracoes]);
@@ -1540,7 +1578,7 @@ export function useAtendimentoServidor({
     const cancelada = () => Object.assign(new Error('Espera cancelada.'), { codigo: CODIGO_ESPERA_CANCELADA });
     let avisou = false;
     try {
-      for (;;) {
+      for (; ;) {
         if (espera.cancelado) throw cancelada();
         try {
           return await encerrar(...args);

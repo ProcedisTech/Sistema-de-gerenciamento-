@@ -1231,6 +1231,10 @@ export const atendimentosApi = {
       method: 'PATCH',
       body: JSON.stringify(campos),
     }),
+  removerItem: (id, itemId) =>
+    request(atendimentoPath(id, `/itens/${encodeURIComponent(itemId)}`), {
+      method: 'DELETE',
+    }),
   /**
    * Textos da avaliação (queixa, expectativas, observações): só a chave PRESENTE em `campos` muda (`null` ou `''`
    * limpa). Devolve o detalhe completo da consulta (com `preenchimentoAnamneseId`).
