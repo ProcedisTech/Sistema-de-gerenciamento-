@@ -3,6 +3,8 @@
  * consulta aberta continua na barra do topo. V1: o atalho do cabeçalho leva de volta à consulta sem abrir outra.
  */
 import { screen } from '@testing-library/react';
+import { ultimoRoteador } from '../rotas/montarComRoteador.jsx';
+import { caminhos } from '../../rotas/caminhos.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { pacienteDto } from '../encerrar/cenariosEncerrar.js';
@@ -61,7 +63,7 @@ describe('F5 e atalho da consulta (V1)', () => {
     expect(emConsulta()).toBe(false);
     expect(abrirDe(srv)).toHaveLength(0);
     expect(detalheLido(srv, ATENDIMENTO_ID)).toBe(false);
-    expect(sessionStorage.getItem('activeView')).toBe('pacientes');
+    expect(ultimoRoteador().state.location.pathname).toBe(caminhos.pacientes());
     expect(screen.getByRole('button', { name: 'Voltar à consulta de Maria Souza' })).toBeTruthy();
   }, TIMEOUT);
 

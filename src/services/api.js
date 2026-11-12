@@ -678,7 +678,7 @@ export const pacientesApi = {
     const raw = await request(`/api/v1/pacientes${qs}`);
     return normalizePacientesPage(raw);
   },
-  get: (id) => request(`/api/v1/pacientes/${id}`),
+  get: (id) => request(`/api/v1/pacientes/${encodeURIComponent(String(id))}`),
   listarProcedimentosFeitosRaiz: (pacienteId) =>
     request(`/api/v1/pacientes/${pacienteId}/procedimentos-feitos-raiz`),
   /** Busca textual (nome | CPF | telefone). Normaliza como `list` — array ou Page. */
@@ -746,6 +746,8 @@ export const pacientesApi = {
     const raw = await request(`/api/v1/pacientes/inativos?${params.toString()}`);
     return normalizePacientesPage(raw);
   },
+  /** Alias para listInativos */
+  inativos: (opts) => pacientesApi.listInativos(opts),
 };
 
 /**
@@ -1093,6 +1095,20 @@ export const agendasApi = {
     }),
 
   /**
+   * Substitui o profissional titular do agendamento com registro de auditoria e notificação.
+   * @param {string} id UUID da agenda
+   * @param {{ novoProfissionalRoleUserId: string, motivo: string }} payload
+   * @param {{ forcar?: boolean }} [opts]
+   */
+  trocarProfissional: (id, payload, opts = {}) => {
+    const qs = opts?.forcar ? '?forcar=true' : '';
+    return request(`/api/v1/agendas/${id}/profissional${qs}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
    * Reagenda um slot (V30): move o agendamento e marca o original como reagendado.
    * @param {string} id UUID do slot original
    * @param {{ novaData: string, novaHoraInicio: string, novaHoraFim: string, observacao?: string }} payload
@@ -1217,6 +1233,7 @@ const atendimentoPath = (id, resto = '') => `${ATENDIMENTOS}/${encodeURIComponen
 export const atendimentosApi = {
   abrir: (data) => request(ATENDIMENTOS, { method: 'POST', body: JSON.stringify(data) }),
   minhas: () => request(`${ATENDIMENTOS}/minhas`),
+  presenca: (id) => request(atendimentoPath(id, '/presenca'), { method: 'POST' }),
   detalhe: (id) => request(atendimentoPath(id)),
   trocarModulo: (id, modulo) =>
     request(atendimentoPath(id, '/modulo'), { method: 'PATCH', body: JSON.stringify({ modulo }) }),

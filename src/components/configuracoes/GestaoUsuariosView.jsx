@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { resolveApiUrl } from "../../config/apiEnv";
 import {
   authHeadersForFetch,
@@ -15,6 +16,7 @@ import { AuditoriaView } from "./AuditoriaView";
 import { GestaoPerfisTab } from "./GestaoPerfisTab";
 import { formatCargoLabel } from "./gestaoUsuariosUtils";
 import { InviteModal } from "./InviteModal";
+import { VincularMembrosAoPerfilModal } from "./VincularMembrosAoPerfilModal";
 import { ConfigTableSkeleton } from "../shared/ConfigPanelSkeletons";
 import { initialsFromName } from "../../utils/agendaAvatarUtils";
 import { perfilFotoDisplaySrc } from "../layout/identityDisplay";
@@ -29,6 +31,10 @@ import {
 } from "./equipePrototypeUtils";
 import "./equipePrototypeBase.css";
 import "./gestaoEquipe.css";
+import { useNavigate } from "react-router";
+import { useRotaAtual } from "../../rotas/useRotaAtual.js";
+import { caminhos } from "../../rotas/caminhos.js";
+import NaoEncontrado from "../../rotas/NaoEncontrado.jsx";
 import { useAgoraDaClinica } from "../hooks/useAgoraDaClinica.js";
 
 export function GestaoUsuariosView({
@@ -36,10 +42,10 @@ export function GestaoUsuariosView({
   onEquipeInvalidate,
   onNavigateAgenda,
   onSelectPatient,
-  targetUserId,
-  onClearTargetUserId,
   onPerfilAtualizado,
 }) {
+  const rota = useRotaAtual();
+  const navigate = useNavigate();
   const {
     isDono,
     canSeeConfigEquipe,
@@ -62,7 +68,7 @@ export function GestaoUsuariosView({
     apareceNaAgenda,
   } = useOrg();
   const resolvedTarget =
-    targetUserId === "me" ? currentRoleUserId : targetUserId;
+    rota.membroId === "me" ? currentRoleUserId : rota.membroId;
   const selfTarget = Boolean(
     currentRoleUserId &&
     resolvedTarget &&
@@ -79,21 +85,40 @@ export function GestaoUsuariosView({
   const [especialidadesList, setEspecialidadesList] = useState([]);
   const [permissoes, setPermissoes] = useState([]);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showVincularMembrosModal, setShowVincularMembrosModal] = useState(false);
   const [inviteDraft, setInviteDraft] = useState(null);
-  const [activeTab, setActiveTab] = useState("membros"); // 'membros' | 'auditoria' | 'perfis'
+  const activeTab = rota.equipeAba ?? "membros"; // 'membros' | 'auditoria' | 'perfis'
+  const setActiveTab = (aba) =>
+    aba !== activeTab && navigate(caminhos.equipe(aba === "membros" ? undefined : aba));
   const [perfilParaAbrirNaAba, setPerfilParaAbrirNaAba] = useState(null);
 
-  const onEditarPerfilNaAba = useCallback((perfilAcessoId) => {
-    setDetailId(null);
+  const onEditarPerfilNaAba = (perfilAcessoId) => {
     setPerfilParaAbrirNaAba(perfilAcessoId);
     setActiveTab("perfis");
-  }, []);
+  };
 
   // Filtros
   const [searchName, setSearchName] = useState("");
   const [filterLevel, setFilterLevel] = useState("");
+  const [selectedStatusFilters, setSelectedStatusFilters] = useState([]); // 'ativos', 'inativos'
+  const [selectedAgendaFilters, setSelectedAgendaFilters] = useState([]); // 'yes', 'no'
+  const [selectedProfileIds, setSelectedProfileIds] = useState([]); // string[]
+  const [selectedAtendimentoFilters, setSelectedAtendimentoFilters] = useState([]); // 'hoje', 'mes'
+  const [viewingProfileId, setViewingProfileId] = useState(null); // string | null (profile cuja ficha está aberta no .pban)
+  const [isTodosPerfisModalOpen, setIsTodosPerfisModalOpen] = useState(false);
+  const [profileSearchInFilter, setProfileSearchInFilter] = useState("");
+  const [todosPerfisSearch, setTodosPerfisSearch] = useState("");
+  const [pinnedProfileIds, setPinnedProfileIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`procedi_pinned_profiles_${orgId}`);
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return null;
+  });
   const [loadError, setLoadError] = useState("");
-  const [detailId, setDetailId] = useState(null);
+  const detailId = resolvedTarget ? String(resolvedTarget) : null;
   const [sortOption, setSortOption] = useState("az"); // 'az' | 'za' | 'perfil' | 'atendimentos'
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
@@ -221,8 +246,8 @@ export function GestaoUsuariosView({
         const body = await badRes.json().catch(() => ({}));
         setLoadError(
           getApiErrorDetail({ body }) ||
-            body?.message ||
-            "Erro ao carregar dados da equipe.",
+          body?.message ||
+          "Erro ao carregar dados da equipe.",
         );
       }
     } catch (e) {
@@ -240,12 +265,6 @@ export function GestaoUsuariosView({
     }
   }, [canSeeConfigEquipe, loadData, orgId]);
 
-
-  useEffect(() => {
-    if (!resolvedTarget || (!canSeeConfigEquipe && !selfTarget)) return;
-    setDetailId(String(resolvedTarget));
-    setActiveTab("membros");
-  }, [resolvedTarget, canSeeConfigEquipe, selfTarget]);
 
   const loadSelf = useCallback(
     async (signal) => {
@@ -289,7 +308,7 @@ export function GestaoUsuariosView({
   const retryData = selfOnly ? loadSelf : loadData;
   const detail = usuarios.find((u) => String(u.id) === String(detailId));
   const selectedProfile = perfisAcesso.find(
-    (p) => String(p.id) === String(filterLevel),
+    (p) => String(p.id) === String(viewingProfileId || filterLevel),
   );
   useEffect(() => {
     if (!canSeeAgenda || !hojeIso) return;
@@ -378,6 +397,24 @@ export function GestaoUsuariosView({
         a.dataAgendamento?.startsWith(hojeIso.slice(0, 7)),
     ).length,
   };
+  const effectiveProfileIds = useMemo(() => {
+    if (selectedProfileIds.length > 0) return selectedProfileIds;
+    if (filterLevel) return [filterLevel];
+    return [];
+  }, [selectedProfileIds, filterLevel]);
+
+  const effectiveStatusFilters = useMemo(() => {
+    if (selectedStatusFilters.length > 0) return selectedStatusFilters;
+    if (statusFilter && ["ativos", "inativos"].includes(statusFilter)) return [statusFilter];
+    return [];
+  }, [selectedStatusFilters, statusFilter]);
+
+  const effectiveAgendaFilters = useMemo(() => {
+    if (selectedAgendaFilters.length > 0) return selectedAgendaFilters;
+    if (agendaAvailabilityFilter !== "all") return [agendaAvailabilityFilter];
+    return [];
+  }, [selectedAgendaFilters, agendaAvailabilityFilter]);
+
   const filteredUsers = usuarios
     .filter((u) => {
       const text = [
@@ -388,20 +425,72 @@ export function GestaoUsuariosView({
       ]
         .join(" ")
         .toLocaleLowerCase("pt-BR");
-      return (
-        text.includes(searchName.toLocaleLowerCase("pt-BR")) &&
-        (!filterLevel || String(u.perfilAcessoId) === String(filterLevel)) &&
-        (statusFilter !== "ativos" || u.ativo !== false) &&
-        (statusFilter !== "inativos" || u.ativo === false) &&
-        (!["agenda", "hoje", "mes"].includes(statusFilter) ||
-          (u.ativo !== false && u.apareceNaAgenda === true)) &&
-        (agendaAvailabilityFilter === "all" ||
-          (agendaAvailabilityFilter === "yes" &&
-            u.ativo !== false &&
-            u.apareceNaAgenda === true) ||
-          (agendaAvailabilityFilter === "no" &&
-            u.apareceNaAgenda !== true))
-      );
+
+      // 1. Busca por texto
+      const matchesSearch = !searchName || text.includes(searchName.toLocaleLowerCase("pt-BR"));
+
+      // 2. Filtro de perfis (acumulativo OR entre perfis selecionados)
+      const matchesProfile =
+        effectiveProfileIds.length === 0 ||
+        effectiveProfileIds.includes(String(u.perfilAcessoId));
+
+      // 3. Status (ativos / inativos)
+      let matchesStatus = true;
+      if (effectiveStatusFilters.includes("ativos") && !effectiveStatusFilters.includes("inativos")) {
+        matchesStatus = u.ativo !== false;
+      } else if (effectiveStatusFilters.includes("inativos") && !effectiveStatusFilters.includes("ativos")) {
+        matchesStatus = u.ativo === false;
+      }
+
+      // 4. Agenda (atendem / não atendem)
+      let matchesAgenda = true;
+      if (effectiveAgendaFilters.includes("yes") && !effectiveAgendaFilters.includes("no")) {
+        matchesAgenda = u.ativo !== false && u.apareceNaAgenda === true;
+      } else if (effectiveAgendaFilters.includes("no") && !effectiveAgendaFilters.includes("yes")) {
+        matchesAgenda = u.apareceNaAgenda !== true;
+      }
+
+      // 5. Atendimentos (hoje / mês)
+      let matchesAtend = true;
+      if (selectedAtendimentoFilters.includes("hoje")) {
+        const hasToday = agenda?.some(
+          (a) =>
+            (a.profissionalRoleUserId || a.roleUserId) === u.id &&
+            a.dataAgendamento === hojeIso,
+        );
+        matchesAtend = matchesAtend && Boolean(hasToday);
+      }
+      if (selectedAtendimentoFilters.includes("mes")) {
+        const hasMonth = agenda?.some(
+          (a) =>
+            (a.profissionalRoleUserId || a.roleUserId) === u.id &&
+            String(a.statusCodigo).toUpperCase() === "REALIZADO" &&
+            a.dataAgendamento?.startsWith(hojeIso?.slice(0, 7) || ""),
+        );
+        matchesAtend = matchesAtend && Boolean(hasMonth);
+      }
+
+      // Fallback para statusFilter legado caso selecionado avulso
+      if (statusFilter === "agenda") {
+        matchesAgenda = matchesAgenda && (u.ativo !== false && u.apareceNaAgenda === true);
+      } else if (statusFilter === "hoje") {
+        const hasToday = agenda?.some(
+          (a) =>
+            (a.profissionalRoleUserId || a.roleUserId) === u.id &&
+            a.dataAgendamento === hojeIso,
+        );
+        matchesAtend = matchesAtend && Boolean(hasToday);
+      } else if (statusFilter === "mes") {
+        const hasMonth = agenda?.some(
+          (a) =>
+            (a.profissionalRoleUserId || a.roleUserId) === u.id &&
+            String(a.statusCodigo).toUpperCase() === "REALIZADO" &&
+            a.dataAgendamento?.startsWith(hojeIso?.slice(0, 7) || ""),
+        );
+        matchesAtend = matchesAtend && Boolean(hasMonth);
+      }
+
+      return matchesSearch && matchesProfile && matchesStatus && matchesAgenda && matchesAtend;
     })
     .sort((a, b) => {
       if (sortOption === "za") {
@@ -426,19 +515,27 @@ export function GestaoUsuariosView({
     });
 
   const activeFiltersCount =
-    (statusFilter ? 1 : 0) +
-    (filterLevel ? 1 : 0) +
-    (agendaAvailabilityFilter !== "all" ? 1 : 0);
+    (searchName ? 1 : 0) +
+    effectiveStatusFilters.length +
+    effectiveProfileIds.length +
+    effectiveAgendaFilters.length +
+    selectedAtendimentoFilters.length +
+    (statusFilter && !["ativos", "inativos"].includes(statusFilter) ? 1 : 0);
 
   const clearAllFilters = () => {
     setSearchName("");
     setFilterLevel("");
+    setSelectedProfileIds([]);
     setStatusFilter("");
+    setSelectedStatusFilters([]);
     setAgendaAvailabilityFilter("all");
+    setSelectedAgendaFilters([]);
+    setSelectedAtendimentoFilters([]);
+    setViewingProfileId(null);
   };
 
   const openDetail = (u) => {
-    setDetailId(u.id);
+    navigate(caminhos.membro(u.id));
     setPeriodo("mes");
   };
   const newProfile = () => {
@@ -506,8 +603,8 @@ export function GestaoUsuariosView({
   const agendaModule =
     selectedProfile?.codigo === "DONO"
       ? summarizeModules(permissoes, profileIds(selectedProfile)).find(
-          (module) => module.key === "agenda",
-        )
+        (module) => module.key === "agenda",
+      )
       : null;
   const attends = (profile) =>
     profileIds(profile)?.some(
@@ -519,10 +616,64 @@ export function GestaoUsuariosView({
     usuarios.filter((u) => u.ativo !== false && u.perfilAcessoId === profile.id)
       .length;
   const sortedProfiles = sortPrototypeProfiles(perfisAcesso);
+
+  const activePinnedProfileIds = useMemo(() => {
+    if (pinnedProfileIds && pinnedProfileIds.length > 0) {
+      return pinnedProfileIds;
+    }
+    return sortedProfiles.slice(0, 7).map((p) => String(p.id));
+  }, [pinnedProfileIds, sortedProfiles]);
+
+  const railProfiles = useMemo(() => {
+    if (activePinnedProfileIds && activePinnedProfileIds.length > 0) {
+      return sortedProfiles.filter((p) => activePinnedProfileIds.includes(String(p.id)));
+    }
+    return sortedProfiles.slice(0, 7);
+  }, [sortedProfiles, activePinnedProfileIds]);
+
+  const togglePinProfile = (id) => {
+    const strId = String(id);
+    setPinnedProfileIds((prev) => {
+      const current = prev && prev.length > 0 ? prev : sortedProfiles.slice(0, 7).map((p) => String(p.id));
+      const next = current.includes(strId)
+        ? current.filter((item) => item !== strId)
+        : [...current, strId];
+      try {
+        localStorage.setItem(`procedi_pinned_profiles_${orgId}`, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+
+  const handleSelectProfileFromRail = (profile) => {
+    const strId = String(profile.id);
+    setViewingProfileId(strId);
+    setFilterLevel(strId);
+    setSelectedProfileIds([strId]);
+  };
+
+  const handleSelectAllFromRail = () => {
+    setViewingProfileId(null);
+    setFilterLevel("");
+    setSelectedProfileIds([]);
+  };
+
+  const handleCloseProfileBanner = () => {
+    if (viewingProfileId) {
+      setSelectedProfileIds((prev) => prev.filter((id) => id !== viewingProfileId));
+      if (filterLevel === viewingProfileId) {
+        setFilterLevel("");
+      }
+    }
+    setViewingProfileId(null);
+  };
+
   const railItem = (profile) => (
     <button
-      className={`rit ${String(profile.id) === filterLevel ? "on" : ""}`}
-      onClick={() => setFilterLevel(String(profile.id))}
+      className={`rit ${viewingProfileId === String(profile.id) || (effectiveProfileIds.length === 1 && effectiveProfileIds.includes(String(profile.id))) ? "on" : ""}`}
+      onClick={() => handleSelectProfileFromRail(profile)}
       key={profile.id}
     >
       <span className={`dot ${profileType(profile)}`}>
@@ -545,9 +696,7 @@ export function GestaoUsuariosView({
     </button>
   );
   const backToTeam = () => {
-    setDetailId(null);
-    setActiveTab("membros");
-    onClearTargetUserId?.();
+    navigate(caminhos.equipe());
   };
   const saveAccess = async (person, changes) => {
     if (!canManageUsers || person.perfilAcessoCodigo === "DONO") return;
@@ -647,6 +796,8 @@ export function GestaoUsuariosView({
         </div>
       ) : loading ? (
         <ConfigTableSkeleton rows={5} cols={4} />
+      ) : detailId && !detail ? (
+        <NaoEncontrado />
       ) : detail ? (
         <EquipePessoaView
           key={detail.id}
@@ -763,37 +914,6 @@ export function GestaoUsuariosView({
         </>
       ) : (
         <>
-          <div className="phd">
-            <div>
-              <h1>Gestão de Equipe</h1>
-              <p>
-                Quem trabalha na clínica, o que cada um faz e o que pode
-                acessar.
-              </p>
-            </div>
-            <div className="acts">
-              {canSeeConfigAuditoria && (
-                <button
-                  className="btn-s"
-                  aria-label="Histórico / Auditoria"
-                  onClick={() => setActiveTab("auditoria")}
-                >
-                  <PrototypeIcon name="hist" size="s" />
-                  <span className="lbl">Histórico / Auditoria</span>
-                </button>
-              )}
-              {canCreateUsers && (
-                <button
-                  className="btn-p"
-                  onClick={() => setShowInviteModal(true)}
-                  aria-label="Convidar pessoa"
-                >
-                  <PrototypeIcon name="uplus" size="s" />
-                  <span className="lbl">Convidar pessoa</span>
-                </button>
-              )}
-            </div>
-          </div>
           {usuarios.length === 1 && (
             <div className="hint">
               <PrototypeIcon name="info" />
@@ -806,46 +926,101 @@ export function GestaoUsuariosView({
           )}
           <div className="kpis">
             {[
-              ["ativos", "Ativos", stats.ativos, "users"],
-              ["agenda", "Atendem na agenda", stats.atendem, "calok"],
-              ["hoje", "Atendimentos hoje", stats.hoje ?? "—", "cal"],
-              [
-                "mes",
-                `Atendimentos em ${monthName}`,
-                stats.mes ?? "—",
-                "steth",
-              ],
-              ["conv", "Convites pendentes", "—", "mail"],
-            ].map(([id, label, value, icon]) => (
-              <button
-                key={id}
-                className={`kpi ${statusFilter === id ? "on" : ""}`}
-                title={
-                  id === "conv"
-                    ? "Convites pendentes por e-mail ainda não disponíveis na API."
-                    : !canSeeAgendaMulti && (id === "hoje" || id === "mes")
-                      ? "Dados da agenda disponíveis para seu acesso."
-                      : undefined
-                }
-                onClick={() => {
-                  if (id === "conv") {
-                    toast.info(
-                      "O sistema atual cria o acesso diretamente. Convites pendentes por e-mail ainda não estão disponíveis.",
-                    );
-                    return;
+              {
+                id: "ativos",
+                label: "ATIVOS",
+                value: stats.ativos,
+                badgeClass: "kpi-badge-teal",
+                icon: "users",
+              },
+              {
+                id: "agenda",
+                label: "ATENDEM NA AGENDA",
+                value: stats.atendem,
+                badgeClass: "kpi-badge-blue",
+                icon: "calok",
+              },
+              {
+                id: "hoje",
+                label: "ATENDIMENTOS HOJE",
+                value: stats.hoje ?? "—",
+                badgeClass: "kpi-badge-amber",
+                icon: "cal",
+              },
+              {
+                id: "mes",
+                label: `ATENDIMENTOS EM ${monthName.toUpperCase()}`,
+                value: stats.mes ?? "—",
+                badgeClass: "kpi-badge-emerald",
+                icon: "steth",
+              },
+              {
+                id: "conv",
+                label: "CONVITES PENDENTES",
+                value: "—",
+                badgeClass: "kpi-badge-slate",
+                icon: "mail",
+              },
+            ].map(({ id, label, value, badgeClass, icon }) => {
+              const isKpiActive =
+                id === "ativos"
+                  ? selectedStatusFilters.includes("ativos")
+                  : id === "agenda"
+                    ? selectedAgendaFilters.includes("yes")
+                    : id === "hoje"
+                      ? selectedAtendimentoFilters.includes("hoje")
+                      : id === "mes"
+                        ? selectedAtendimentoFilters.includes("mes")
+                        : false;
+              return (
+                <button
+                  type="button"
+                  key={id}
+                  className={`kpi ${isKpiActive ? "on" : ""}`}
+                  title={
+                    id === "conv"
+                      ? "Convites pendentes por e-mail ainda não disponíveis na API."
+                      : !canSeeAgendaMulti && (id === "hoje" || id === "mes")
+                        ? "Dados da agenda disponíveis para seu acesso."
+                        : undefined
                   }
-                  setStatusFilter(statusFilter === id ? "" : id);
-                }}
-              >
-                <span>
-                  <small>{label}</small>
-                  <b>{value}</b>
-                </span>
-                <span className="ic">
-                  <PrototypeIcon name={icon} size="l" />
-                </span>
-              </button>
-            ))}
+                  onClick={() => {
+                    if (id === "conv") {
+                      toast.info(
+                        "O sistema atual cria o acesso diretamente. Convites pendentes por e-mail ainda não estão disponíveis.",
+                      );
+                      return;
+                    }
+                    if (id === "ativos") {
+                      setSelectedStatusFilters((prev) =>
+                        prev.includes("ativos") ? prev.filter((s) => s !== "ativos") : [...prev, "ativos"]
+                      );
+                    } else if (id === "agenda") {
+                      setSelectedAgendaFilters((prev) =>
+                        prev.includes("yes") ? prev.filter((a) => a !== "yes") : [...prev, "yes"]
+                      );
+                    } else if (id === "hoje") {
+                      setSelectedAtendimentoFilters((prev) =>
+                        prev.includes("hoje") ? prev.filter((h) => h !== "hoje") : [...prev, "hoje"]
+                      );
+                    } else if (id === "mes") {
+                      setSelectedAtendimentoFilters((prev) =>
+                        prev.includes("mes") ? prev.filter((m) => m !== "mes") : [...prev, "mes"]
+                      );
+                    }
+                  }}
+                >
+                  <div className="kpi-top">
+                    <span className="kpi-label">{label}</span>
+                    <span className={`kpi-badge ${badgeClass}`}>
+                      <PrototypeIcon name={icon} size="s" />
+                    </span>
+                  </div>
+                  <div className="kpi-value">{value}</div>
+                  <div className="kpi-sub-spacer" aria-hidden="true">·</div>
+                </button>
+              );
+            })}
           </div>
           {(previewError || agendaError) && (
             <p role="alert" className="team-error">
@@ -878,8 +1053,8 @@ export function GestaoUsuariosView({
                 </button>
               )}
               <button
-                className={`rit ${!filterLevel ? "on" : ""}`}
-                onClick={() => setFilterLevel("")}
+                className={`rit ${effectiveProfileIds.length === 0 && !viewingProfileId ? "on" : ""}`}
+                onClick={handleSelectAllFromRail}
               >
                 <span className="dot all">
                   <PrototypeIcon name="users" size="s" />
@@ -890,31 +1065,33 @@ export function GestaoUsuariosView({
                 </span>
                 <span className="ct">{stats.ativos}</span>
               </button>
-              <div className="rgl">Da sua clínica</div>
-              {sortedProfiles
-                .filter((p) => profileType(p) !== "tpl")
-                .map(railItem)}
-              <div className="rgl">
-                <PrototypeIcon name="lock" size="s" />
-                Modelos prontos
-              </div>
-              {sortedProfiles
-                .filter((p) => profileType(p) === "tpl")
-                .map(railItem)}
+              {railProfiles.map(railItem)}
+              {perfisAcesso.length > 0 && (
+                <button
+                  type="button"
+                  className="rail-see-all-btn"
+                  onClick={() => setIsTodosPerfisModalOpen(true)}
+                  aria-label={`Ver todos os ${perfisAcesso.length} perfis`}
+                >
+                  <PrototypeIcon name="shield" size="s" />
+                  <span>Ver todos os perfis</span>
+                  <span className="rail-see-all-btn-count">{perfisAcesso.length}</span>
+                </button>
+              )}
             </aside>
             <div style={{ minWidth: 0 }}>
               <div className="pchips">
                 <button
-                  className={!filterLevel ? "on" : ""}
-                  onClick={() => setFilterLevel("")}
+                  className={effectiveProfileIds.length === 0 && !viewingProfileId ? "on" : ""}
+                  onClick={handleSelectAllFromRail}
                 >
                   Toda a equipe <i>{stats.ativos}</i>
                 </button>
-                {sortedProfiles.map((p) => (
+                {railProfiles.map((p) => (
                   <button
                     key={p.id}
-                    className={filterLevel === String(p.id) ? "on" : ""}
-                    onClick={() => setFilterLevel(String(p.id))}
+                    className={viewingProfileId === String(p.id) || effectiveProfileIds.includes(String(p.id)) ? "on" : ""}
+                    onClick={() => handleSelectProfileFromRail(p)}
                   >
                     <PrototypeIcon
                       name={p.codigo === "DONO" ? "crown" : "shield"}
@@ -923,6 +1100,15 @@ export function GestaoUsuariosView({
                     {p.nome} <i>{count(p)}</i>
                   </button>
                 ))}
+                {perfisAcesso.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setIsTodosPerfisModalOpen(true)}
+                    className="pchip-more"
+                  >
+                    Ver todos ({perfisAcesso.length})
+                  </button>
+                )}
                 {canEditConfigPerfil && (
                   <button onClick={newProfile}>
                     <PrototypeIcon name="plus" size="s" />
@@ -947,6 +1133,14 @@ export function GestaoUsuariosView({
                       ) : (
                         canEditConfigPerfil && (
                           <>
+                            <button
+                              className="btn-s"
+                              onClick={() => setShowVincularMembrosModal(true)}
+                              title={`Adicionar membros ao perfil ${selectedProfile.nome}`}
+                            >
+                              <PrototypeIcon name="uplus" size="s" />
+                              Adicionar membros
+                            </button>
                             <button
                               className={
                                 profileType(selectedProfile) === "tpl"
@@ -986,6 +1180,15 @@ export function GestaoUsuariosView({
                           </>
                         )
                       )}
+                      <button
+                        type="button"
+                        className="btn-close-pban"
+                        onClick={handleCloseProfileBanner}
+                        aria-label="Fechar ficha do perfil e remover filtro"
+                        title="Fechar ficha e remover filtro"
+                      >
+                        ✕
+                      </button>
                     </div>
                   </div>
                   {selectedProfile.codigo === "DONO" &&
@@ -1147,12 +1350,25 @@ export function GestaoUsuariosView({
                 <label className="search">
                   <PrototypeIcon name="search" />
                   <input
+                    id="inputBuscaEquipe"
                     placeholder="Buscar por nome, e-mail ou telefone"
                     aria-label="Buscar pessoa"
                     value={searchName}
                     onChange={(e) => setSearchName(e.target.value)}
                   />
                 </label>
+
+                {canCreateUsers && (
+                  <button
+                    type="button"
+                    className="btn-p tool-action-btn"
+                    onClick={() => setShowInviteModal(true)}
+                    aria-label="Convidar pessoa"
+                  >
+                    <PrototypeIcon name="uplus" size="s" />
+                    <span className="lbl">Convidar pessoa</span>
+                  </button>
+                )}
 
                 <div
                   className="filter-wrapper"
@@ -1191,11 +1407,7 @@ export function GestaoUsuariosView({
                           <button
                             type="button"
                             className="btn-clear-all"
-                            onClick={() => {
-                              setStatusFilter("");
-                              setFilterLevel("");
-                              setAgendaAvailabilityFilter("all");
-                            }}
+                            onClick={clearAllFilters}
                           >
                             Limpar
                           </button>
@@ -1204,34 +1416,36 @@ export function GestaoUsuariosView({
 
                       <div className="popover-section">
                         <span className="section-title">Status do Acesso</span>
-                        <div className="popover-options">
-                          <label className="popover-radio">
+                        <div className="popover-options-vertical">
+                          <label className="popover-checkbox-row">
                             <input
-                              type="radio"
-                              name="popover_status"
-                              checked={
-                                !statusFilter ||
-                                ["agenda", "hoje", "mes"].includes(statusFilter)
-                              }
-                              onChange={() => setStatusFilter("")}
-                            />
-                            <span>Todos</span>
-                          </label>
-                          <label className="popover-radio">
-                            <input
-                              type="radio"
-                              name="popover_status"
-                              checked={statusFilter === "ativos"}
-                              onChange={() => setStatusFilter("ativos")}
+                              type="checkbox"
+                              checked={effectiveStatusFilters.includes("ativos")}
+                              onChange={(e) => {
+                                setSelectedStatusFilters((prev) =>
+                                  e.target.checked
+                                    ? [...prev.filter((s) => s !== "ativos"), "ativos"]
+                                    : prev.filter((s) => s !== "ativos"),
+                                );
+                                setStatusFilter("");
+                              }}
+                              aria-label="Apenas Ativos"
                             />
                             <span>Apenas Ativos</span>
                           </label>
-                          <label className="popover-radio">
+                          <label className="popover-checkbox-row">
                             <input
-                              type="radio"
-                              name="popover_status"
-                              checked={statusFilter === "inativos"}
-                              onChange={() => setStatusFilter("inativos")}
+                              type="checkbox"
+                              checked={effectiveStatusFilters.includes("inativos")}
+                              onChange={(e) => {
+                                setSelectedStatusFilters((prev) =>
+                                  e.target.checked
+                                    ? [...prev.filter((s) => s !== "inativos"), "inativos"]
+                                    : prev.filter((s) => s !== "inativos"),
+                                );
+                                setStatusFilter("");
+                              }}
+                              aria-label="Apenas Inativos"
                             />
                             <span>Apenas Inativos</span>
                           </label>
@@ -1239,62 +1453,143 @@ export function GestaoUsuariosView({
                       </div>
 
                       <div className="popover-section">
-                        <span className="section-title">Perfil de Acesso</span>
-                        <select
-                          className="input-select"
-                          style={{
-                            width: "100%",
-                            padding: "6px 10px",
-                            borderRadius: "8px",
-                            border: "1px solid var(--app-border)",
-                            fontSize: "13px",
-                            color: "var(--app-ink)",
-                            background: "#fff",
-                          }}
-                          value={filterLevel}
-                          onChange={(e) => setFilterLevel(e.target.value)}
-                          aria-label="Filtrar por perfil"
-                        >
-                          <option value="">Todos os perfis</option>
-                          {perfisAcesso.map((p) => (
-                            <option key={p.id} value={String(p.id)}>
-                              {p.nome}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="popover-section-header">
+                          <span className="section-title">Perfil de Acesso</span>
+                          {perfisAcesso.length > 0 && (
+                            <button
+                              type="button"
+                              className="popover-link-action"
+                              onClick={() => {
+                                setIsFilterPopoverOpen(false);
+                                setIsTodosPerfisModalOpen(true);
+                              }}
+                            >
+                              Ver todos ({perfisAcesso.length})
+                            </button>
+                          )}
+                        </div>
+                        <div className="popover-search-input-wrap">
+                          <PrototypeIcon name="search" size="s" />
+                          <input
+                            type="text"
+                            placeholder="Buscar perfil..."
+                            value={profileSearchInFilter}
+                            onChange={(e) => setProfileSearchInFilter(e.target.value)}
+                            aria-label="Buscar perfil no filtro"
+                            className="popover-mini-search"
+                          />
+                        </div>
+                        <div className="popover-profiles-list">
+                          {perfisAcesso
+                            .filter((p) =>
+                              p.nome
+                                .toLowerCase()
+                                .includes(profileSearchInFilter.toLowerCase()),
+                            )
+                            .map((p) => {
+                              const strId = String(p.id);
+                              const isChecked = effectiveProfileIds.includes(strId);
+                              return (
+                                <label key={p.id} className="popover-checkbox-row">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(e) => {
+                                      setSelectedProfileIds((prev) =>
+                                        e.target.checked
+                                          ? [...prev.filter((id) => id !== strId), strId]
+                                          : prev.filter((id) => id !== strId),
+                                      );
+                                      if (filterLevel === strId) setFilterLevel("");
+                                    }}
+                                    aria-label={p.nome}
+                                  />
+                                  <span className={`dot ${profileType(p)} mini`}>
+                                    <PrototypeIcon
+                                      name={p.codigo === "DONO" ? "crown" : "shield"}
+                                      size="s"
+                                    />
+                                  </span>
+                                  <span className="popover-profile-name">{p.nome}</span>
+                                  <span className="popover-profile-count">{count(p)}</span>
+                                </label>
+                              );
+                            })}
+                        </div>
                       </div>
 
                       <div className="popover-section">
                         <span className="section-title">
                           Disponibilidade na Agenda
                         </span>
-                        <div className="popover-options">
-                          <label className="popover-radio">
+                        <div className="popover-options-vertical">
+                          <label className="popover-checkbox-row">
                             <input
-                              type="radio"
-                              name="popover_agenda"
-                              checked={agendaAvailabilityFilter === "all"}
-                              onChange={() => setAgendaAvailabilityFilter("all")}
-                            />
-                            <span>Todos</span>
-                          </label>
-                          <label className="popover-radio">
-                            <input
-                              type="radio"
-                              name="popover_agenda"
-                              checked={agendaAvailabilityFilter === "yes"}
-                              onChange={() => setAgendaAvailabilityFilter("yes")}
+                              type="checkbox"
+                              checked={effectiveAgendaFilters.includes("yes")}
+                              onChange={(e) => {
+                                setSelectedAgendaFilters((prev) =>
+                                  e.target.checked
+                                    ? [...prev.filter((a) => a !== "yes"), "yes"]
+                                    : prev.filter((a) => a !== "yes"),
+                                );
+                                setAgendaAvailabilityFilter("all");
+                              }}
+                              aria-label="Atendem na agenda"
                             />
                             <span>Atendem na agenda</span>
                           </label>
-                          <label className="popover-radio">
+                          <label className="popover-checkbox-row">
                             <input
-                              type="radio"
-                              name="popover_agenda"
-                              checked={agendaAvailabilityFilter === "no"}
-                              onChange={() => setAgendaAvailabilityFilter("no")}
+                              type="checkbox"
+                              checked={effectiveAgendaFilters.includes("no")}
+                              onChange={(e) => {
+                                setSelectedAgendaFilters((prev) =>
+                                  e.target.checked
+                                    ? [...prev.filter((a) => a !== "no"), "no"]
+                                    : prev.filter((a) => a !== "no"),
+                                );
+                                setAgendaAvailabilityFilter("all");
+                              }}
+                              aria-label="Não atendem"
                             />
                             <span>Não atendem</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="popover-section">
+                        <span className="section-title">Atendimentos</span>
+                        <div className="popover-options-vertical">
+                          <label className="popover-checkbox-row">
+                            <input
+                              type="checkbox"
+                              checked={selectedAtendimentoFilters.includes("hoje")}
+                              onChange={(e) => {
+                                setSelectedAtendimentoFilters((prev) =>
+                                  e.target.checked
+                                    ? [...prev.filter((h) => h !== "hoje"), "hoje"]
+                                    : prev.filter((h) => h !== "hoje"),
+                                );
+                              }}
+                              aria-label="Atendimentos hoje"
+                            />
+                            <span>Atendimentos hoje</span>
+                          </label>
+                          <label className="popover-checkbox-row">
+                            <input
+                              type="checkbox"
+                              checked={selectedAtendimentoFilters.includes("mes")}
+                              onChange={(e) => {
+                                setSelectedAtendimentoFilters((prev) =>
+                                  e.target.checked
+                                    ? [...prev.filter((m) => m !== "mes"), "mes"]
+                                    : prev.filter((m) => m !== "mes"),
+                                );
+                              }}
+                              aria-label={`Atendimentos em ${monthName}`}
+                            />
+                            <span>Atendimentos em {monthName}</span>
                           </label>
                         </div>
                       </div>
@@ -1371,19 +1666,16 @@ export function GestaoUsuariosView({
                   )}
                 </div>
 
-                {(searchName ||
-                  filterLevel ||
-                  statusFilter ||
-                  agendaAvailabilityFilter !== "all") && (
-                  <button
-                    type="button"
-                    className="btn-g"
-                    onClick={clearAllFilters}
-                    aria-label="Limpar todos os filtros"
-                  >
-                    Limpar filtros
-                  </button>
-                )}
+                {activeFiltersCount > 0 && (
+                    <button
+                      type="button"
+                      className="btn-g"
+                      onClick={clearAllFilters}
+                      aria-label="Limpar todos os filtros"
+                    >
+                      Limpar filtros
+                    </button>
+                  )}
               </div>
 
               <div
@@ -1392,17 +1684,21 @@ export function GestaoUsuariosView({
               >
                 <button
                   type="button"
-                  className={`quick-chip ${!statusFilter ? "active" : ""}`}
-                  onClick={() => setStatusFilter("")}
+                  className={`quick-chip ${activeFiltersCount === 0 && !searchName ? "active" : ""}`}
+                  onClick={clearAllFilters}
                 >
                   <span>Todos</span>
                   <span className="chip-count">{usuarios.length}</span>
                 </button>
                 <button
                   type="button"
-                  className={`quick-chip ${statusFilter === "ativos" ? "active" : ""}`}
+                  className={`quick-chip ${selectedStatusFilters.includes("ativos") ? "active" : ""}`}
                   onClick={() =>
-                    setStatusFilter(statusFilter === "ativos" ? "" : "ativos")
+                    setSelectedStatusFilters((prev) =>
+                      prev.includes("ativos")
+                        ? prev.filter((s) => s !== "ativos")
+                        : [...prev, "ativos"]
+                    )
                   }
                 >
                   <span>Ativos</span>
@@ -1410,9 +1706,13 @@ export function GestaoUsuariosView({
                 </button>
                 <button
                   type="button"
-                  className={`quick-chip ${statusFilter === "agenda" ? "active" : ""}`}
+                  className={`quick-chip ${selectedAgendaFilters.includes("yes") ? "active" : ""}`}
                   onClick={() =>
-                    setStatusFilter(statusFilter === "agenda" ? "" : "agenda")
+                    setSelectedAgendaFilters((prev) =>
+                      prev.includes("yes")
+                        ? prev.filter((a) => a !== "yes")
+                        : [...prev, "yes"]
+                    )
                   }
                 >
                   <span>Atendem na agenda</span>
@@ -1420,9 +1720,13 @@ export function GestaoUsuariosView({
                 </button>
                 <button
                   type="button"
-                  className={`quick-chip ${statusFilter === "hoje" ? "active" : ""}`}
+                  className={`quick-chip ${selectedAtendimentoFilters.includes("hoje") ? "active" : ""}`}
                   onClick={() =>
-                    setStatusFilter(statusFilter === "hoje" ? "" : "hoje")
+                    setSelectedAtendimentoFilters((prev) =>
+                      prev.includes("hoje")
+                        ? prev.filter((h) => h !== "hoje")
+                        : [...prev, "hoje"]
+                    )
                   }
                 >
                   <span>Atendimentos hoje</span>
@@ -1430,9 +1734,13 @@ export function GestaoUsuariosView({
                 </button>
                 <button
                   type="button"
-                  className={`quick-chip ${statusFilter === "mes" ? "active" : ""}`}
+                  className={`quick-chip ${selectedAtendimentoFilters.includes("mes") ? "active" : ""}`}
                   onClick={() =>
-                    setStatusFilter(statusFilter === "mes" ? "" : "mes")
+                    setSelectedAtendimentoFilters((prev) =>
+                      prev.includes("mes")
+                        ? prev.filter((m) => m !== "mes")
+                        : [...prev, "mes"]
+                    )
                   }
                 >
                   <span>Atendimentos em {monthName}</span>
@@ -1440,10 +1748,7 @@ export function GestaoUsuariosView({
                 </button>
               </div>
 
-              {(searchName ||
-                filterLevel ||
-                statusFilter ||
-                agendaAvailabilityFilter !== "all") && (
+              {activeFiltersCount > 0 && (
                 <div className="active-pills-bar" aria-label="Filtros ativos">
                   <span className="active-pills-title">Filtros ativos:</span>
                   {Boolean(searchName) && (
@@ -1459,57 +1764,114 @@ export function GestaoUsuariosView({
                       </button>
                     </span>
                   )}
-                  {Boolean(filterLevel) && (
+                  {effectiveProfileIds.map((pId) => {
+                    const profile = perfisAcesso.find((p) => String(p.id) === String(pId));
+                    if (!profile) return null;
+                    return (
+                      <span className="active-pill" key={pId}>
+                        Perfil: {profile.nome}
+                        <button
+                          type="button"
+                          className="active-pill-remove"
+                          onClick={() => {
+                            setSelectedProfileIds((prev) => prev.filter((id) => id !== pId));
+                            if (filterLevel === pId) setFilterLevel("");
+                            if (viewingProfileId === pId) setViewingProfileId(null);
+                          }}
+                          aria-label={`Remover filtro de perfil ${profile.nome}`}
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    );
+                  })}
+                  {selectedStatusFilters.includes("ativos") && (
                     <span className="active-pill">
-                      Perfil:{" "}
-                      {perfisAcesso.find(
-                        (p) => String(p.id) === String(filterLevel),
-                      )?.nome || "Selecionado"}
+                      Status: Ativos
                       <button
                         type="button"
                         className="active-pill-remove"
-                        onClick={() => setFilterLevel("")}
-                        aria-label="Remover filtro de perfil"
-                      >
-                        ✕
-                      </button>
-                    </span>
-                  )}
-                  {Boolean(statusFilter) && (
-                    <span className="active-pill">
-                      Status:{" "}
-                      {statusFilter === "ativos"
-                        ? "Ativos"
-                        : statusFilter === "inativos"
-                          ? "Inativos"
-                          : statusFilter === "agenda"
-                            ? "Atendem na agenda"
-                            : statusFilter === "hoje"
-                              ? "Atendimentos hoje"
-                              : statusFilter === "mes"
-                                ? `Atendimentos em ${monthName}`
-                                : statusFilter}
-                      <button
-                        type="button"
-                        className="active-pill-remove"
-                        onClick={() => setStatusFilter("")}
+                        onClick={() => {
+                          setSelectedStatusFilters((prev) => prev.filter((s) => s !== "ativos"));
+                        }}
                         aria-label="Remover filtro de status"
                       >
                         ✕
                       </button>
                     </span>
                   )}
-                  {agendaAvailabilityFilter !== "all" && (
+                  {selectedStatusFilters.includes("inativos") && (
                     <span className="active-pill">
-                      Agenda:{" "}
-                      {agendaAvailabilityFilter === "yes"
-                        ? "Atendem"
-                        : "Não atendem"}
+                      Status: Inativos
                       <button
                         type="button"
                         className="active-pill-remove"
-                        onClick={() => setAgendaAvailabilityFilter("all")}
+                        onClick={() => {
+                          setSelectedStatusFilters((prev) => prev.filter((s) => s !== "inativos"));
+                        }}
+                        aria-label="Remover filtro de status inativos"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  )}
+                  {selectedAgendaFilters.includes("yes") && (
+                    <span className="active-pill">
+                      Agenda: Atendem
+                      <button
+                        type="button"
+                        className="active-pill-remove"
+                        onClick={() => {
+                          setSelectedAgendaFilters((prev) => prev.filter((a) => a !== "yes"));
+                          if (agendaAvailabilityFilter === "yes") setAgendaAvailabilityFilter("all");
+                        }}
+                        aria-label="Remover filtro de agenda atendem"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  )}
+                  {selectedAgendaFilters.includes("no") && (
+                    <span className="active-pill">
+                      Agenda: Não atendem
+                      <button
+                        type="button"
+                        className="active-pill-remove"
+                        onClick={() => {
+                          setSelectedAgendaFilters((prev) => prev.filter((a) => a !== "no"));
+                          if (agendaAvailabilityFilter === "no") setAgendaAvailabilityFilter("all");
+                        }}
                         aria-label="Remover filtro de agenda"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  )}
+                  {selectedAtendimentoFilters.includes("hoje") && (
+                    <span className="active-pill">
+                      Atendimentos: Hoje
+                      <button
+                        type="button"
+                        className="active-pill-remove"
+                        onClick={() => {
+                          setSelectedAtendimentoFilters((prev) => prev.filter((h) => h !== "hoje"));
+                        }}
+                        aria-label="Remover filtro de atendimentos hoje"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  )}
+                  {selectedAtendimentoFilters.includes("mes") && (
+                    <span className="active-pill">
+                      Atendimentos: Em {monthName}
+                      <button
+                        type="button"
+                        className="active-pill-remove"
+                        onClick={() => {
+                          setSelectedAtendimentoFilters((prev) => prev.filter((m) => m !== "mes"));
+                        }}
+                        aria-label={`Remover filtro de atendimentos em ${monthName}`}
                       >
                         ✕
                       </button>
@@ -1607,7 +1969,7 @@ export function GestaoUsuariosView({
                                       hojeIso.slice(0, 7),
                                     ) &&
                                     String(a.statusCodigo).toUpperCase() ===
-                                      "REALIZADO",
+                                    "REALIZADO",
                                 ).length
                               }
                               <span>em {monthName}</span>
@@ -1695,6 +2057,142 @@ export function GestaoUsuariosView({
           }}
         />
       )}
+      {showVincularMembrosModal && selectedProfile && (
+        <VincularMembrosAoPerfilModal
+          isOpen={showVincularMembrosModal}
+          onClose={() => setShowVincularMembrosModal(false)}
+          selectedProfile={selectedProfile}
+          usuarios={usuarios}
+          perfisAcesso={perfisAcesso}
+          onSuccess={async () => {
+            await loadData();
+            onEquipeInvalidate?.();
+          }}
+        />
+      )}
+      {isTodosPerfisModalOpen &&
+        createPortal(
+          <div className="prototype-equipe">
+            <div
+              className="modal-todos-perfis-overlay"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setIsTodosPerfisModalOpen(false);
+              }}
+            >
+              <div
+                className="modal-card modal-todos-perfis"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="modalTodosPerfisTitulo"
+              >
+                <div className="modal-header">
+                  <div className="modal-header-left">
+                    <div className="modal-header-icon" aria-hidden="true">
+                      <PrototypeIcon name="shield" size="m" />
+                    </div>
+                    <div className="modal-header-text">
+                      <h3 id="modalTodosPerfisTitulo">Todos os Perfis de Acesso</h3>
+                      <p>Consulte e fixe perfis na barra lateral da clínica.</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="modal-close-btn"
+                    onClick={() => setIsTodosPerfisModalOpen(false)}
+                    aria-label="Fechar modal"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="modal-search-bar">
+                  <PrototypeIcon name="search" size="s" />
+                  <input
+                    type="text"
+                    placeholder="Buscar perfil pelo nome..."
+                    value={todosPerfisSearch}
+                    onChange={(e) => setTodosPerfisSearch(e.target.value)}
+                    aria-label="Buscar perfil na lista completa"
+                  />
+                </div>
+
+                <div className="modal-perfis-list">
+                  {sortedProfiles
+                    .filter((p) =>
+                    p.nome.toLowerCase().includes(todosPerfisSearch.toLowerCase()),
+                  )
+                    .map((p) => {
+                      const strId = String(p.id);
+                      const isPinned = activePinnedProfileIds.includes(strId);
+                      const funcoesCount = profileIds(p)?.length ?? 0;
+                      return (
+                        <div key={p.id} className="modal-perfil-card">
+                          <div className="modal-perfil-select">
+                            <span className={`dot ${profileType(p)}`}>
+                              <PrototypeIcon
+                                name={p.codigo === "DONO" ? "crown" : "shield"}
+                                size="s"
+                              />
+                            </span>
+                            <div className="modal-perfil-info">
+                              <b className="modal-perfil-name">{p.nome}</b>
+                              <span className="modal-perfil-meta">
+                                {count(p)} membro(s) · {funcoesCount} de {permissoes.length} funções ·{" "}
+                                <span className={attends(p) ? "meta-atende" : "meta-nao-atende"}>
+                                  {attends(p) ? "Atende na agenda" : "Não atende"}
+                                </span>
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="modal-perfil-actions">
+                            <button
+                              type="button"
+                              className={`btn-pin ${isPinned ? "pinned" : ""}`}
+                              onClick={() => togglePinProfile(strId)}
+                              title={isPinned ? "Desafixar da barra lateral" : "Fixar na barra lateral"}
+                              aria-label={isPinned ? `Desafixar ${p.nome}` : `Fixar ${p.nome}`}
+                            >
+                              <PrototypeIcon name="pin" size="s" />
+                              <span>{isPinned ? "Fixado" : "Fixar"}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              className="btn-s btn-ficha"
+                              onClick={() => {
+                                setViewingProfileId(strId);
+                                setIsTodosPerfisModalOpen(false);
+                              }}
+                              aria-label={`Abrir ficha de ${p.nome}`}
+                            >
+                              Ficha
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+
+                <div className="modal-footer">
+                  <span className="modal-footer-stats">
+                    Total de <b>{sortedProfiles.length}</b> {sortedProfiles.length === 1 ? "perfil cadastrado" : "perfis cadastrados"}
+                  </span>
+                  <div className="modal-footer-actions">
+                    <button
+                      type="button"
+                      className="btn-p"
+                      onClick={() => setIsTodosPerfisModalOpen(false)}
+                    >
+                      Fechar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
 
     </div>
   );

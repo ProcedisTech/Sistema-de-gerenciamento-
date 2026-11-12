@@ -4,6 +4,7 @@
  * no aparelho continua lá.
  */
 import { act, screen } from '@testing-library/react';
+import { ultimoRoteador } from '../rotas/montarComRoteador.jsx';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { IDS, agendaDto } from '../encerrar/cenariosEncerrar.js';
@@ -28,7 +29,7 @@ vi.mock('../../contexts/AvisosProvider.jsx', async () => (await import('./canalA
 const DETALHE = new RegExp(`^/api/v1/atendimentos/${ATENDIMENTO_ID}$`);
 const MINHAS = /^\/api\/v1\/atendimentos\/minhas$/;
 const ITENS = new RegExp(`^/api/v1/atendimentos/${ATENDIMENTO_ID}/itens$`);
-const BASE = 'Esta consulta foi encerrada por falta de atividade.';
+const BASE = 'Esta consulta foi encerrada porque ninguém respondeu ao aviso de 4 h. O que não tinha sido salvo se perdeu.';
 
 async function esperar(ms) {
   await act(async () => {
@@ -49,7 +50,7 @@ describe('T2: abandonada com a tela fora da consulta', () => {
     localStorage.clear();
   });
 
-  it('depois do "Apenas Sair" com item novo guardado: abandonada não dá toast, não leva ao perfil e não apaga o storage', async () => {
+  it('depois do "Apenas Sair" com item novo guardado: abandonada não dá toast, não leva ao perfil e apaga o storage', async () => {
     const estado = { dto: consultaDto(), itensFora: true };
     const srv = await montarApp({
       agendas: [agendaDto({ id: IDS.AGENDA_1 })],
@@ -75,7 +76,7 @@ describe('T2: abandonada com a tela fora da consulta', () => {
     const guardadasAntes = entradasGuardadas();
     expect(guardadasAntes.length).toBeGreaterThan(0);
     const patientViewAntes = sessionStorage.getItem('patientView');
-    const activeViewAntes = sessionStorage.getItem('activeView');
+    const caminhoAntes = ultimoRoteador().state.location.pathname;
     const detalhesAntes = srv.leituras.filter((l) => DETALHE.test(l.path.split('?')[0])).length;
 
     estado.dto = consultaDto({ status: 'abandonado' });
@@ -87,8 +88,50 @@ describe('T2: abandonada com a tela fora da consulta', () => {
     expect(srv.leituras.filter((l) => DETALHE.test(l.path.split('?')[0])).length).toBeGreaterThan(detalhesAntes);
     expect(screen.queryByText(new RegExp(BASE.replace('.', '\\.')))).toBeNull();
     expect(sessionStorage.getItem('patientView')).toBe(patientViewAntes);
-    expect(sessionStorage.getItem('activeView')).toBe(activeViewAntes);
-    expect(entradasGuardadas()).toEqual(guardadasAntes);
+    expect(ultimoRoteador().state.location.pathname).toBe(caminhoAntes);
+    expect(entradasGuardadas()).toEqual([]);
     expect(escritasDe(srv, 'POST', /\/encerrar$/)).toEqual([]);
+  }, TIMEOUT);
+
+  it('depois de abandonada fora da tela, Iniciar (consulta nova) nao reenvia nada do aparelho', async () => {
+    const estado = { dto: consultaDto(), itensFora: true };
+    const srv = await montarApp({
+      agendas: [agendaDto({ id: IDS.AGENDA_1 })],
+      view: 'agenda',
+      rotas: [
+        ['POST', /^\/api\/v1\/atendimentos$/, () => estado.dto],
+        ['GET', DETALHE, () => estado.dto],
+        ['GET', MINHAS, () => (estado.dto.status === 'aberto' ? [resumoDto(estado.dto)] : [])],
+        ['POST', ITENS, () => (estado.itensFora ? { status: 503, corpo: { message: 'Fora do ar' } } : { id: 'item-1', ordem: 0 })],
+      ],
+    });
+    await iniciarPelaAgenda();
+    clicarBotao(/^Procedimento/);
+    await assentarMuito(6);
+    clicarBotao(/Voltar ao hub/);
+    await assentarMuito();
+    clicarBotao(/Encerrar consulta/);
+    await assentarMuito();
+    clicarBotao('Apenas Sair (Manter em andamento)');
+    await assentarMuito(6);
+    expect(emConsulta()).toBe(false);
+    expect(entradasGuardadas().length).toBeGreaterThan(0);
+
+    estado.dto = consultaDto({ status: 'abandonado' });
+    avisos.emitirAviso(AVISO.ATENDIMENTO.SESSAO_ALTERADA, ATENDIMENTO_ID, { atendimentoId: ATENDIMENTO_ID });
+    await esperar(400);
+    await assentarMuito(6);
+    expect(entradasGuardadas()).toEqual([]);
+
+    // Iniciar de novo: o servidor devolve uma consulta nova; a rede volta, mas nada antigo pode sair.
+    const escritasAntes = escritasDe(srv, 'POST', ITENS).length;
+    estado.itensFora = false;
+    estado.dto = consultaDto({ id: 'atend-nova' });
+    await iniciarPelaAgenda();
+    expect(escritasDe(srv, 'POST', /^\/api\/v1\/atendimentos$/).length).toBe(2);
+    await esperar(3500);
+    await assentarMuito(6);
+    expect(entradasGuardadas()).toEqual([]);
+    expect(escritasDe(srv, 'POST', ITENS).length).toBe(escritasAntes);
   }, TIMEOUT);
 });

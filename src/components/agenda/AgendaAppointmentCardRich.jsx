@@ -11,7 +11,7 @@ import { getTimingBadge, getExecutionSummary } from '../../utils/agendaTimingBad
 import { AgendaAvatarInitials } from './AgendaAvatarInitials.jsx';
 import { usePapel } from '../../hooks/usePapel.js';
 import { useFusoClinica } from '../hooks/useFusoClinica.js';
-import { AgendaRailCardActions, ConsultaEmAndamentoChip } from './AgendaRailCardActions.jsx';
+import { AgendaRailCardActions, ConsultaEmAndamentoChip, ProfissionalSubstituidoBadge } from './AgendaRailCardActions.jsx';
 import {
   BLOQUEIO_HATCH_BG,
   bloqueioHoraFimLabel,
@@ -131,6 +131,10 @@ export function AgendaAppointmentCardRich({
   const stripe = getRailStripeClass(appointment);
   const canCancelar = Boolean(canDeleteAgenda && onCancelar);
   const actions = getRailCardActions(appointment.status, canStartAnamnese, canCancelar, andamento);
+  const foiSubstituido = Boolean(
+    appointment.profissionalOriginalNome &&
+      appointment.profissionalOriginalNome !== appointment.profissionalNome,
+  );
   const execSummary = getExecutionSummary(appointment, fuso);
   const timingBadge = execSummary?.badge || getTimingBadge(appointment, fuso);
 
@@ -176,9 +180,15 @@ export function AgendaAppointmentCardRich({
           {appointment.procedimentoNome || 'Sem procedimento'}
         </p>
         {appointment.profissionalNome ? (
-          <div className="mt-0.5 flex items-center gap-1 text-[11.5px] font-normal text-ink-500" title={appointment.profissionalNome}>
+          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11.5px] font-normal text-ink-500" title={appointment.profissionalNome}>
             <Stethoscope className="h-3.5 w-3.5 text-ink-400 shrink-0" />
             <span className="truncate">{appointment.profissionalNome}</span>
+            {foiSubstituido ? (
+              <ProfissionalSubstituidoBadge
+                profissionalOriginalNome={appointment.profissionalOriginalNome}
+                motivoTrocaProfissional={appointment.motivoTrocaProfissional}
+              />
+            ) : null}
           </div>
         ) : null}
         {!isNivel1 ? (

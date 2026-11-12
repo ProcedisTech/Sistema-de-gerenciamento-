@@ -34,7 +34,7 @@ describe('textoDasFotosNaoEnviadas (com e sem origem)', () => {
 });
 
 describe('textoDaConsultaAbandonada', () => {
-  const BASE = 'Esta consulta foi encerrada por falta de atividade.';
+  const BASE = 'Esta consulta foi encerrada porque ninguém respondeu ao aviso de 4 h. O que não tinha sido salvo se perdeu.';
 
   it('n=0: só a frase base', () => {
     expect(textoDaConsultaAbandonada(0)).toBe(BASE);

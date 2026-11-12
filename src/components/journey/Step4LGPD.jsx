@@ -30,7 +30,7 @@ import {
   organizacaoApi,
 } from '../../services/api';
 import { ProcedimentoSearchInput } from '../agenda/ProcedimentoSearchInput.jsx';
-import { ehRotuloDeTela } from '../consulta/consultaServidor.js';
+import { ehLinhaConsultaSemCatalogo, ehRotuloDeTela } from '../consulta/consultaServidor.js';
 import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
 import { TermoVisualizacao } from '../termos/TermoVisualizacao';
 import { resolveApiUrl } from '../../config/apiEnv';
@@ -371,7 +371,6 @@ export function Step3Termos({
   const [showSalvarPadraoPrompt, setShowSalvarPadraoPrompt] = useState(false);
   const [savingPadraoPrompt, setSavingPadraoPrompt] = useState(false);
   const [pendingNextTermoId, setPendingNextTermoId] = useState(null);
-  const [termoToCancel, setTermoToCancel] = useState(null);
   const [backendAssinaturaId, setBackendAssinaturaId] = useState(null);
   const [showConcluirConfirm, setShowConcluirConfirm] = useState(false);
   const [procedimentosSemVinculo, setProcedimentosSemVinculo] = useState([]);
@@ -1426,15 +1425,6 @@ export function Step3Termos({
                   >
                     Ver PDF
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTermoToCancel(t);
-                    }}
-                    className="rounded-lg bg-red-50 px-3 py-1.5 text-[12px] font-bold text-red-600 border border-red-200 hover:bg-red-100 transition-colors"
-                  >
-                    Cancelar
-                  </button>
                 </div>
               </div>
             );
@@ -1971,46 +1961,6 @@ export function Step3Termos({
         </div>
       ) : null}
 
-      {/* Popup de Cancelar Assinatura */}
-      {termoToCancel ? (
-        <div className="fixed inset-0 z-[320] flex items-center justify-center bg-slate-900/45 px-4">
-          <div className="w-full max-w-md rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-2xl">
-            <h4 className="text-[16px] font-bold text-[#0f172a]">Cancelar Assinatura</h4>
-            <p className="mt-2 text-[14px] text-[#475569]">
-              Deseja realmente cancelar a assinatura deste documento? O termo <strong>{termoToCancel.termoTitulo || 'Termo de Consentimento'}</strong> voltará para a fila de pendentes.
-            </p>
-            <div className="mt-4 flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setTermosAssinados(prev => prev.filter(item => item.backendAssinaturaId !== termoToCancel.backendAssinaturaId));
-                  if (termoToCancel.termoId) {
-                    setTermosPendentesIds(prev => {
-                      if (!prev.includes(String(termoToCancel.termoId))) return [...prev, String(termoToCancel.termoId)];
-                      return prev;
-                    });
-                  }
-                  if (typeof setTermoAssinado === 'function' && termosAssinados.length <= 1) {
-                    setTermoAssinado(false);
-                  }
-                  setTermoToCancel(null);
-                }}
-                className="h-10 flex-1 rounded-lg bg-red-600 px-3 text-[13px] font-semibold text-white hover:bg-red-700"
-              >
-                Sim, cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => setTermoToCancel(null)}
-                className="h-10 flex-1 rounded-lg border border-[#e2e8f0] bg-white px-3 text-[13px] font-semibold text-[#64748b] hover:bg-[#f8fafc]"
-              >
-                Voltar
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       {showConcluirConfirm ? (
         <div className="fixed inset-0 z-[320] flex items-center justify-center bg-slate-900/45 px-4">
           <div className="w-full max-w-md rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-2xl">
@@ -2256,6 +2206,8 @@ export function Step4Procedimento({
     });
   }, [procsIdsKey, resolucao, onValidarTermosCatalogo, procedimentosSelecionados, procedimentosSessao]);
 
+  const procedimentosSessaoMapa = useMemo(() => (Array.isArray(procedimentosSessao) ? procedimentosSessao.filter((l) => !ehLinhaConsultaSemCatalogo(l)) : procedimentosSessao), [procedimentosSessao]);
+
   const itensPlanoPendentes = useMemo(() => {
     const rawItens = journeyPlanejamentoCtx?.itens || journeyPlanejamentoCtx?.planejamentoItens || [];
     if (!Array.isArray(rawItens) || rawItens.length === 0) {
@@ -2313,6 +2265,7 @@ export function Step4Procedimento({
 
   const ehSlotInicialVazio = React.useCallback((slot) => {
     if (!slot) return true;
+    if (ehLinhaConsultaSemCatalogo(slot)) return false;
     const temCat = Boolean(String(slot.catalogoProcedimentoSaudeId || slot.nomeProcedimentoCatalogoId || slot.catalogoId || '').trim());
     const temPlan = Boolean(String(slot.planejamentoItemId || '').trim());
     if (temCat || temPlan) return false;
@@ -2353,8 +2306,14 @@ export function Step4Procedimento({
     if (typeof setProcedimentosSessao === 'function') {
       setProcedimentosSessao(novaLista);
     }
-    if (novaLista.length === 1) {
-      gravarProcedimentoCatalogo(novoItem.nomeProcedimento, safeCatId);
+    const procsReais = novaLista.filter((p) => !ehLinhaConsultaSemCatalogo(p));
+    if (procsReais.length > 0) {
+      const primeiro = procsReais[0];
+      const rawPrimeiroId = primeiro.catalogoProcedimentoSaudeId || primeiro.catalogoId || primeiro.nomeProcedimentoCatalogoId || primeiro.id;
+      const primeiroId = rawPrimeiroId && rawPrimeiroId !== 'undefined' ? String(rawPrimeiroId).trim() : null;
+      gravarProcedimentoCatalogo(primeiro.nomeProcedimento || primeiro.nome, primeiroId);
+    } else {
+      gravarProcedimentoCatalogo('', null);
     }
     setStep4Errors((prev) => ({
       ...prev,
@@ -2362,8 +2321,10 @@ export function Step4Procedimento({
       catalogoId: false,
     }));
     if (typeof onValidarTermosCatalogo === 'function') {
-      const todosIds = novaLista.map((p) => String(p.catalogoProcedimentoSaudeId || p.catalogoId || p.id));
-      await onValidarTermosCatalogo(todosIds, novaLista.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
+      const todosIds = procsReais
+        .map((p) => p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
+        .filter((id) => id && id !== 'undefined' && id !== 'null');
+      await onValidarTermosCatalogo(todosIds, procsReais.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
         abrirModal: false,
         procedimentosSessaoOverride: novaLista,
       });
@@ -2401,8 +2362,9 @@ export function Step4Procedimento({
       if (typeof setProcedimentosSessao === 'function') {
         setProcedimentosSessao(listaFinal);
       }
-      if (novaLista.length > 0) {
-        const primeiro = novaLista[0];
+      const procsReais = novaLista.filter((p) => !ehLinhaConsultaSemCatalogo(p));
+      if (procsReais.length > 0) {
+        const primeiro = procsReais[0];
         const rawPrimeiroId = primeiro.catalogoProcedimentoSaudeId || primeiro.catalogoId || primeiro.nomeProcedimentoCatalogoId || primeiro.id;
         const primeiroId = rawPrimeiroId && rawPrimeiroId !== 'undefined' ? String(rawPrimeiroId).trim() : null;
         gravarProcedimentoCatalogo(
@@ -2418,10 +2380,10 @@ export function Step4Procedimento({
         catalogoId: false,
       }));
       if (typeof onValidarTermosCatalogo === 'function') {
-        const todosIds = novaLista
+        const todosIds = procsReais
           .map((p) => p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
           .filter((id) => id && id !== 'undefined' && id !== 'null');
-        await onValidarTermosCatalogo(todosIds, novaLista.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
+        await onValidarTermosCatalogo(todosIds, procsReais.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
           abrirModal: false,
           procedimentosSessaoOverride: listaFinal,
         });
@@ -2468,8 +2430,9 @@ export function Step4Procedimento({
     if (typeof setProcedimentosSessao === 'function') {
       setProcedimentosSessao(novaLista);
     }
-    if (novaLista.length > 0) {
-      const primeiro = novaLista[0];
+    const procsReais = novaLista.filter((p) => !ehLinhaConsultaSemCatalogo(p));
+    if (procsReais.length > 0) {
+      const primeiro = procsReais[0];
       const rawPrimeiroId = primeiro.catalogoProcedimentoSaudeId || primeiro.catalogoId || primeiro.nomeProcedimentoCatalogoId || primeiro.id;
       const primeiroId = rawPrimeiroId && rawPrimeiroId !== 'undefined' ? String(rawPrimeiroId).trim() : null;
       gravarProcedimentoCatalogo(
@@ -2485,10 +2448,10 @@ export function Step4Procedimento({
       catalogoId: false,
     }));
     if (typeof onValidarTermosCatalogo === 'function') {
-      const todosIds = novaLista
+      const todosIds = procsReais
         .map((p) => p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
         .filter((id) => id && id !== 'undefined' && id !== 'null');
-      await onValidarTermosCatalogo(todosIds, novaLista.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
+      await onValidarTermosCatalogo(todosIds, procsReais.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
         abrirModal: false,
         procedimentosSessaoOverride: novaLista,
       });
@@ -2527,8 +2490,9 @@ export function Step4Procedimento({
     if (typeof setProcedimentosSessao === 'function') {
       setProcedimentosSessao(listaFinal);
     }
-    if (novaLista.length > 0) {
-      const primeiro = novaLista[0];
+    const procsReais = novaLista.filter((p) => !ehLinhaConsultaSemCatalogo(p));
+    if (procsReais.length > 0) {
+      const primeiro = procsReais[0];
       const rawPrimeiroId = primeiro.catalogoProcedimentoSaudeId || primeiro.catalogoId || primeiro.nomeProcedimentoCatalogoId || primeiro.id;
       const primeiroId = rawPrimeiroId && rawPrimeiroId !== 'undefined' ? String(rawPrimeiroId).trim() : null;
       gravarProcedimentoCatalogo(
@@ -2539,10 +2503,10 @@ export function Step4Procedimento({
       gravarProcedimentoCatalogo('', null);
     }
     if (typeof onValidarTermosCatalogo === 'function') {
-      const todosIds = novaLista
+      const todosIds = procsReais
         .map((p) => p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
         .filter((id) => id && id !== 'undefined' && id !== 'null');
-      await onValidarTermosCatalogo(todosIds, novaLista.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
+      await onValidarTermosCatalogo(todosIds, procsReais.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
         abrirModal: false,
         procedimentosSessaoOverride: listaFinal,
       });
@@ -2575,11 +2539,14 @@ export function Step4Procedimento({
     if (typeof setProcedimentosSessao === 'function') {
       setProcedimentosSessao(novaLista);
     }
-    if (novaLista.length > 0) {
-      const primeiro = novaLista[0];
+    const procsReais = novaLista.filter((p) => !ehLinhaConsultaSemCatalogo(p));
+    if (procsReais.length > 0) {
+      const primeiro = procsReais[0];
       const rawPrimeiroId = primeiro.catalogoProcedimentoSaudeId || primeiro.catalogoId || primeiro.nomeProcedimentoCatalogoId || primeiro.id;
       const primeiroId = rawPrimeiroId && rawPrimeiroId !== 'undefined' ? String(rawPrimeiroId).trim() : null;
       gravarProcedimentoCatalogo(primeiro.nomeProcedimento || primeiro.nome, primeiroId);
+    } else {
+      gravarProcedimentoCatalogo('', null);
     }
     setStep4Errors((prev) => ({
       ...prev,
@@ -2587,10 +2554,10 @@ export function Step4Procedimento({
       catalogoId: false,
     }));
     if (typeof onValidarTermosCatalogo === 'function') {
-      const todosIds = novaLista
+      const todosIds = procsReais
         .map((p) => p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
         .filter((id) => id && id !== 'undefined' && id !== 'null');
-      await onValidarTermosCatalogo(todosIds, novaLista.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
+      await onValidarTermosCatalogo(todosIds, procsReais.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
         abrirModal: false,
         procedimentosSessaoOverride: novaLista,
       });
@@ -3180,7 +3147,7 @@ export function Step4Procedimento({
             procedimentoFeitoId={procedimentoFeitoId}
             catalogoId={catalogoId}
             nomeProcedimento={nomeProcedimento}
-            procedimentosSessao={procedimentosSessao}
+            procedimentosSessao={procedimentosSessaoMapa}
             onMudarCorProcedimento={handleMudarCorProcedimento}
             onAdicionarProcedimento={handleAdicionarProcedimentoDoMapa}
             onRemoverProcedimento={handleRemoverProcedimento}

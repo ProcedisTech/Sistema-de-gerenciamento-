@@ -89,6 +89,9 @@ export function useMapaRascunhoAutosave({
   const fotoIdPorBlobRef = useRef(new WeakMap());
   const salvoNoServidorRef = useRef(new Set());
   const hidratadosRef = useRef(new Set());
+  const chaveAtualRef = useRef(null);
+  const consultaAnteriorRef = useRef(null);
+  const ordemRelerRef = useRef(0);
   const opcoesRef = useRef({ roleUserId, avisarErro, esperasMs, mapaState, invalidCatIds });
 
   useEffect(() => {
@@ -223,18 +226,38 @@ export function useMapaRascunhoAutosave({
     }
   }, []);
 
+  // Releitura: espera o envio pendente do item (falha dele não bloqueia) e só aplica se a chave e o número de ordem ainda valem.
+  const reler = useCallback((cid, iid, pid) => {
+    const chave = `${cid}:${iid}`;
+    const ordem = ++ordemRelerRef.current;
+    const aplicar = () => {
+      if (chaveAtualRef.current === chave && ordemRelerRef.current === ordem) hidratar(cid, iid, pid);
+    };
+    const fila = filaPorItemRef.current.get(iid);
+    if (fila) fila.catch(() => {}).then(aplicar);
+    else aplicar(); // sem envio pendente: lê na hora (síncrono)
+  }, [hidratar]);
+
+  // Cada item é lido uma vez por consulta. Ao voltar à consulta (nulo -> valor) só relê se o mapa em memória está vazio.
   useEffect(() => {
-    if (!consultaId || !itemId || !pacienteId) return;
-    const chave = `${consultaId}:${itemId}`;
+    const chave = consultaId && itemId ? `${consultaId}:${itemId}` : null;
+    chaveAtualRef.current = chave;
+    const voltou = consultaId && !consultaAnteriorRef.current;
+    consultaAnteriorRef.current = consultaId;
+    const { pontosPorVista: pv, fotosPorVista: fv } = atualRef.current;
+    const vazio = !Object.values(pv || {}).some((l) => Array.isArray(l) && l.length)
+      && !Object.values(fv || {}).some(Boolean);
+    if (voltou && vazio) hidratadosRef.current.clear();
+    if (!chave || !pacienteId) return;
     if (hidratadosRef.current.has(chave)) return;
     hidratadosRef.current.add(chave);
-    hidratar(consultaId, itemId, pacienteId);
-  }, [consultaId, itemId, pacienteId, hidratar]);
+    reler(consultaId, itemId, pacienteId);
+  }, [consultaId, itemId, pacienteId, reler]);
 
   const aoAvisoDoMapa = useCallback(() => {
     const agora = atualRef.current;
-    if (agora?.consultaId && agora?.itemId && pacienteId) hidratar(agora.consultaId, agora.itemId, pacienteId);
-  }, [hidratar, pacienteId]);
+    if (agora?.consultaId && agora?.itemId && pacienteId) reler(agora.consultaId, agora.itemId, pacienteId);
+  }, [reler, pacienteId]);
   useAviso(PREFIXO_AVISO.PROCEDIMENTO, aoAvisoDoMapa);
 
   /** Salva na hora o que espera o debounce e aguarda os envios do mapa. Usado pelo encerrar e pelo "Apenas sair". */

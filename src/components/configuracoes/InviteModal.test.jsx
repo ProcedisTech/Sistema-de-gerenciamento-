@@ -13,11 +13,17 @@ import { InviteModal } from "./InviteModal";
 import PrototypeIcon from "./PrototypeIcon";
 import * as Lucide from "lucide-react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { setOrgId } from "../../services/api";
 
 // Regressão prevenida: consulta por módulo e edição de perfis respeitam a seleção e a autorização do convite.
 
+const toastMocks = {
+  error: vi.fn(),
+  success: vi.fn(),
+};
+
 vi.mock("../../contexts/useToast.js", () => ({
-  useToast: () => ({ error: vi.fn(), success: vi.fn() }),
+  useToast: () => toastMocks,
 }));
 vi.mock("../hooks/useAgoraDaClinica.js", () => ({
   useAgoraDaClinica: () => ({ hojeIso: "2026-10-04" }),
@@ -27,6 +33,19 @@ vi.mock("../../hooks/useEstadosCivis.js", () => ({
     estadosCivis: [{ id: "civil", nome: "Solteiro(a)" }],
     loading: false,
   }),
+}));
+vi.mock("@supabase/supabase-js", () => ({
+  createClient: vi.fn(() => ({
+    auth: {
+      signUp: vi.fn(async () => ({
+        data: {
+          user: { id: "usr_mock_123" },
+          session: { access_token: "mock_token" },
+        },
+        error: null,
+      })),
+    },
+  })),
 }));
 
 // Catálogo canônico da V172, sem categorias ilustrativas do showcase.
@@ -389,6 +408,7 @@ const defaultProps = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  setOrgId("d0000000-0000-0000-0000-0000000000aa");
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => ({ ok: true, json: async () => selectedIds })),
@@ -396,6 +416,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  setOrgId(null);
   vi.unstubAllGlobals();
 });
 
@@ -447,36 +468,17 @@ describe("InviteModal", () => {
     trigger.remove();
   });
 
-  it("preserva rascunho ao usar modelo como base sem confirmação extra", async () => {
-    const onEditarPerfilNaAba = vi.fn();
-    render(
-      <InviteModal
-        {...defaultProps}
-        onEditarPerfilNaAba={onEditarPerfilNaAba}
-      />,
-    );
-    fireEvent.change(screen.getByLabelText("Nome Completo"), {
-      target: { value: "Pessoa do convite" },
-    });
+  it("não renderiza botões de mutação de perfil no rodapé do card", async () => {
+    render(<InviteModal {...defaultProps} />);
     fireEvent.change(screen.getByLabelText("Perfil de acesso"), {
       target: { value: "clinico" },
     });
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "Criar perfil com base neste modelo",
+    expect(
+      screen.queryByRole("button", {
+        name: /Editar este perfil|Criar (perfil|novo) com base/,
       }),
-    );
-    expect(onEditarPerfilNaAba).toHaveBeenCalledWith(
-      "copy:clinico",
-      expect.objectContaining({
-        form: expect.objectContaining({
-          nome: "Pessoa do convite",
-          perfilAcessoId: "clinico",
-        }),
-      }),
-    );
-    expect(screen.queryByText("Sair sem salvar?")).not.toBeInTheDocument();
+    ).not.toBeInTheDocument();
   });
   it("mostra erro de permissões sem apresentar acesso vazio", async () => {
     fetch.mockResolvedValue({ ok: false });
@@ -488,6 +490,81 @@ describe("InviteModal", () => {
       "Não foi possível carregar as permissões",
     );
     expect(screen.getByRole("button", { name: "Criar acesso" })).toBeDisabled();
+  });
+
+  it("exibe o <select> canônico agrupado por perfis da clínica e modelos prontos do sistema", () => {
+    render(<InviteModal {...defaultProps} />);
+    const perfilSelect = screen.getByLabelText(/Perfil de acesso/);
+    expect(perfilSelect).toBeInTheDocument();
+    expect(perfilSelect).toHaveClass("select-control");
+
+    expect(
+      perfilSelect.querySelector('optgroup[label="Perfis da sua clínica"]'),
+    ).toBeInTheDocument();
+    expect(
+      perfilSelect.querySelector('optgroup[label="Modelos prontos do sistema"]'),
+    ).toBeInTheDocument();
+    expect(within(perfilSelect).getByRole("option", { name: "Clínico" })).toBeInTheDocument();
+    expect(within(perfilSelect).getByRole("option", { name: "Perfil da clínica" })).toBeInTheDocument();
+    expect(within(perfilSelect).queryByRole("option", { name: /^Dono$/i })).not.toBeInTheDocument();
+  });
+
+  it("seleciona perfil pelo <select> canônico e atualiza o card de governança e funções", async () => {
+    render(<InviteModal {...defaultProps} />);
+    const perfilSelect = screen.getByLabelText(/Perfil de acesso/);
+
+    fireEvent.change(perfilSelect, { target: { value: "clinico" } });
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("Modelo pronto · protegido")).toBeInTheDocument();
+    expect(screen.getByText(/funções liberadas/)).toBeInTheDocument();
+
+    fireEvent.change(perfilSelect, { target: { value: "custom" } });
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("Perfil da sua Clínica")).toBeInTheDocument();
+  });
+
+  it("renderiza o seletor visual idêntico ao protótipo com botão vazio, dropdown e botão alterar perfil", async () => {
+    render(<InviteModal {...defaultProps} />);
+
+    // 1. Botão Vazio de Destaque
+    expect(
+      screen.getByText("Escolha um perfil para conferir o acesso desta pessoa"),
+    ).toBeInTheDocument();
+    const btnSelecionar = screen.getByText("Selecionar perfil");
+    expect(btnSelecionar).toBeInTheDocument();
+
+    const dropdown = screen.getByRole("listbox", { name: "Perfis Disponíveis" });
+    expect(dropdown).not.toHaveClass("open");
+
+    // 2. Abrir Dropdown
+    fireEvent.click(btnSelecionar);
+    expect(dropdown).toHaveClass("open");
+
+    // 3. Selecionar Perfil no Dropdown
+    const optClinico = within(dropdown).getByRole("option", { name: /Clínico/ });
+    fireEvent.click(optClinico);
+
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    expect(dropdown).not.toHaveClass("open");
+    expect(
+      screen.queryByText("Escolha um perfil para conferir o acesso desta pessoa"),
+    ).not.toBeInTheDocument();
+
+    // 4. Card do Perfil Selecionado com Botão Alterar Perfil
+    const btnAlterar = screen.getByText("Alterar perfil");
+    expect(btnAlterar).toBeInTheDocument();
+
+    // 5. Reabrir Dropdown pelo Alterar Perfil
+    fireEvent.click(btnAlterar);
+    expect(dropdown).toHaveClass("open");
+  });
+
+  it("fecha o modal de convite ao pressionar Escape quando não há sub-modal aberto", () => {
+    render(<InviteModal {...defaultProps} />);
+    const dialog = screen.getByRole("dialog");
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(defaultProps.onClose).toHaveBeenCalledOnce();
   });
 });
 
@@ -593,25 +670,25 @@ describe("matriz canônica de funções do convite", () => {
     expect(summary).toHaveTextContent("8 / 53");
     expect(summary).toHaveTextContent("funções liberadas");
     expect(
-      within(summary).getByRole("button", {
+      within(summary).queryByRole("button", {
         name: "Criar perfil com base neste modelo",
       }),
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
     const heading = screen.getByRole("heading", {
       name: "O que este perfil pode fazer",
     });
-    expect(heading.parentElement).toHaveTextContent("8 de 53");
+    expect(heading.parentElement).not.toHaveTextContent("8 de 53");
     expect(heading.parentElement).toHaveTextContent(
       "Toque em um módulo para detalhar",
     );
     const matrix = screen.getByRole("group", { name: "Módulos do perfil" });
     expect(
       summary.compareDocumentPosition(matrix) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
+      Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      matrix.compareDocumentPosition(screen.getByLabelText("CPF")) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
+      screen.getByLabelText("CPF").compareDocumentPosition(matrix) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 
@@ -626,10 +703,10 @@ describe("matriz canônica de funções do convite", () => {
         .map((b) => b.textContent),
     ).toEqual([
       "Agenda1/9 liberadasParcial",
-      "Pacientes6/6 liberadasCompleto",
+      "Pacientes6/12 liberadasParcial",
       "Atendimento0/6 liberadasSem acesso",
-      "Prontuário0/9 liberadasSem acesso",
-      "Documentos0/6 liberadasSem acesso",
+      "Prontuário0/5 liberadasSem acesso",
+      "Documentos0/4 liberadasSem acesso",
       "Catálogo0/3 liberadasSem acesso",
       "Equipe0/7 liberadasSem acesso",
       "Clínica0/3 liberadasSem acesso",
@@ -644,13 +721,13 @@ describe("matriz canônica de funções do convite", () => {
     expect(agenda).toHaveAttribute("aria-expanded", "true");
     const panel = screen.getByRole("region", { name: "Funções de Agenda" });
     expect(panel).toHaveAttribute("id", "module-detail");
-    expect(within(panel).getAllByRole("listitem")).toHaveLength(9);
+    expect(within(panel).getAllByRole("checkbox")).toHaveLength(9);
     expect(
-      within(panel).getByText("Visualizar Agenda").closest("li"),
-    ).toHaveTextContent("Liberada");
+      within(panel).getByRole("checkbox", { name: "Visualizar Agenda" }),
+    ).toBeChecked();
     expect(
-      within(panel).getByText("Criar Agendamento").closest("li"),
-    ).toHaveTextContent("Bloqueada");
+      within(panel).getByRole("checkbox", { name: "Criar Agendamento" }),
+    ).not.toBeChecked();
     expect(
       within(panel).queryByText("Aparecer na Agenda como Profissional"),
     ).not.toBeInTheDocument();
@@ -669,76 +746,30 @@ describe("matriz canônica de funções do convite", () => {
     expect(defaultProps.onSuccess).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ["custom", "Editar este perfil", "custom"],
-    ["custom", "Criar novo com base neste", "copy:custom"],
-    ["clinico", "Criar perfil com base neste modelo", "copy:clinico"],
-  ])(
-    "abre a ação %s / %s com destino %s e rascunho completo",
-    async (profile, label, destination) => {
-      render(<InviteModal {...defaultProps} />);
-      fireEvent.change(screen.getByLabelText("Nome Completo"), {
-        target: { value: "Rascunho" },
-      });
-      fireEvent.change(screen.getByLabelText("Telefone Celular (Opcional)"), {
-        target: { value: "11999999999" },
-      });
-      await chooseProfile(profile);
-      if (profile === "custom") {
-        expect(
-          screen.getByText(/alterações afetam os colaboradores/),
-        ).toBeInTheDocument();
-        expect(screen.getByText("Perfil da sua Clínica")).toBeInTheDocument();
-      } else {
-        expect(
-          screen.queryByRole("button", { name: "Editar este perfil" }),
-        ).not.toBeInTheDocument();
-        expect(
-          screen.getByText("Modelo pronto · protegido"),
-        ).toBeInTheDocument();
-      }
-      fireEvent.click(screen.getByRole("button", { name: label }));
-      expect(defaultProps.onEditarPerfilNaAba).toHaveBeenCalledWith(
-        destination,
-        expect.objectContaining({
-          form: expect.objectContaining({
-            nome: "Rascunho",
-            perfilAcessoId: profile,
-          }),
-          telefoneCountryCode: "BR",
-          telefoneNumero: "(11) 99999-9999",
-        }),
-      );
-    },
-  );
-
-  it.each(["clinico", "custom"])(
-    "mantém consulta sem CTAs de mutação sem autorização (%s)",
+  it.each(["custom", "clinico"])(
+    "exibe informativo de proteção do perfil sem botões redundantes (%s)",
     async (profile) => {
-      render(<InviteModal {...defaultProps} canEditConfigPerfil={false} />);
+      render(<InviteModal {...defaultProps} />);
       await chooseProfile(profile);
       expect(
         screen.queryByRole("button", {
           name: /Editar este perfil|Criar (perfil|novo) com base/,
         }),
       ).not.toBeInTheDocument();
-      fireEvent.click(moduleButton("Agenda"));
-      expect(
-        screen.getByRole("region", { name: "Funções de Agenda" }),
-      ).toBeInTheDocument();
-      expect(defaultProps.onEditarPerfilNaAba).not.toHaveBeenCalled();
+      if (profile === "custom") {
+        expect(
+          screen.getByText(/Perfil da sua clínica\. Personalize as permissões diretamente nos seletores acima\./),
+        ).toBeInTheDocument();
+        expect(
+          screen.queryByText(/alterações afetam os colaboradores/),
+        ).not.toBeInTheDocument();
+      } else {
+        expect(
+          screen.getByText(/Modelo protegido pelo sistema\. Personalize as permissões diretamente nos seletores acima\./),
+        ).toBeInTheDocument();
+      }
     },
   );
-
-  it("oculta ações quando o callback do editor não está disponível", async () => {
-    render(<InviteModal {...defaultProps} onEditarPerfilNaAba={undefined} />);
-    await chooseProfile("custom");
-    expect(
-      screen.queryByRole("button", {
-        name: /Editar este perfil|Criar novo com base/,
-      }),
-    ).not.toBeInTheDocument();
-  });
 
   it("recolhe ao trocar ou limpar perfil e ao fechar o convite", async () => {
     render(<InviteModal {...defaultProps} />);
@@ -800,7 +831,7 @@ describe("matriz canônica de funções do convite", () => {
   it("esconde dados anteriores em loading/erro e permite tentar novamente sem reabrir painel", async () => {
     const consoleError = vi
       .spyOn(console, "error")
-      .mockImplementation(() => {});
+      .mockImplementation(() => { });
     render(<InviteModal {...defaultProps} />);
     await chooseProfile();
     fireEvent.click(moduleButton("Agenda"));
@@ -932,5 +963,514 @@ describe("contrato compartilhado dos ícones Lucide", () => {
         "",
       ),
     );
+  });
+});
+
+describe("Validação de Integridade Estrita de Campos Obrigatórios", () => {
+  const fillValidBasicsExcept = async (override = {}) => {
+    // Cargo e Perfil
+    const roleSelect = screen.getByLabelText(/Cargo na Clínica/);
+    fireEvent.change(roleSelect, { target: { value: "dentista" } });
+
+    const perfilSelect = screen.getByLabelText(/Perfil de acesso/);
+    fireEvent.change(perfilSelect, { target: { value: "clinico" } });
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /Criar acesso/i }),
+      ).not.toBeDisabled(),
+    );
+
+    // Nome
+    const nomeInput = screen.getByLabelText(/Nome Completo/);
+    fireEvent.change(nomeInput, {
+      target: { value: override.nome !== undefined ? override.nome : "Dra. Ana Silva" },
+    });
+
+    // Email
+    const emailInput = screen.getByLabelText(/E-mail/);
+    fireEvent.change(emailInput, {
+      target: { value: override.email !== undefined ? override.email : "ana.silva@clinica.com" },
+    });
+
+    // CPF (529.982.247-25 é matematicamente válido)
+    const cpfInput = screen.getByLabelText(/CPF/);
+    fireEvent.change(cpfInput, {
+      target: { value: override.cpf !== undefined ? override.cpf : "529.982.247-25" },
+    });
+
+    // Senha
+    const senhaInput = screen.getByLabelText(/Senha inicial/);
+    fireEvent.change(senhaInput, {
+      target: { value: override.senha !== undefined ? override.senha : "senhaSegura123" },
+    });
+
+    // Data de Nascimento
+    const dataNascInput = screen.getByLabelText(/Data de Nascimento/);
+    fireEvent.change(dataNascInput, {
+      target: { value: override.dataNascimento !== undefined ? override.dataNascimento : "1990-05-15" },
+    });
+
+    // Estado Civil
+    const estadoCivilSelect = screen.getByLabelText(/Estado Civil/);
+    fireEvent.change(estadoCivilSelect, {
+      target: { value: override.estadoCivilId !== undefined ? override.estadoCivilId : "civil" },
+    });
+
+    // Telefone
+    const telInput = screen.getByLabelText(/Telefone Celular/);
+    fireEvent.change(telInput, {
+      target: { value: override.telefone !== undefined ? override.telefone : "(11) 98765-4321" },
+    });
+  };
+
+  it("bloqueia submit quando o número de celular for incompleto ou incorreto", async () => {
+    render(<InviteModal {...defaultProps} />);
+    await fillValidBasicsExcept({ telefone: "(11) 9" });
+
+    const submitBtn = screen.getByRole("button", { name: /Criar acesso/i });
+    fireEvent.click(submitBtn);
+
+    expect(toastMocks.error).toHaveBeenCalledWith(
+      "Informe um número de telefone celular completo e válido.",
+    );
+    const telInput = screen.getByLabelText(/Telefone Celular/);
+    expect(telInput).toHaveClass("has-error");
+    expect(
+      screen.getByText("Informe um número de telefone celular completo e válido."),
+    ).toBeInTheDocument();
+  });
+
+  it("exibe erro inline com borda vermelha ao sair do campo (onBlur) com telefone inválido", async () => {
+    render(<InviteModal {...defaultProps} />);
+    const telInput = screen.getByLabelText(/Telefone Celular/);
+
+    fireEvent.change(telInput, { target: { value: "1198" } });
+    fireEvent.blur(telInput);
+
+    expect(telInput).toHaveClass("has-error");
+    expect(
+      screen.getByText("Informe um número de telefone celular completo e válido."),
+    ).toBeInTheDocument();
+  });
+
+  it("bloqueia submit quando o CPF for matematicamente inválido (dígitos verificadores falsos)", async () => {
+    render(<InviteModal {...defaultProps} />);
+    await fillValidBasicsExcept({ cpf: "111.111.111-11" });
+
+    const submitBtn = screen.getByRole("button", { name: /Criar acesso/i });
+    fireEvent.click(submitBtn);
+
+    expect(toastMocks.error).toHaveBeenCalledWith(
+      "CPF inválido. Verifique os números digitados.",
+    );
+    const cpfInput = screen.getByLabelText(/CPF/);
+    expect(cpfInput).toHaveClass("has-error");
+    expect(
+      screen.getByText("CPF inválido. Verifique os números digitados."),
+    ).toBeInTheDocument();
+  });
+
+  it("bloqueia submit e destaca campo quando o CPF já pertencer a um colaborador da equipe", async () => {
+    render(
+      <InviteModal
+        {...defaultProps}
+        equipeMembros={[
+          { id: "mem-1", nomeCompleto: "João Silva", cpf: "529.982.247-25" },
+        ]}
+      />,
+    );
+    await fillValidBasicsExcept({ cpf: "529.982.247-25" });
+
+    const submitBtn = screen.getByRole("button", { name: /Criar acesso/i });
+    fireEvent.click(submitBtn);
+
+    expect(toastMocks.error).toHaveBeenCalledWith(
+      "Já existe um usuário cadastrado com este CPF.",
+    );
+    const cpfInput = screen.getByLabelText(/CPF/);
+    expect(cpfInput).toHaveClass("has-error");
+    expect(
+      screen.getByText("Já existe um usuário cadastrado com este CPF."),
+    ).toBeInTheDocument();
+  });
+
+  it("não incrementa contador de progresso quando o CPF for duplicado na equipe", async () => {
+    render(
+      <InviteModal
+        {...defaultProps}
+        equipeMembros={[
+          { id: "mem-1", nomeCompleto: "João Silva", cpf: "529.982.247-25" },
+        ]}
+      />,
+    );
+    const cpfInput = screen.getByLabelText(/CPF/);
+    fireEvent.change(cpfInput, { target: { value: "529.982.247-25" } });
+    expect(screen.getByText(/0 de 9 campos obrigatórios/)).toBeInTheDocument();
+  });
+
+  it("trata retorno 409 do backend destacando o campo CPF sem fechar o modal", async () => {
+    fetch.mockImplementation((url) => {
+      if (String(url).includes("/api/auth/completar-perfil")) {
+        return Promise.resolve({
+          ok: false,
+          status: 409,
+          json: () =>
+            Promise.resolve({
+              message: "Já existe um usuário cadastrado com este CPF.",
+            }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve([]),
+      });
+    });
+
+    render(<InviteModal {...defaultProps} />);
+    await fillValidBasicsExcept({});
+
+    const submitBtn = screen.getByRole("button", { name: /Criar acesso/i });
+    await act(async () => {
+      fireEvent.click(submitBtn);
+    });
+
+    expect(toastMocks.error).toHaveBeenCalledWith(
+      "Já existe um usuário cadastrado com este CPF.",
+    );
+    const cpfInput = screen.getByLabelText(/CPF/);
+    expect(cpfInput).toHaveClass("has-error");
+    expect(defaultProps.onSuccess).not.toHaveBeenCalled();
+    expect(defaultProps.onClose).not.toHaveBeenCalled();
+  });
+
+  it("bloqueia submit quando a data de nascimento for futura", async () => {
+    render(<InviteModal {...defaultProps} />);
+    await fillValidBasicsExcept({ dataNascimento: "2099-01-01" });
+
+    const submitBtn = screen.getByRole("button", { name: /Criar acesso/i });
+    fireEvent.click(submitBtn);
+
+    expect(toastMocks.error).toHaveBeenCalledWith(
+      "A data de nascimento não pode ser no futuro.",
+    );
+    const dataInput = screen.getByLabelText(/Data de Nascimento/);
+    expect(dataInput).toHaveClass("has-error");
+    expect(
+      screen.getByText("A data de nascimento não pode ser no futuro."),
+    ).toBeInTheDocument();
+  });
+
+  it("bloqueia submit quando o e-mail não possuir domínio válido", async () => {
+    render(<InviteModal {...defaultProps} />);
+    await fillValidBasicsExcept({ email: "usuario@dominioincompleto" });
+
+    const submitBtn = screen.getByRole("button", { name: /Criar acesso/i });
+    fireEvent.click(submitBtn);
+
+    expect(toastMocks.error).toHaveBeenCalledWith(
+      "Informe um e-mail profissional válido.",
+    );
+    const emailInput = screen.getByLabelText(/E-mail/);
+    expect(emailInput).toHaveClass("has-error");
+    expect(
+      screen.getByText("Informe um e-mail profissional válido."),
+    ).toBeInTheDocument();
+  });
+
+  it("sincroniza a contagem da barra de progresso (X de 9) exigindo validação estrita", async () => {
+    render(<InviteModal {...defaultProps} />);
+
+    // Inicia com 0 de 9
+    expect(
+      screen.getByText("0 de 9 campos obrigatórios preenchidos"),
+    ).toBeInTheDocument();
+
+    const telInput = screen.getByLabelText(/Telefone Celular/);
+
+    // Telefone incompleto -> não incrementa
+    fireEvent.change(telInput, { target: { value: "9" } });
+    expect(
+      screen.getByText("0 de 9 campos obrigatórios preenchidos"),
+    ).toBeInTheDocument();
+
+    // Telefone completo válido -> incrementa para 1 de 9
+    fireEvent.change(telInput, { target: { value: "(11) 98765-4321" } });
+    expect(
+      screen.getByText("1 de 9 campos obrigatórios preenchidos"),
+    ).toBeInTheDocument();
+
+    // CPF com checksum falso -> não incrementa
+    const cpfInput = screen.getByLabelText(/CPF/);
+    fireEvent.change(cpfInput, { target: { value: "111.111.111-11" } });
+    expect(
+      screen.getByText("1 de 9 campos obrigatórios preenchidos"),
+    ).toBeInTheDocument();
+
+    // CPF válido -> incrementa para 2 de 9
+    fireEvent.change(cpfInput, { target: { value: "529.982.247-25" } });
+    expect(
+      screen.getByText("2 de 9 campos obrigatórios preenchidos"),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("Edição Interativa de Permissões e Criação de Novo Perfil", () => {
+  const fillValidBasicsExcept = async (override = {}) => {
+    const roleSelect = screen.getByLabelText(/Cargo na Clínica/);
+    fireEvent.change(roleSelect, { target: { value: "dentista" } });
+
+    const perfilSelect = screen.getByLabelText(/Perfil de acesso/);
+    fireEvent.change(perfilSelect, { target: { value: "clinico" } });
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /Criar acesso/i }),
+      ).not.toBeDisabled(),
+    );
+
+    const nomeInput = screen.getByLabelText(/Nome Completo/);
+    fireEvent.change(nomeInput, {
+      target: { value: override.nome !== undefined ? override.nome : "Dra. Ana Silva" },
+    });
+
+    const emailInput = screen.getByLabelText(/E-mail/);
+    fireEvent.change(emailInput, {
+      target: { value: override.email !== undefined ? override.email : "ana.silva@clinica.com" },
+    });
+
+    const cpfInput = screen.getByLabelText(/CPF/);
+    fireEvent.change(cpfInput, {
+      target: { value: override.cpf !== undefined ? override.cpf : "529.982.247-25" },
+    });
+
+    const senhaInput = screen.getByLabelText(/Senha inicial/);
+    fireEvent.change(senhaInput, {
+      target: { value: override.senha !== undefined ? override.senha : "senhaSegura123" },
+    });
+
+    const dataNascInput = screen.getByLabelText(/Data de Nascimento/);
+    fireEvent.change(dataNascInput, {
+      target: { value: override.dataNascimento !== undefined ? override.dataNascimento : "1990-05-15" },
+    });
+
+    const estadoCivilSelect = screen.getByLabelText(/Estado Civil/);
+    fireEvent.change(estadoCivilSelect, {
+      target: { value: override.estadoCivilId !== undefined ? override.estadoCivilId : "civil" },
+    });
+
+    const telInput = screen.getByLabelText(/Telefone Celular/);
+    fireEvent.change(telInput, {
+      target: { value: override.telefone !== undefined ? override.telefone : "(11) 98765-4321" },
+    });
+  };
+
+  it("renderiza o card de governança com badges e contagem de funções ao selecionar perfil", async () => {
+    render(<InviteModal {...defaultProps} />);
+    const perfilSelect = screen.getByLabelText(/Perfil de acesso/);
+    fireEvent.change(perfilSelect, { target: { value: "clinico" } });
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("region", { name: "Resumo do perfil de acesso" }),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/funções liberadas/)).toBeInTheDocument();
+    expect(screen.getByText("Modelo pronto · protegido")).toBeInTheDocument();
+  });
+
+  it("marca o perfil como customizado e exibe o banner custom-profile-alert ao alterar permissão", async () => {
+    render(<InviteModal {...defaultProps} />);
+    const perfilSelect = screen.getByLabelText(/Perfil de acesso/);
+    fireEvent.change(perfilSelect, { target: { value: "clinico" } });
+
+    await waitFor(() =>
+      expect(screen.getByRole("group", { name: "Módulos do perfil" })).toBeInTheDocument(),
+    );
+
+    // Expande o módulo Agenda
+    const agendaBtn = screen.getByRole("button", { name: /Agenda .* liberadas/ });
+    fireEvent.click(agendaBtn);
+
+    const permDetail = screen.getByLabelText("Funções de Agenda");
+    expect(permDetail).toBeInTheDocument();
+
+    // Encontra o checkbox de uma permissão liberada
+    const checkbox = within(permDetail).getAllByRole("checkbox")[0];
+    expect(checkbox).toBeChecked();
+
+    // Desmarca a permissão
+    fireEvent.click(checkbox);
+
+    // O banner de personalização deve aparecer
+    expect(
+      screen.getByText("Você está personalizando as permissões deste colaborador"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/-1 desmarcadas/)).toBeInTheDocument();
+  });
+
+  it("reverte as permissões para o modelo base ao clicar em Restaurar", async () => {
+    render(<InviteModal {...defaultProps} />);
+    const perfilSelect = screen.getByLabelText(/Perfil de acesso/);
+    fireEvent.change(perfilSelect, { target: { value: "clinico" } });
+
+    await waitFor(() =>
+      expect(screen.getByRole("group", { name: "Módulos do perfil" })).toBeInTheDocument(),
+    );
+
+    const agendaBtn = screen.getByRole("button", { name: /Agenda .* liberadas/ });
+    fireEvent.click(agendaBtn);
+
+    const permDetail = screen.getByLabelText("Funções de Agenda");
+    const checkbox = within(permDetail).getAllByRole("checkbox")[0];
+    fireEvent.click(checkbox);
+
+    expect(
+      screen.getByText("Você está personalizando as permissões deste colaborador"),
+    ).toBeInTheDocument();
+
+    // Clica em Restaurar
+    const undoBtn = screen.getByRole("button", { name: "Restaurar" });
+    fireEvent.click(undoBtn);
+
+    expect(toastMocks.success).toHaveBeenCalledWith(
+      "Permissões restauradas para o modelo base.",
+    );
+    expect(
+      screen.queryByText("Você está personalizando as permissões deste colaborador"),
+    ).toBeNull();
+  });
+
+  it("aplica ações rápidas em lote no módulo (Sem acesso e Tudo)", async () => {
+    render(<InviteModal {...defaultProps} />);
+    const perfilSelect = screen.getByLabelText(/Perfil de acesso/);
+    fireEvent.change(perfilSelect, { target: { value: "clinico" } });
+
+    await waitFor(() =>
+      expect(screen.getByRole("group", { name: "Módulos do perfil" })).toBeInTheDocument(),
+    );
+
+    const agendaBtn = screen.getByRole("button", { name: /Agenda .* liberadas/ });
+    fireEvent.click(agendaBtn);
+
+    // Clica em Sem acesso
+    const semAcessoBtn = screen.getByRole("button", { name: "Sem acesso" });
+    fireEvent.click(semAcessoBtn);
+
+    expect(
+      screen.getByText("Você está personalizando as permissões deste colaborador"),
+    ).toBeInTheDocument();
+
+    // Clica em Tudo
+    const tudoBtn = screen.getByRole("button", { name: "Tudo" });
+    fireEvent.click(tudoBtn);
+
+    // Verifica que todas as funções do módulo estão liberadas
+    const permDetail = screen.getByLabelText("Funções de Agenda");
+    const allCheckboxes = within(permDetail).getAllByRole("checkbox");
+    expect(allCheckboxes.every((cb) => cb.checked)).toBe(true);
+  });
+
+  it("abre o modal Salvar Novo Perfil de Acesso ao clicar em Criar acesso com perfil customizado", async () => {
+    render(<InviteModal {...defaultProps} />);
+    await fillValidBasicsExcept();
+
+    // Expande módulo e desmarca uma função
+    const agendaBtn = screen.getByRole("button", { name: /Agenda .* liberadas/ });
+    fireEvent.click(agendaBtn);
+
+    const permDetail = screen.getByLabelText("Funções de Agenda");
+    const checkbox = within(permDetail).getAllByRole("checkbox")[0];
+    fireEvent.click(checkbox);
+
+    // Submete o formulário
+    const submitBtn = screen.getByRole("button", { name: /Criar acesso/i });
+    fireEvent.click(submitBtn);
+
+    // Abre o sub-modal de salvar novo perfil
+    expect(
+      screen.getByRole("dialog", { name: "Salvar Novo Perfil de Acesso" }),
+    ).toBeInTheDocument();
+
+    const nomePerfilInput = screen.getByLabelText(/Nome do Novo Perfil/);
+    expect(nomePerfilInput).toBeInTheDocument();
+    expect(nomePerfilInput).toHaveValue("Dentista Personalizado");
+  });
+
+  it("cria o novo perfil na API e vincula o colaborador ao confirmar no modal", async () => {
+    const novoPerfilMock = {
+      id: "cli-novo-uuid-123",
+      nome: "Dentista Personalizado",
+    };
+
+    fetch.mockImplementation(async (url, opts) => {
+      const urlStr = String(url);
+      if (urlStr.includes("signup") || urlStr.includes("/auth/v1/")) {
+        return {
+          ok: true,
+          json: async () => ({
+            user: { id: "usr_mock_123" },
+            session: { access_token: "mock_token" },
+          }),
+        };
+      }
+      if (urlStr.includes("/api/v1/equipe")) {
+        return {
+          ok: true,
+          json: async () => ({ ok: true }),
+        };
+      }
+      if (urlStr.includes("/api/v1/perfis-acesso") && opts?.method === "POST") {
+        return {
+          ok: true,
+          json: async () => novoPerfilMock,
+        };
+      }
+      if (urlStr.includes("/permissoes") && opts?.method === "PUT") {
+        return {
+          ok: true,
+          json: async () => ({}),
+        };
+      }
+      if (urlStr.includes("/api/auth/completar-perfil")) {
+        return {
+          ok: true,
+          json: async () => ({ ok: true }),
+        };
+      }
+      return {
+        ok: true,
+        json: async () => selectedIds,
+      };
+    });
+
+    render(<InviteModal {...defaultProps} />);
+    await fillValidBasicsExcept();
+
+    const agendaBtn = screen.getByRole("button", { name: /Agenda .* liberadas/ });
+    fireEvent.click(agendaBtn);
+
+    const permDetail = screen.getByLabelText("Funções de Agenda");
+    const checkbox = within(permDetail).getAllByRole("checkbox")[0];
+    fireEvent.click(checkbox);
+
+    const submitBtn = screen.getByRole("button", { name: /Criar acesso/i });
+    fireEvent.click(submitBtn);
+
+    expect(
+      screen.getByRole("dialog", { name: "Salvar Novo Perfil de Acesso" }),
+    ).toBeInTheDocument();
+
+    const salvarPerfilBtn = screen.getByRole("button", {
+      name: "Salvar perfil e criar acesso",
+    });
+    fireEvent.click(salvarPerfilBtn);
+
+    await waitFor(() => {
+      expect(toastMocks.success).toHaveBeenCalledWith(
+        "Acesso criado com sucesso!",
+      );
+    });
+    expect(defaultProps.onSuccess).toHaveBeenCalled();
   });
 });

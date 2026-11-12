@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CalendarDays, ChevronLeft, LogOut, Menu, Settings, Users, UserCog } from 'lucide-react';
+import { CalendarDays, ChevronLeft, History, LogOut, Menu, Settings, Users, UserCog } from 'lucide-react';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { usePapel } from '../../hooks/usePapel';
 import { ClinicaIdentityBlock } from './ClinicaIdentityBlock.jsx';
@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { view: 'pacientes', label: 'Pacientes', icon: Users },
   { view: 'agenda', label: 'Agenda', icon: CalendarDays },
   { view: 'gestao-equipe', label: 'Gestão de Equipe', icon: UserCog },
+  { view: 'auditoria', label: 'Auditoria', icon: History },
   { view: 'configuracoes', label: 'Configurações', icon: Settings },
 ];
 
@@ -28,7 +29,7 @@ function readDesktopCollapsed() {
 /**
  * @param {{
  *   activeView: string,
- *   setActiveView: (v: string) => void,
+ *   irParaTela: (v: string) => void,
  *   handleLogout: () => void,
  *   authUser?: object,
  *   onRailWidthPxChange?: (px: number) => void,
@@ -44,7 +45,7 @@ function readDesktopCollapsed() {
  */
 export function Sidebar({
   activeView,
-  setActiveView,
+  irParaTela,
   handleLogout,
   authUser,
   onRailWidthPxChange,
@@ -70,10 +71,11 @@ export function Sidebar({
   const isDesktop = useMediaQuery('(min-width: 1024px)');
   const [tabletExpanded, setTabletExpanded] = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useState(readDesktopCollapsed);
-  const { canSeeConfigEquipe, canSeeConfig } = usePapel();
+  const { canSeeConfigEquipe, canSeeConfig, canSeeConfigAuditoria } = usePapel();
   const visibleNavItems = NAV_ITEMS.filter((item) => {
     if (item.view === 'configuracoes') return canSeeConfig;
     if (item.view === 'gestao-equipe') return canSeeConfigEquipe;
+    if (item.view === 'auditoria') return canSeeConfigAuditoria;
     return true;
   });
 
@@ -167,7 +169,7 @@ export function Sidebar({
                     key={item.view}
                     type="button"
                     title={item.label}
-                    onClick={() => setActiveView(item.view)}
+                    onClick={() => irParaTela(item.view)}
                     className={`mx-auto flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
                       activeView === item.view
                         ? 'bg-emerald-50 text-app-accent-deep shadow-sm ring-1 ring-emerald-200/60'
@@ -241,7 +243,7 @@ export function Sidebar({
                     key={item.view}
                     type="button"
                     title={item.label}
-                    onClick={() => setActiveView(item.view)}
+                    onClick={() => irParaTela(item.view)}
                     className={`flex min-h-[44px] w-full items-center gap-3 rounded-xl pl-2 pr-4 py-3 text-left text-[14px] font-semibold transition-all border-l-2 ${
                       activeView === item.view
                         ? 'border-l-app-accent bg-emerald-50 text-app-accent-deep'
@@ -318,7 +320,7 @@ export function Sidebar({
                     key={item.view}
                     type="button"
                     title={item.label}
-                    onClick={() => setActiveView(item.view)}
+                    onClick={() => irParaTela(item.view)}
                     className={`flex min-h-[44px] w-full items-center gap-3 rounded-xl pl-2 pr-4 py-3 text-left text-[14px] font-semibold transition-all border-l-2 ${
                       activeView === item.view
                         ? 'border-l-app-accent bg-emerald-50 text-app-accent-deep'

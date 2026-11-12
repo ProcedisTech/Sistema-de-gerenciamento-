@@ -4,6 +4,45 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
+const regrasDatas = [
+    {
+      selector: "Literal[value='America/Sao_Paulo']",
+      message: "Use o fuso da clínica (useFusoClinica / payload.fusoHorario) ou FUSO_PADRAO de utils/datasClinica.",
+    },
+    {
+      selector:
+        "CallExpression[callee.type='MemberExpression'][callee.property.name=/^(slice|split)$/][callee.object.type='CallExpression'][callee.object.callee.property.name='toISOString']",
+      message: 'toISOString() é UTC: use hojeDaClinica(fuso) ou diaDoInstante(valor, fuso).',
+    },
+    {
+      selector: "NewExpression[callee.name='Date'] > Literal.arguments[value=/^\\d{4}-\\d{2}-\\d{2}/]",
+      message: "new Date('AAAA-MM-DD') desloca o dia: use as funções de calendário de utils/datasClinica.",
+    },
+    {
+      selector: "NewExpression[callee.name='Date'][arguments.length>=4]",
+      message: 'new Date(a, m, d, h, …) usa o fuso do navegador: use instanteDoHorarioDaClinica(dataIso, hhmm, fuso).',
+    },
+    {
+      selector: "CallExpression[callee.property.name=/^(getHours|getMinutes)$/]",
+      message: 'getHours()/getMinutes() usam o fuso do navegador: use agoraDaClinica(fuso, ms) ou formatarInstante(valor, fuso, "hora").',
+    },
+]
+
+const TELAS = 'pacientes|agenda|notificacoes|equipe|configuracoes|consulta|entrar'
+const MSG_CAMINHO = 'Endereço de tela só se escreve em src/rotas/caminhos.js.'
+
+const regrasRotas = [
+  { selector: `Literal[value=/^\\/(${TELAS})(\\/[\\w:-]+)*(\\?.*)?$/]`, message: MSG_CAMINHO },
+  { selector: `TemplateLiteral > TemplateElement:first-child[value.raw=/^\\/(${TELAS})(\\/|\\?|$)/]`, message: MSG_CAMINHO },
+]
+
+const SETTERS_PROIBIDOS = ['setActiveView', 'goToView', 'goToViewWithGuard', 'setPatientView', 'setPatientDetailTab', 'setConfigSection']
+const regrasSetters = (nomes) => nomes.length === 0 ? [] : [
+  { selector: `CallExpression[callee.name=/^(${nomes.join('|')})$/]`, message: 'Navegação por tela antiga: use as rotas (src/rotas).' },
+  { selector: `CallExpression[callee.property.name=/^(${nomes.join('|')})$/]`, message: 'Navegação por tela antiga: use as rotas (src/rotas).' },
+]
+
+
 export default defineConfig([
   globalIgnores(['dist']),
   {
@@ -119,30 +158,13 @@ export default defineConfig([
   {
     files: ['src/**/*.{js,jsx}'],
     rules: {
-      'no-restricted-syntax': [
-        'error',
-        {
-          selector: "Literal[value='America/Sao_Paulo']",
-          message: "Use o fuso da clínica (useFusoClinica / payload.fusoHorario) ou FUSO_PADRAO de utils/datasClinica.",
-        },
-        {
-          selector:
-            "CallExpression[callee.type='MemberExpression'][callee.property.name=/^(slice|split)$/][callee.object.type='CallExpression'][callee.object.callee.property.name='toISOString']",
-          message: 'toISOString() é UTC: use hojeDaClinica(fuso) ou diaDoInstante(valor, fuso).',
-        },
-        {
-          selector: "NewExpression[callee.name='Date'] > Literal.arguments[value=/^\\d{4}-\\d{2}-\\d{2}/]",
-          message: "new Date('AAAA-MM-DD') desloca o dia: use as funções de calendário de utils/datasClinica.",
-        },
-        {
-          selector: "NewExpression[callee.name='Date'][arguments.length>=4]",
-          message: 'new Date(a, m, d, h, …) usa o fuso do navegador: use instanteDoHorarioDaClinica(dataIso, hhmm, fuso).',
-        },
-        {
-          selector: "CallExpression[callee.property.name=/^(getHours|getMinutes)$/]",
-          message: 'getHours()/getMinutes() usam o fuso do navegador: use agoraDaClinica(fuso, ms) ou formatarInstante(valor, fuso, "hora").',
-        },
-      ],
+      'no-restricted-syntax': ['error', ...regrasDatas, ...regrasRotas, ...regrasSetters(SETTERS_PROIBIDOS)],
+    },
+  },
+  {
+    files: ['src/rotas/**'],
+    rules: {
+      'no-restricted-syntax': ['error', ...regrasDatas],
     },
   },
   {

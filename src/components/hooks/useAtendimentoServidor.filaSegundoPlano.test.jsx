@@ -110,7 +110,7 @@ describe('useAtendimentoServidor: fila em segundo plano', () => {
     expect(sessionStorage.getItem(fila(USUARIO))).toBeNull();
   });
 
-  it('consulta que não está aberta em "minhas" não ganha fila em segundo plano', async () => {
+  it('consulta abandonada em "minhas" não ganha fila em segundo plano e o guardado é apagado', async () => {
     vi.mocked(atendimentosApi.minhas).mockResolvedValue([resumo({ status: 'abandonado' })]);
     sessionStorage.setItem(fila(USUARIO), JSON.stringify([ENVIO_ITEM]));
     montar();
@@ -118,7 +118,7 @@ describe('useAtendimentoServidor: fila em segundo plano', () => {
     await esperar(50);
 
     expect(atendimentosApi.alterarItem).not.toHaveBeenCalled();
-    expect(sessionStorage.getItem(fila(USUARIO))).not.toBeNull();
+    expect(sessionStorage.getItem(fila(USUARIO))).toBeNull();
   });
 
   it('itemNovo guardado não sai em segundo plano; sai uma vez quando a pessoa entra na consulta', async () => {

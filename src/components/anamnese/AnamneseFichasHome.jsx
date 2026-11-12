@@ -8,7 +8,11 @@ import {
   Search,
   Trash2,
 } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router';
 import { anamneseApi } from '../../services/api';
+import { useRotaAtual } from '../../rotas/useRotaAtual';
+import { caminhos } from '../../rotas/caminhos';
+import NaoEncontrado from '../../rotas/NaoEncontrado';
 import { useToast } from '../../contexts/useToast';
 import { ConfigTableSkeleton } from '../shared/ConfigPanelSkeletons';
 import { ViewportDialog } from '../shared/ViewportDialog.jsx';
@@ -77,8 +81,16 @@ export const AnamneseFichasHome = forwardRef(function AnamneseFichasHome(
   const [fichas, setFichas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
-  const [view, setView] = useState('list');
-  const [editorFichaId, setEditorFichaId] = useState(undefined);
+  const rota = useRotaAtual();
+  const navigate = useNavigate();
+  // Ficha aberta vem do endereço (/fichas/:id); "Nova ficha" segue em memória.
+  const [novaFicha, setNovaFicha] = useState(false);
+  // Qualquer navegação que passou (inclusive clicar "Fichas" na própria seção) fecha a ficha nova em memória.
+  const chaveLocal = useLocation().key;
+  useEffect(() => { setNovaFicha(false); }, [chaveLocal]);
+  const fichaDoEndereco = rota.fichaId != null ? fichas.find((f) => String(f.id) === String(rota.fichaId)) : null;
+  const view = novaFicha || rota.fichaId != null ? 'editor' : 'list';
+  const editorFichaId = rota.fichaId != null ? rota.fichaId : novaFicha ? null : undefined;
   const [fichaParaExcluir, setFichaParaExcluir] = useState(null);
   const [excluindo, setExcluindo] = useState(false);
   const onDirtyFichaChangeRef = useRef(onDirtyFichaChange);
@@ -113,10 +125,10 @@ export const AnamneseFichasHome = forwardRef(function AnamneseFichasHome(
   }, []);
 
   const exitToList = useCallback(() => {
-    setView('list');
-    setEditorFichaId(undefined);
+    setNovaFicha(false);
+    if (rota.fichaId != null) navigate(caminhos.configuracoes('fichas')); // já na lista: não empilha o mesmo endereço
     fetchDados();
-  }, [fetchDados]);
+  }, [fetchDados, navigate, rota.fichaId]);
 
   useImperativeHandle(ref, () => ({ exitToList }), [exitToList]);
 
@@ -131,13 +143,11 @@ export const AnamneseFichasHome = forwardRef(function AnamneseFichasHome(
   }, [fichas, busca]);
 
   const openEditor = (id) => {
-    setEditorFichaId(id);
-    setView('editor');
+    navigate(caminhos.ficha(id));
   };
 
   const handleNovaFicha = () => {
-    setEditorFichaId(null);
-    setView('editor');
+    setNovaFicha(true);
   };
 
   const handleDuplicar = async (id, e) => {
@@ -167,7 +177,9 @@ export const AnamneseFichasHome = forwardRef(function AnamneseFichasHome(
     }
   };
 
-  if (view === 'editor') {
+  if (rota.fichaId != null && !fichaDoEndereco) {
+    if (!loading) return <NaoEncontrado />;
+  } else if (view === 'editor') {
     return (
       <AnamneseDocumentoEditor
         fichaId={editorFichaId}

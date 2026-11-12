@@ -1,4 +1,4 @@
-import { Calendar, Check, MessageCircle, Play, XCircle, ClipboardList } from 'lucide-react';
+import { Calendar, Check, MessageCircle, Play, XCircle, ClipboardList, ArrowLeftRight } from 'lucide-react';
 import { getRailPrimaryLabel } from '../../utils/agendaCardActions.js';
 
 const BTN_FOCUS =
@@ -29,6 +29,25 @@ export function ConsultaEmAndamentoChip({ className = '' }) {
     >
       <span className="h-1.5 w-1.5 rounded-full bg-status-ok" aria-hidden />
       Em andamento
+    </span>
+  );
+}
+
+/**
+ * Selo discreto de substituição de profissional no card da Agenda.
+ */
+export function ProfissionalSubstituidoBadge({ profissionalOriginalNome, motivoTrocaProfissional, className = '' }) {
+  if (!profissionalOriginalNome) return null;
+  const titleText = motivoTrocaProfissional
+    ? `Substituído (agendado originalmente com ${profissionalOriginalNome}) · Motivo: ${motivoTrocaProfissional}`
+    : `Substituído (agendado originalmente com ${profissionalOriginalNome})`;
+  return (
+    <span
+      title={titleText}
+      className={`inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10.5px] font-semibold text-amber-800 ${className}`}
+    >
+      <ArrowLeftRight className="h-2.5 w-2.5 shrink-0 text-amber-700" aria-hidden />
+      <span>Substituído · era {profissionalOriginalNome}</span>
     </span>
   );
 }
@@ -75,7 +94,11 @@ export function AgendaRailCardActions({
     <div className={className}>
       {actions.emAndamento ? <ConsultaEmAndamentoChip className="self-start" /> : null}
       {primary ? (
-        <button type="button" onClick={handlePrimary} className={primaryButtonClass(primaryHeightClass)}>
+        <button
+          type="button"
+          onClick={handlePrimary}
+          className={primaryButtonClass(primaryHeightClass)}
+        >
           {primary === 'confirmar' ? (
             <Check className={`${primaryIconClass} shrink-0`} aria-hidden />
           ) : (

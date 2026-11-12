@@ -16,7 +16,7 @@ import { ConfigDetailView } from './ConfigDetailView';
  * @param {boolean} [props.canSeeAgendaConfig]   — N5+: horários, feriados, templates
  * @param {boolean} [props.canSeeEquipe]         — N5+: pacientes inativados
  * @param {string}  props.configSection
- * @param {(s: string) => void} props.setConfigSection
+ * @param {(s: string | null) => void} props.irParaSecao
  * @param {(nome: string, logoUrl?: string) => void} [props.onClinicaAtualizada]
  * @param {(data: { nomeCompleto?: string, apelido?: string, fotoUrl?: string }) => void} [props.onPerfilAtualizado]
  * @param {() => void} [props.onPacientesCatalogRefresh]
@@ -28,7 +28,7 @@ export function ConfiguracoesView({
   canSeeAnamnese = false,
   canSeeProcedimentos = false,
   canSeeTermos = false,
-  canSeePerfil = false,
+  canSeePerfil = true,
   canSeeClinica = false,
   canSeeAgendaConfig = false,
   canSeeEquipe = false,
@@ -42,7 +42,7 @@ export function ConfiguracoesView({
   onDirtyHorariosChange,
   onDirtyFichaChange,
   configSection,
-  setConfigSection,
+  irParaSecao,
 }) {
   const sectionGuardRef = useRef(null);
 
@@ -96,14 +96,13 @@ export function ConfiguracoesView({
       const visibleItems = filterCategoryItems(catDef, flags);
       const alreadyInCategory = visibleItems.some((i) => i.id === configSection);
       if (!alreadyInCategory && visibleItems.length > 0) {
-        setConfigSection(visibleItems[0].id);
+        irParaSecao(visibleItems[0].id);
       }
     }
   };
 
   const handleBackToHub = () => {
-    setActiveCategory(null);
-    setConfigSection(null);
+    irParaSecao(null);
   };
 
   // Label da seção ativa para o subtítulo no header (hub ou detalhe)
@@ -135,7 +134,7 @@ export function ConfiguracoesView({
           activeSection={configSection}
           onSelectSection={(id) => {
             if (sectionGuardRef.current) sectionGuardRef.current(id);
-            else setConfigSection(id);
+            else irParaSecao(id);
           }}
         />
       )}
@@ -160,7 +159,7 @@ export function ConfiguracoesView({
           <ConfigDetailView
             categoryKey={displayCategory}
             configSection={configSection}
-            setConfigSection={setConfigSection}
+            irParaSecao={irParaSecao}
             onBackToHub={handleBackToHub}
             canSeeAnamnese={canSeeAnamnese}
             canSeeProcedimentos={canSeeProcedimentos}

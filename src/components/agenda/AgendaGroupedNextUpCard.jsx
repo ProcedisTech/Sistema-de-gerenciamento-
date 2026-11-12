@@ -4,7 +4,7 @@ import { getAppointmentStatusBucket } from '../../utils/agendaDayInsights.js';
 import { formatCountdown } from '../../utils/agendaRailHelpers.js';
 import { AgendaAvatarInitials } from './AgendaAvatarInitials.jsx';
 import { GroupedDurationBlock } from './GroupedRailTimeColumn.jsx';
-import { AgendaRailCardActions, ConsultaEmAndamentoChip } from './AgendaRailCardActions.jsx';
+import { AgendaRailCardActions, ConsultaEmAndamentoChip, ProfissionalSubstituidoBadge } from './AgendaRailCardActions.jsx';
 import { usePapel } from '../../hooks/usePapel.js';
 
 function statusDotClass(appointment) {
@@ -49,6 +49,10 @@ export function AgendaGroupedNextUpCard({
     canCancelar,
     andamento,
   );
+  const foiSubstituido = Boolean(
+    primary.profissionalOriginalNome &&
+      primary.profissionalOriginalNome !== (group.profissionalNome || primary.profissionalNome),
+  );
 
   return (
     <article
@@ -87,8 +91,16 @@ export function AgendaGroupedNextUpCard({
               </li>
             ))}
           </ul>
-          {showProfissional && group.profissionalNome ? (
-            <p className="mt-0.5 truncate text-[11px] text-ink-500">{group.profissionalNome}</p>
+          {(showProfissional || foiSubstituido) && (group.profissionalNome || primary.profissionalNome) ? (
+            <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-500">
+              <span className="truncate">{group.profissionalNome || primary.profissionalNome}</span>
+              {foiSubstituido ? (
+                <ProfissionalSubstituidoBadge
+                  profissionalOriginalNome={primary.profissionalOriginalNome}
+                  motivoTrocaProfissional={primary.motivoTrocaProfissional}
+                />
+              ) : null}
+            </div>
           ) : null}
           <GroupedDurationBlock duracaoTotalMin={group.duracaoTotalMin} className="mt-2" />
         </div>

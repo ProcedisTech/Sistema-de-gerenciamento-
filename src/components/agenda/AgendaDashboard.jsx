@@ -5,6 +5,8 @@ import { WeekTimeGrid } from './WeekTimeGrid';
 import AgendaSlotActions from './AgendaSlotActions.jsx';
 import { AgendaSummaryEntryCard } from './AgendaSummaryEntryCard.jsx';
 import { AgendaWeekSlotDetailModal } from './AgendaWeekSlotDetailModal.jsx';
+import NaoEncontrado from '../../rotas/NaoEncontrado.jsx';
+import { agendasApi } from '../../services/api.js';
 import { AgendaAdvanceConfirmModal } from './AgendaAdvanceConfirmModal.jsx';
 import { AgendaNovoChoiceModal } from './AgendaNovoChoiceModal.jsx';
 import { ModalEscolhaAssinatura } from '../assinaturas/ModalEscolhaAssinatura.jsx';
@@ -24,7 +26,7 @@ import { useToast } from '../../contexts/useToast.js';
 import { usePapel } from '../../hooks/usePapel.js';
 import { buildAdvanceOffersByAgendaId } from '../../utils/agendaAdvanceOffer.js';
 import { getConsultaEmAndamento } from '../../utils/agendaCardActions.js';
-import { addMinutesToTime } from '../../utils/agendaMapping.js';
+import { addMinutesToTime, mapAgendaDtoToAppointment } from '../../utils/agendaMapping.js';
 import {
   formatListDayCountLabel,
   formatListDayPreviewEntry,
@@ -184,12 +186,15 @@ export function AgendaDashboard({
   clinicaSlug = '',
   profissionalNome = '',
   shortcutsBlocked: shortcutsBlockedExternal = false,
+  agendaIdAlvo = null,
+  onAbrirDetalhe,
+  onFecharDetalhe,
 }) {
   const panelListRef = React.useRef(null);
   const cardRefs = React.useRef({});
   const firstFilterRef = React.useRef(null);
   const [listDaySummary, setListDaySummary] = React.useState(null);
-  const [weekSlotDetail, setWeekSlotDetail] = React.useState(null);
+  const [alvo, setAlvo] = React.useState({ id: null, row: null, erro: false, dia: null });
   const [advancePending, setAdvancePending] = React.useState(null);
   const [novoChoiceOpen, setNovoChoiceOpen] = React.useState(false);
   const [showEntrance, setShowEntrance] = React.useState(true);
@@ -198,7 +203,7 @@ export function AgendaDashboard({
   const isDesktop = useMediaQuery('(min-width: 1024px)');
   const isMobile = !isDesktop;
   const toast = useToast();
-  const { canDeleteAgenda, roleUserId } = usePapel();
+  const { canDeleteAgenda, canEncaixarForaDisp: _canEncaixarForaDisp, roleUserId } = usePapel();
 
   const closeDaySheet = React.useCallback(() => {
     agenda.closeDaySheet();
@@ -249,7 +254,7 @@ export function AgendaDashboard({
           agenda.bloqueioModalOpen ||
           agenda.foraDispModal ||
           listDaySummary ||
-          weekSlotDetail ||
+          agendaIdAlvo ||
           advancePending ||
           novoChoiceOpen,
       ),
@@ -259,7 +264,7 @@ export function AgendaDashboard({
       agenda.bloqueioModalOpen,
       agenda.foraDispModal,
       listDaySummary,
-      weekSlotDetail,
+      agendaIdAlvo,
       advancePending,
       novoChoiceOpen,
     ],
@@ -376,9 +381,40 @@ export function AgendaDashboard({
     if (agenda.viewMode === 'grid' || agenda.viewMode === 'semana') setListDaySummary(null);
   }, [agenda.viewMode]);
 
+  // O detalhe vem do endereço. Link direto fora da semana carregada: busca o item, leva a semana ao dia dele.
+  const semanaRef = React.useRef(agenda.weekGridAppointments);
+  semanaRef.current = agenda.weekGridAppointments;
+  const { selectDay, setViewMode, goToToday, syncWeekFromSelection } = agenda;
   React.useEffect(() => {
-    if (agenda.viewMode !== 'semana') setWeekSlotDetail(null);
-  }, [agenda.viewMode]);
+    if (!agendaIdAlvo) return undefined;
+    if ((semanaRef.current || []).some((r) => String(r.id) === String(agendaIdAlvo))) return undefined;
+    let velha = false;
+    agendasApi.get(agendaIdAlvo).then(
+      (dto) => {
+        if (velha) return;
+        const row = mapAgendaDtoToAppointment(dto);
+        const dia = toDateKey(dto?.dataAgendamento);
+        setAlvo({ id: agendaIdAlvo, row, erro: !row, dia });
+        if (!row) { goToToday(); return; }
+        selectDay(dia, false);
+        setViewMode('semana');
+      },
+      () => {
+        if (velha) return;
+        setAlvo({ id: agendaIdAlvo, row: null, erro: true, dia: null });
+        goToToday();
+      },
+    );
+    return () => { velha = true; };
+  }, [agendaIdAlvo, selectDay, setViewMode, goToToday]);
+
+  // A semana só acompanha o dia escolhido depois que ele já está no estado.
+  React.useEffect(() => {
+    if (alvo.dia && agenda.selectedDay === alvo.dia) {
+      syncWeekFromSelection();
+      setAlvo((a) => ({ ...a, dia: null }));
+    }
+  }, [alvo.dia, agenda.selectedDay, syncWeekFromSelection]);
 
   const batchRefresh = agenda.refreshDashboard;
 
@@ -552,14 +588,23 @@ export function AgendaDashboard({
 
   const onOpenWeekSlotDetail = React.useCallback(
     (appt) => {
-      setWeekSlotDetail(resolveWeekTarget(appt));
+      const id = getEntryPrimaryAppointment(resolveWeekTarget(appt))?.id;
+      if (id != null) onAbrirDetalhe?.(String(id));
     },
-    [resolveWeekTarget],
+    [resolveWeekTarget, onAbrirDetalhe],
   );
 
   const closeWeekSlotDetail = React.useCallback(() => {
-    setWeekSlotDetail(null);
-  }, []);
+    onFecharDetalhe?.();
+  }, [onFecharDetalhe]);
+
+  const weekSlotDetail = React.useMemo(() => {
+    if (!agendaIdAlvo || agenda.viewMode !== 'semana') return null;
+    const row =
+      (agenda.weekGridAppointments || []).find((r) => String(r.id) === String(agendaIdAlvo)) ||
+      (alvo.id === agendaIdAlvo ? alvo.row : null);
+    return row ? resolveWeekTarget(row) : null;
+  }, [agendaIdAlvo, agenda.viewMode, agenda.weekGridAppointments, alvo, resolveWeekTarget]);
 
   const handleWeekPrimary = React.useCallback(
     (target) => {
@@ -580,10 +625,10 @@ export function AgendaDashboard({
 
   const openWeekCreateAtSlot = React.useCallback(
     (iso, horaHm) => {
-      setWeekSlotDetail(null);
+      if (agendaIdAlvo) onFecharDetalhe?.();
       agenda.openCreateModalAtSlot(iso, horaHm);
     },
-    [agenda]
+    [agenda, onFecharDetalhe, agendaIdAlvo]
   );
 
   const handleRailConfirmar = React.useCallback(
@@ -722,7 +767,10 @@ export function AgendaDashboard({
           clinicaNome={clinicaNome}
           profissionalNome={profissionalNome}
           viewMode={agenda.viewMode}
-          onChangeViewMode={agenda.setViewMode}
+          onChangeViewMode={(modo) => {
+            if (agendaIdAlvo) onFecharDetalhe?.();
+            agenda.setViewMode(modo);
+          }}
           onSyncWeekFromSelection={agenda.syncWeekFromSelection}
         />
       </div>
@@ -856,6 +904,8 @@ export function AgendaDashboard({
         onAdvanceClick={agenda.isNivel1 ? null : handleAdvanceClick}
         onAgendarNesteHorario={agenda.isNivel1 ? null : openWeekCreateAtSlot}
       />
+
+      {agendaIdAlvo && alvo.erro && alvo.id === agendaIdAlvo ? <NaoEncontrado /> : null}
 
       <AgendaWeekSlotDetailModal
         target={weekSlotDetail}

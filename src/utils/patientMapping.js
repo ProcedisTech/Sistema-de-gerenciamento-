@@ -206,6 +206,9 @@ export function mapBackendPatient(dto, opts) {
     ehAniversariante: dto.ehAniversariante === true,
     anamneseDesatualizada: dto.anamneseDesatualizada === true,
     anamnesePendente: dto.anamnesePendente === true,
+    inativadoEm: pickDateTimeIso(dto, 'inativadoEm', 'inativado_em'),
+    inativadoPorNome: dtoPick(dto, 'inativadoPorNome', 'inativado_por_nome') || '',
+    motivoInativacao: dtoPick(dto, 'motivoInativacao', 'motivo_inativacao') || '',
   };
 }
 

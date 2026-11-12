@@ -23,7 +23,8 @@ import { parseDataCalendario } from '../../utils/datasClinica.js';
 import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 
 export function PatientCreateView({
-  setPatientView,
+  rota,
+  voltarParaLista,
   onPatientCreated,
   onSuccess,
   onClose,
@@ -34,6 +35,10 @@ export function PatientCreateView({
   const isModal = variant === 'modal';
   const isAgendaHost = hostMode === 'agenda';
   const scrollBodyRef = useRef(null);
+  const rotaIdRef = useRef(rota?.rotaId);
+  rotaIdRef.current = rota?.rotaId;
+  const voltarRef = useRef(voltarParaLista);
+  voltarRef.current = voltarParaLista;
   const toast = useToast();
   const { isNivel1 } = usePapel();
   const { fuso, hojeIso } = useAgoraDaClinica();
@@ -43,8 +48,8 @@ export function PatientCreateView({
       onClose();
       return;
     }
-    setPatientView('list');
-  }, [onClose, setPatientView]);
+    voltarParaLista?.();
+  }, [onClose, voltarParaLista]);
 
   const scrollFormTop = () => {
     if (isModal && scrollBodyRef.current) {
@@ -277,7 +282,10 @@ export function PatientCreateView({
         handleClose();
       } else {
         setSucesso(true);
-        setTimeout(() => setPatientView('list'), 1500);
+        setTimeout(() => {
+          // lido no disparo: se a pessoa já saiu de /pacientes/novo, não puxa de volta
+          if (rotaIdRef.current === 'pacienteNovo') voltarRef.current?.({ replace: true });
+        }, 1500);
       }
     } catch (err) {
       const fb = getPacienteCreateErrorFeedback(err);
@@ -383,7 +391,7 @@ export function PatientCreateView({
         </p>
         <button
           type="button"
-          onClick={() => setPatientView('list')}
+          onClick={handleClose}
           className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-semibold transition-all shadow-sm"
         >
           Voltar para a Lista
@@ -399,7 +407,7 @@ export function PatientCreateView({
         <div className="flex items-center justify-between">
           <button
             type="button"
-            onClick={() => setPatientView('list')}
+            onClick={handleClose}
             className="inline-flex items-center gap-2 text-[14px] font-bold text-[#00a88e] transition-all hover:text-[#00967f]"
           >
             <ArrowLeft className="h-4 w-4" strokeWidth={2.5} /> Voltar para Pacientes

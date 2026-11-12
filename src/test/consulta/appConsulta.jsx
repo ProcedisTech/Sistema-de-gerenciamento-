@@ -7,14 +7,14 @@
  *   vi.mock('../../contexts/AvisosProvider.jsx', async () => (await import('./canalAvisosTeste.jsx')).avisosProviderFalso());
  */
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { expect, vi } from 'vitest';
 import { assentar, prepararAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { criarServidorEncerrarFalso, ROLE_USER_ID } from '../encerrar/servidorEncerrarFalso.js';
 import { IDS, catalogoClinica, pacienteDto, tiposProcedimento } from '../encerrar/cenariosEncerrar.js';
 import { PERMISSOES } from '../../constants/permissoes.js';
-import { ToastProvider } from '../../contexts/ToastContext.jsx';
 import AppRoot from '../../components/AppRoot.jsx';
+import { caminhoDoLegado, montarComRoteador } from '../rotas/montarComRoteador.jsx';
 /** 06/10/2026 10:00 em America/Sao_Paulo. */
 export const AGORA = '2026-10-06T13:00:00.000Z';
 export const TIMEOUT = 60000;
@@ -97,6 +97,7 @@ export async function montarApp({
   view = 'pacientes',
   sessao = {},
   permissoes = Object.values(PERMISSOES),
+  caminho,
 } = {}) {
   prepararAmbienteSnapshot();
   vi.setSystemTime(new Date(agora));
@@ -106,11 +107,7 @@ export async function montarApp({
   for (const [k, v] of Object.entries(sessao)) sessionStorage.setItem(k, v);
   const srv = criarServidorEncerrarFalso({ permissoes, rotas: [...rotas, ...rotasBase({ agendas })] });
   vi.stubGlobal('fetch', srv.fetchFalso);
-  render(
-    <ToastProvider>
-      <AppRoot />
-    </ToastProvider>,
-  );
+  montarComRoteador(<AppRoot />, { caminho: caminho ?? caminhoDoLegado({ view, sessao, idPorCpf: { [pacienteDto.cpf]: IDS.PACIENTE } }) });
   await assentarMuito(6);
   return srv;
 }

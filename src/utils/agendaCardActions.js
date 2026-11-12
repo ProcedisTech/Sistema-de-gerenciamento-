@@ -24,14 +24,14 @@ export function getConsultaEmAndamento(rows, meuRoleUserId) {
 
 /**
  * Com consulta em andamento: principal 'voltar' só para quem abriu (outra profissional fica sem principal);
- * some com cancelar e reagendar. Sem andamento: devolve as ações como estão + emAndamento:false.
+ * some com cancelar, reagendar e transferir. Sem andamento: devolve as ações como estão + emAndamento:false.
  */
 function aplicarAndamento(actions, andamento) {
   if (!andamento?.emAndamento) return { ...actions, emAndamento: false };
   return {
     ...actions,
     primary: andamento.minha ? 'voltar' : null,
-    secondary: actions.secondary.filter((a) => a !== 'cancelar' && a !== 'reagendar'),
+    secondary: actions.secondary.filter((a) => a !== 'cancelar' && a !== 'reagendar' && a !== 'transferir'),
     emAndamento: true,
     atendimentoId: andamento.atendimentoId ?? null,
   };
@@ -45,7 +45,12 @@ function aplicarAndamento(actions, andamento) {
  * @param {{ emAndamento: boolean, minha: boolean, atendimentoId: string|null }} [andamento] — de getConsultaEmAndamento
  * @returns {{ primary: 'confirmar' | 'iniciar' | 'voltar' | null, secondary: Array<'anamnese' | 'whatsapp' | 'reagendar' | 'cancelar'>, emAndamento: boolean, atendimentoId?: string|null }}
  */
-export function getRailCardActions(status, canStartAnamnese = true, canCancelarAgendamento = true, andamento) {
+export function getRailCardActions(
+  status,
+  canStartAnamnese = true,
+  canCancelarAgendamento = true,
+  andamento,
+) {
   const s = String(status || '');
   const isPending = s === 'pendente' || s === 'aguardando_confirmacao';
   const isConfirmed = s === 'confirmado';
@@ -55,8 +60,9 @@ export function getRailCardActions(status, canStartAnamnese = true, canCancelarA
     secondary.push('cancelar');
   }
 
+  const primary = isPending ? 'confirmar' : (isConfirmed && canStartAnamnese) ? 'iniciar' : null;
   return aplicarAndamento({
-    primary: isPending ? 'confirmar' : (isConfirmed && canStartAnamnese) ? 'iniciar' : null,
+    primary,
     secondary,
   }, andamento);
 }
@@ -75,7 +81,12 @@ export function getRailPrimaryLabel(primary) {
  * @param {boolean} [canCancelarAgendamento=true]
  * @param {{ emAndamento: boolean, minha: boolean, atendimentoId: string|null }} [andamento] — de getConsultaEmAndamento(linhasDoGrupo, ...)
  */
-export function getGroupedRailCardActions(statuses = [], canStartAnamnese = true, canCancelarAgendamento = true, andamento) {
+export function getGroupedRailCardActions(
+  statuses = [],
+  canStartAnamnese = true,
+  canCancelarAgendamento = true,
+  andamento,
+) {
   const list = (statuses || []).map((s) => String(s || ''));
   const hasPending = list.some((s) => s === 'pendente' || s === 'aguardando_confirmacao');
   const allConfirmed = list.length > 0 && list.every((s) => s === 'confirmado');

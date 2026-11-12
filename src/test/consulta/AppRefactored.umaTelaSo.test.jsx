@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { ORG_ID, ROLE_USER_ID } from '../encerrar/servidorEncerrarFalso.js';
 import { TIMEOUT, assentarMuito, montarApp } from './appConsulta.jsx';
+import { ultimoRoteador } from '../rotas/montarComRoteador.jsx';
 
 vi.mock('../../lib/supabaseClient.js', async () => (await import('../encerrar/servidorEncerrarFalso.js')).supabaseFalso());
 vi.mock('../../contexts/AvisosProvider.jsx', async () => (await import('./canalAvisosTeste.jsx')).avisosProviderFalso());
@@ -33,7 +34,7 @@ function rotas() {
 }
 
 async function perfil(extra = {}) {
-  return montarApp({ view: 'configuracoes', sessao: { procedi_config_section: 'perfil' }, rotas: rotas(), ...extra });
+  return montarApp({ caminho: '/configuracoes/meu-perfil', rotas: rotas(), ...extra });
 }
 
 afterEach(() => {
@@ -91,7 +92,7 @@ describe('Modelo unificado de clínica no App real', () => {
   }, TIMEOUT);
 
   it('guard local preserva alterações nos horários da clínica quando usuário cancela saída do painel', async () => {
-    await montarApp({ view: 'configuracoes', sessao: { procedi_config_section: 'horarios-funcionamento' }, rotas: rotas() });
+    await montarApp({ caminho: '/configuracoes/horarios', rotas: rotas() });
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('switch', { name: 'Terça-feira inativo' }));
@@ -101,11 +102,11 @@ describe('Modelo unificado de clínica no App real', () => {
     expect(screen.getByRole('button', { name: 'Continuar editando' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Continuar editando' }));
     expect(screen.getByRole('switch', { name: 'Terça-feira ativo' })).toBeInTheDocument();
-    expect(sessionStorage.getItem('procedi_config_section')).toBe('horarios-funcionamento');
+    expect(ultimoRoteador().state.location.pathname).toBe('/configuracoes/horarios');
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Feriados' })[0]);
     fireEvent.click(screen.getByRole('button', { name: 'Sair sem salvar' }));
     await assentarMuito();
-    expect(sessionStorage.getItem('procedi_config_section')).toBe('agenda-feriados');
+    expect(ultimoRoteador().state.location.pathname).toBe('/configuracoes/feriados');
   }, TIMEOUT);
 });

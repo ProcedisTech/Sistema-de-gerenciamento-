@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  ArrowLeftRight,
   Calendar,
   ChevronDown,
   ChevronRight,
@@ -90,6 +91,8 @@ export function ProcedureTimelinePreviewCard({
   timeLabel,
   procedureName,
   professionalName,
+  profissionalAgendadoNome,
+  motivoTrocaProfissional,
   onPress,
   depth = 0,
   retornoCount = 0,
@@ -102,6 +105,15 @@ export function ProcedureTimelinePreviewCard({
   isRetornosExpanded = false,
 }) {
   const isChild = depth > 0;
+  const foiSubstituido = Boolean(
+    profissionalAgendadoNome &&
+      profissionalAgendadoNome !== professionalName,
+  );
+  const substituicaoTitle = foiSubstituido
+    ? motivoTrocaProfissional
+      ? `Agendado com ${profissionalAgendadoNome} → Realizado por ${professionalName} · Motivo: ${motivoTrocaProfissional}`
+      : `Agendado com ${profissionalAgendadoNome} → Realizado por ${professionalName}`
+    : `Realizado por ${professionalName}`;
 
   const body = (
     <div className="min-w-0 flex-1 p-3 sm:p-3.5">
@@ -139,9 +151,17 @@ export function ProcedureTimelinePreviewCard({
       </div>
 
       <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-[#64748b]">
-        <p className="flex items-center gap-1 truncate font-medium" title={`Realizado por ${professionalName}`}>
+        <p className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 font-medium" title={substituicaoTitle}>
           <Stethoscope className="h-3.5 w-3.5 shrink-0 text-[#94a3b8]" strokeWidth={2} aria-hidden />
-          <span className="truncate">Realizado por {professionalName}</span>
+          {foiSubstituido ? (
+            <span className="inline-flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5">
+              <span>Agendado com {profissionalAgendadoNome}</span>
+              <ArrowLeftRight className="h-2.5 w-2.5 shrink-0 text-amber-600" aria-hidden />
+              <span className="font-semibold text-[#0f172a]">Realizado por {professionalName}</span>
+            </span>
+          ) : (
+            <span className="truncate">Realizado por {professionalName}</span>
+          )}
         </p>
         {fotosCount > 0 && (
           <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600">

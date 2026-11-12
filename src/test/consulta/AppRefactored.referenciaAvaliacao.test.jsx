@@ -1,108 +1,97 @@
 // Regressão prevenida:
 // No Hub de Procedimentos, a seção "AVALIAÇÃO — APENAS REFERÊNCIA" NUNCA pode vazar fotos
-// ou mapas de consultas anteriores quando o atendimento for avulso (sem plano vinculado).
-// Em atendimentos vinculados a plano, só deve exibir fotos do plano ativo ou da consulta atual.
+// de consultas anteriores (atendimento avulso) e a foto da vista do mapa (MAPA) nunca entra na faixa.
+// Testa a função real usada em AppRefactored.jsx (antes era uma cópia da regra).
+//
+// Mudanças de expectativa vs. versão anterior (cópia da regra):
+// - D1: foto MAPA do atendimento atual deixou de entrar (foto de mapa nunca entra na faixa).
+// - D5: cenário "foto do plano de outra consulta" saiu: a regra de plano não existe no código.
 
 import { describe, it, expect } from 'vitest';
+import { ehFotoReferenciaAvaliacao } from '../../utils/pacienteGaleria.js';
 
-/**
- * Função pura espelhando a regra estrita de filtro implementada em AppRefactored.jsx (L1982-L2005)
- */
-function filtrarFotosReferenciaAvaliacao(itens, currentAtendId, currentPlanId) {
-  return itens.filter((f) => {
-    const code = String(f.tipoFotoCodigo || f.categoria || '').toUpperCase();
-    const leg = String(f.legenda || f.descricaoLegenda || '').toUpperCase();
-    const isAvaliacaoFoto =
-      code === 'AVALIACAO' ||
-      code === 'MAPA' ||
-      code === 'PLANEJAMENTO' ||
-      leg.includes('AVALIAÇÃO') ||
-      leg.includes('AVALIACAO');
-    if (!isAvaliacaoFoto) return false;
-
-    const fotoAtendId = f.atendimentoId || f.atendimento?.id;
-    const fotoPlanId = f.planejamentoId || f.mapaOverlay?.planejamentoId;
-
-    const pertenceAoAtendimento = Boolean(
-      currentAtendId && fotoAtendId && String(fotoAtendId) === String(currentAtendId)
-    );
-    const pertenceAoPlano = Boolean(
-      currentPlanId && fotoPlanId && String(fotoPlanId) === String(currentPlanId)
-    );
-
-    // Em atendimento avulso (sem plano), NUNCA vaza fotos de atendimentos passados
-    if (!currentPlanId) {
-      return pertenceAoAtendimento;
-    }
-
-    return Boolean(pertenceAoAtendimento || pertenceAoPlano);
-  });
-}
+const filtrar = (itens, atendId) => itens.filter((f) => ehFotoReferenciaAvaliacao(f, atendId));
 
 describe('Regressão Zero — Filtro Estrito de Fotos de Referência no Hub de Procedimentos', () => {
-  const currentAtendId = 'atend-atual-123';
+  const atual = 'atend-atual-123';
 
-  const fotoHistoricaAvulsa = {
+  const fotoHistoricaMapa = {
     id: 'f-hist-1',
     tipoFotoCodigo: 'MAPA',
     legenda: 'Mapa de Avaliação Anterior',
     atendimentoId: 'atend-antigo-999',
-    planejamentoId: null,
   };
-
-  const fotoHistoricaOutroPlano = {
+  const fotoHistoricaAvaliacao = {
     id: 'f-hist-2',
     tipoFotoCodigo: 'AVALIACAO',
-    legenda: 'Avaliação Plano B',
+    legenda: 'Avaliação Antiga',
     atendimentoId: 'atend-antigo-888',
-    planejamentoId: 'plano-outro-xyz',
   };
-
-  const fotoSessaoAtual = {
-    id: 'f-sessao-atual',
+  const fotoMapaSessaoAtual = {
+    id: 'f-mapa-atual',
     tipoFotoCodigo: 'MAPA',
     legenda: 'Mapa de Avaliação Desta Sessão',
-    atendimentoId: currentAtendId,
-    planejamentoId: null,
+    atendimentoId: atual,
   };
-
-  const fotoDoPlanoAtivo = {
-    id: 'f-plano-ativo',
+  const fotoAvaliacaoAtual = {
+    id: 'f-aval-atual',
     tipoFotoCodigo: 'AVALIACAO',
-    legenda: 'Foto de Referência do Plano Ativo',
-    atendimentoId: 'atend-anterior-777',
-    planejamentoId: 'plano-ativo-principal',
+    legenda: 'Foto de avaliação desta sessão',
+    atendimentoId: atual,
   };
 
-  it('Cenário 1: Consulta Avulsa (sem plano) sem fotos na sessão atual retorna lista VAZIA (Zero Vazamento)', () => {
-    // Simula entrar direto em procedimento sem ter tirado fotos na avaliação da sessão atual
-    const galeria = [fotoHistoricaAvulsa, fotoHistoricaOutroPlano, fotoDoPlanoAtivo];
-
-    const resultado = filtrarFotosReferenciaAvaliacao(galeria, currentAtendId, null);
-
-    // Deve ser RIGOROSAMENTE VAZIO. Zero fotos de consultas antigas vazando.
-    expect(resultado).toEqual([]);
+  it('Cenário 1: sem fotos de avaliação na sessão atual retorna lista VAZIA (Zero Vazamento)', () => {
+    expect(filtrar([fotoHistoricaMapa, fotoHistoricaAvaliacao], atual)).toEqual([]);
   });
 
-  it('Cenário 2: Consulta Avulsa (sem plano) com foto tirada na sessão atual retorna APENAS a foto da sessão', () => {
-    const galeria = [fotoHistoricaAvulsa, fotoHistoricaOutroPlano, fotoSessaoAtual];
-
-    const resultado = filtrarFotosReferenciaAvaliacao(galeria, currentAtendId, null);
-
-    expect(resultado).toHaveLength(1);
-    expect(resultado[0].id).toBe('f-sessao-atual');
+  it('Cenário 2: só a foto de avaliação da sessão atual entra; MAPA da sessão (D1) e antigas ficam fora', () => {
+    const r = filtrar([fotoHistoricaMapa, fotoHistoricaAvaliacao, fotoMapaSessaoAtual, fotoAvaliacaoAtual], atual);
+    expect(r.map((f) => f.id)).toEqual(['f-aval-atual']);
   });
 
-  it('Cenário 3: Consulta vinculada a plano exibe fotos do plano ativo e da sessão atual, filtrando outros planos', () => {
-    const galeria = [fotoHistoricaAvulsa, fotoHistoricaOutroPlano, fotoSessaoAtual, fotoDoPlanoAtivo];
+  it('PLANEJAMENTO e legenda com "avaliacao" (sem acento) do mesmo atendimento entram', () => {
+    const plan = { id: 'p', tipoFotoCodigo: 'PLANEJAMENTO', atendimentoId: atual };
+    const leg = { id: 'l', tipoFotoCodigo: 'OUTRA', legenda: 'avaliacao inicial', atendimentoId: atual };
+    expect(filtrar([plan, leg], atual).map((f) => f.id)).toEqual(['p', 'l']);
+  });
 
-    const resultado = filtrarFotosReferenciaAvaliacao(galeria, currentAtendId, 'plano-ativo-principal');
+  it('atendimentoId atual ausente não retorna nada', () => {
+    expect(filtrar([fotoAvaliacaoAtual], null)).toEqual([]);
+  });
 
-    expect(resultado).toHaveLength(2);
-    const ids = resultado.map((f) => f.id);
-    expect(ids).toContain('f-sessao-atual');
-    expect(ids).toContain('f-plano-ativo');
-    expect(ids).not.toContain('f-hist-1');
-    expect(ids).not.toContain('f-hist-2');
+  it('MAPA do mesmo atendimento com tipoMapaCodigo procedimento fica fora', () => {
+    const f = { ...fotoMapaSessaoAtual, mapaOverlay: { tipoMapaCodigo: 'procedimento' } };
+    expect(filtrar([f], atual)).toEqual([]);
+  });
+
+  it('MAPA com "avaliação" na legenda fica fora', () => {
+    const f = { id: 'm', tipoFotoCodigo: 'MAPA', legenda: 'Mapa de avaliação', atendimentoId: atual };
+    expect(filtrar([f], atual)).toEqual([]);
+  });
+
+  it('AVALIACAO com tipoMapaCodigo procedimento fica fora', () => {
+    const f = { ...fotoAvaliacaoAtual, mapaOverlay: { tipoMapaCodigo: 'procedimento' } };
+    expect(filtrar([f], atual)).toEqual([]);
+  });
+
+  it('AVALIACAO com tipoMapaCodigo retorno fica fora', () => {
+    const f = { ...fotoAvaliacaoAtual, mapaOverlay: { tipoMapaCodigo: 'retorno' } };
+    expect(filtrar([f], atual)).toEqual([]);
+  });
+
+  it('AVALIACAO com mapa de avaliação entra e mantém mapaOverlay com os pontos', () => {
+    const overlay = { tipoMapaCodigo: 'avaliacao', pontos: [{ x: 1, y: 2 }, { x: 3, y: 4 }] };
+    const r = filtrar([{ ...fotoAvaliacaoAtual, mapaOverlay: overlay }], atual);
+    expect(r).toHaveLength(1);
+    expect(r[0].mapaOverlay).toBe(overlay);
+    expect(r[0].mapaOverlay.pontos).toHaveLength(2);
+  });
+
+  it('AVALIACAO sem mapa entra', () => {
+    expect(filtrar([fotoAvaliacaoAtual], atual)).toHaveLength(1);
+  });
+
+  it('AVALIACAO de outro atendimento fica fora', () => {
+    expect(filtrar([{ ...fotoAvaliacaoAtual, atendimentoId: 'outro' }], atual)).toEqual([]);
   });
 });

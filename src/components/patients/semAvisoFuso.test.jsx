@@ -89,8 +89,7 @@ function Tela({ responder }) {
           setPatientListSortBy={() => {}}
           setPatientSearchQuery={() => {}}
           setSelectedPatientCpf={() => {}}
-          setPatientDetailTab={() => {}}
-          setPatientView={() => {}}
+          irPara={() => {}}
           getPatientInitials={() => 'PT'}
           kpi={kpi}
           nomeUsuario="Ana"

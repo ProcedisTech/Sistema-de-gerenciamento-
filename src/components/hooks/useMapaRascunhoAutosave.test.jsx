@@ -8,6 +8,13 @@ vi.mock('../../services/api', () => ({
   pacientesGaleriaApi: { upload: vi.fn(), list: vi.fn(), fetchArquivoBlob: vi.fn() },
 }));
 
+const aviso = vi.hoisted(() => ({ handler: null }));
+vi.mock('../../contexts/useAviso.js', () => ({
+  useAviso: (_prefixo, handler) => {
+    aviso.handler = handler;
+  },
+}));
+
 const { atendimentosApi, pacientesGaleriaApi } = await import('../../services/api');
 
 const CONSULTA = { id: 'c-1', pacienteId: 'p-1', tipoProcedimentoCodigo: null };
@@ -233,5 +240,265 @@ describe('useMapaRascunhoAutosave (C4)', () => {
     act(() => result.current.mapa.adicionarPonto('FRONTAL', ponto(0.1)));
     await act(async () => result.current.autosave.aguardarMapa());
     expect(atendimentosApi.salvarMapa).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('useMapaRascunhoAutosave: releitura ao voltar', () => {
+  const dtoDe = (vista, quantidade = 1) => ({
+    mapaId: 'm-1',
+    atendimentoItemId: 'item-1',
+    fotoGaleriaIdPorVista: {},
+    marcacoes: [{ anguloFotoCodigo: vista, quantidade, tipoGeometria: 'ponto', vertices: [{ ordem: 1, posX: 0.1, posY: 0.1 }] }],
+  });
+  const buscasDe = (iid) => atendimentosApi.buscarMapa.mock.calls.filter((c) => c[1] === iid).length;
+  const SAIU = { consultaAtual: null, itemAtual: 'item-1' };
+  const VOLTOU = { consultaAtual: CONSULTA, itemAtual: 'item-1' };
+  const envioPendente = () => {
+    const ctl = {};
+    atendimentosApi.salvarMapa.mockImplementationOnce(() => new Promise((res, rej) => {
+      ctl.soltar = res;
+      ctl.falhar = rej;
+    }));
+    return ctl;
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    aviso.handler = null;
+    atendimentosApi.buscarMapa.mockResolvedValue(null);
+    atendimentosApi.salvarMapa.mockResolvedValue({});
+  });
+
+  it('1) sai e volta com o mapa na memória: nenhuma leitura nova e o mapa igual (D3\')', async () => {
+    atendimentosApi.buscarMapa.mockResolvedValue(dtoDe('FRONTAL'));
+    const { result, rerender } = montar();
+    await assentar();
+    expect(buscasDe('item-1')).toBe(1);
+    const antes = result.current.mapa.pontosPorVista.FRONTAL;
+
+    rerender(SAIU);
+    rerender(VOLTOU);
+    await assentar();
+
+    expect(buscasDe('item-1')).toBe(1);
+    expect(result.current.mapa.pontosPorVista.FRONTAL).toEqual(antes);
+  });
+
+  it('3) A -> B (marca e salva) -> A, com rascunho nos dois: nenhuma leitura nova do A e os pontos continuam (D6\')', async () => {
+    atendimentosApi.buscarMapa.mockResolvedValue(dtoDe('FRONTAL'));
+    const { result, rerender } = montar();
+    await assentar();
+    rerender({ consultaAtual: CONSULTA, itemAtual: 'item-2' });
+    await assentar();
+    act(() => result.current.mapa.adicionarPonto('PERFIL_D', ponto(0.4)));
+    await assentar();
+    expect(atendimentosApi.salvarMapa).toHaveBeenCalledTimes(1);
+    expect(buscasDe('item-1')).toBe(1);
+    expect(buscasDe('item-2')).toBe(1);
+
+    rerender({ consultaAtual: CONSULTA, itemAtual: 'item-1' });
+    await assentar();
+
+    expect(buscasDe('item-1')).toBe(1);
+    expect(buscasDe('item-2')).toBe(1);
+    expect(result.current.mapa.pontosPorVista.FRONTAL).toHaveLength(1);
+    expect(result.current.mapa.pontosPorVista.PERFIL_D).toHaveLength(1);
+  });
+
+  it('4) procedimento ainda não lido: lê uma vez só, mesmo com re-render', async () => {
+    const { rerender } = montar();
+    await assentar();
+    expect(buscasDe('item-1')).toBe(1);
+    rerender({ consultaAtual: CONSULTA, itemAtual: 'item-9' });
+    rerender({ consultaAtual: { ...CONSULTA }, itemAtual: 'item-9' });
+    await assentar();
+    expect(buscasDe('item-9')).toBe(1);
+  });
+
+  it('6) aviso de procedimento relê, mesmo já lido e com o mapa preenchido', async () => {
+    atendimentosApi.buscarMapa.mockResolvedValue(dtoDe('FRONTAL'));
+    const { result } = montar();
+    await assentar();
+    expect(buscasDe('item-1')).toBe(1);
+    expect(result.current.mapa.pontosPorVista.FRONTAL).toHaveLength(1);
+
+    act(() => aviso.handler());
+    await assentar();
+    expect(buscasDe('item-1')).toBe(2);
+  });
+
+  it('a) 2) consulta some, o mapa é zerado e volta: busca de novo e repõe o mapa (D3\')', async () => {
+    atendimentosApi.buscarMapa.mockResolvedValue(dtoDe('FRONTAL'));
+    const { result, rerender } = montar();
+    await assentar();
+    expect(buscasDe('item-1')).toBe(1);
+    expect(result.current.mapa.pontosPorVista.FRONTAL).toHaveLength(1);
+
+    rerender(SAIU);
+    act(() => result.current.mapa.resetMapa());
+    expect(result.current.mapa.pontosPorVista.FRONTAL ?? []).toHaveLength(0);
+    rerender(VOLTOU);
+    await assentar();
+
+    expect(buscasDe('item-1')).toBe(2);
+    expect(result.current.mapa.pontosPorVista.FRONTAL).toHaveLength(1);
+  });
+
+  it('b) vista com mudança não salva continua igual depois da releitura (pelo aviso, D3\': voltar com mapa cheio não relê)', async () => {
+    atendimentosApi.salvarMapa.mockRejectedValue(Object.assign(erro(422), { body: { message: 'x' } }));
+    const { result } = montar();
+    await assentar();
+    act(() => result.current.mapa.adicionarPonto('FRONTAL', ponto(0.9, 7)));
+    await assentar();
+    expect(result.current.mapa.getDirtyVistas()).toEqual(['FRONTAL']);
+
+    atendimentosApi.buscarMapa.mockResolvedValue({
+      ...dtoDe('FRONTAL', 1),
+      marcacoes: [...dtoDe('FRONTAL', 1).marcacoes, ...dtoDe('PERFIL_D', 3).marcacoes],
+    });
+    act(() => aviso.handler());
+    await assentar();
+
+    expect(buscasDe('item-1')).toBe(2);
+    expect(result.current.mapa.pontosPorVista.FRONTAL[0].quantidade).toBe(7);
+    expect(result.current.mapa.pontosPorVista.PERFIL_D).toHaveLength(1);
+    expect(result.current.mapa.getDirtyVistas()).toEqual(['FRONTAL']);
+  });
+
+  it('c) envio em andamento: só busca depois que o envio termina (D7)', async () => {
+    const envio = envioPendente();
+    const { result } = montar();
+    await assentar();
+    act(() => result.current.mapa.adicionarPonto('FRONTAL', ponto(0.1)));
+    await assentar();
+    expect(atendimentosApi.salvarMapa).toHaveBeenCalledTimes(1);
+
+    act(() => aviso.handler());
+    await assentar();
+    expect(buscasDe('item-1')).toBe(1);
+
+    await act(async () => envio.soltar({}));
+    await assentar();
+    expect(buscasDe('item-1')).toBe(2);
+  });
+
+  it('c2) sai da consulta com mudança pendente (enfileira no cleanup), o mapa é zerado e volta: a releitura espera esse envio (D3\')', async () => {
+    const envio = envioPendente();
+    const { result, rerender } = montar();
+    await assentar();
+    act(() => result.current.mapa.adicionarPonto('FRONTAL', ponto(0.1)));
+    rerender(SAIU);
+    act(() => result.current.mapa.resetMapa());
+    rerender(VOLTOU);
+    await assentar();
+    expect(atendimentosApi.salvarMapa).toHaveBeenCalledTimes(1);
+    expect(buscasDe('item-1')).toBe(1);
+
+    await act(async () => envio.soltar({}));
+    await assentar();
+    expect(buscasDe('item-1')).toBe(2);
+  });
+
+  it('d) envio que falha: a releitura acontece mesmo assim', async () => {
+    const envio = envioPendente();
+    const { result } = montar();
+    await assentar();
+    act(() => result.current.mapa.adicionarPonto('FRONTAL', ponto(0.1)));
+    await assentar();
+    act(() => aviso.handler());
+    await assentar();
+    expect(buscasDe('item-1')).toBe(1);
+
+    await act(async () => envio.falhar(Object.assign(erro(422), { body: { message: 'x' } })));
+    await assentar();
+    expect(buscasDe('item-1')).toBe(2);
+  });
+
+  it('d2) fila que rejeita (o aviso de erro lança): a releitura acontece mesmo assim', async () => {
+    const naoTratada = vi.fn();
+    globalThis.process.on('unhandledRejection', naoTratada);
+    const envio = envioPendente();
+    const avisarErro = vi.fn(() => {
+      throw new Error('aviso quebrou');
+    });
+    const r = renderHook(() => {
+      const mapa = useMapaAplicacaoState();
+      useMapaRascunhoAutosave({
+        consulta: CONSULTA, itemId: 'item-1', mapaState: mapa, roleUserId: 'ru-1', avisarErro, debounceMs: DEBOUNCE, esperasMs: ESPERAS,
+      });
+      return mapa;
+    });
+    await assentar();
+    act(() => r.result.current.adicionarPonto('FRONTAL', ponto(0.1)));
+    await assentar();
+    act(() => aviso.handler());
+    await assentar();
+    expect(buscasDe('item-1')).toBe(1);
+
+    await act(async () => envio.falhar(Object.assign(erro(422), { body: { message: 'x' } })));
+    await assentar();
+    globalThis.process.off('unhandledRejection', naoTratada);
+    expect(buscasDe('item-1')).toBe(2);
+  });
+
+  it('e) troca de item relê o item novo e descarta a resposta atrasada do antigo (D6)', async () => {
+    let soltarAntigo;
+    atendimentosApi.buscarMapa.mockImplementationOnce(() => new Promise((r) => {
+      soltarAntigo = r;
+    }));
+    atendimentosApi.buscarMapa.mockImplementationOnce(async () => dtoDe('PERFIL_D'));
+    const { result, rerender } = montar();
+    rerender({ consultaAtual: CONSULTA, itemAtual: 'item-2' });
+    await assentar();
+    expect(buscasDe('item-2')).toBe(1);
+
+    await act(async () => soltarAntigo(dtoDe('FRONTAL')));
+    await assentar();
+    expect(result.current.mapa.pontosPorVista.PERFIL_D).toHaveLength(1);
+    expect(result.current.mapa.pontosPorVista.FRONTAL).toBeUndefined();
+  });
+
+  it('f) aviso + troca de item juntos: a releitura do item antigo (esperando envio) não dispara', async () => {
+    const envio = envioPendente();
+    const { result, rerender } = montar();
+    await assentar();
+    act(() => result.current.mapa.adicionarPonto('FRONTAL', ponto(0.1)));
+    await assentar();
+    act(() => aviso.handler());
+    rerender({ consultaAtual: CONSULTA, itemAtual: 'item-2' });
+    await assentar();
+    expect(buscasDe('item-2')).toBe(1);
+
+    await act(async () => envio.soltar({}));
+    await assentar();
+    expect(buscasDe('item-1')).toBe(1);
+    expect(buscasDe('item-2')).toBe(1);
+  });
+
+  it('f2) dois avisos seguidos esperando o mesmo envio: só a mais recente aplica', async () => {
+    const envio = envioPendente();
+    const { result } = montar();
+    await assentar();
+    act(() => result.current.mapa.adicionarPonto('FRONTAL', ponto(0.1)));
+    await assentar();
+    act(() => aviso.handler());
+    act(() => aviso.handler());
+
+    await act(async () => envio.soltar({}));
+    await assentar();
+    expect(buscasDe('item-1')).toBe(2);
+  });
+
+  it('f3) aviso esperando envio e a consulta some: não busca ao liberar', async () => {
+    const envio = envioPendente();
+    const { result, rerender } = montar();
+    await assentar();
+    act(() => result.current.mapa.adicionarPonto('FRONTAL', ponto(0.1)));
+    await assentar();
+    act(() => aviso.handler());
+    rerender(SAIU);
+    await act(async () => envio.soltar({}));
+    await assentar();
+    expect(buscasDe('item-1')).toBe(1);
   });
 });

@@ -152,4 +152,18 @@ describe('agendaCardActions — consulta em andamento (Camada 2)', () => {
       primary: 'iniciar', secondary: ['anamnese', 'whatsapp', 'reagendar', 'cancelar'], emAndamento: false,
     });
   });
+
+  it('não titular continua habilitado: iniciar sem primaryDisabled, sem transferir', () => {
+    const semAnd = { emAndamento: false, minha: false, atendimentoId: null };
+    const r = getRailCardActions('confirmado', true, true, semAnd);
+    expect(r.primary).toBe('iniciar');
+    expect(r.secondary).toEqual(['anamnese', 'whatsapp', 'reagendar', 'cancelar']);
+    expect(r.primaryDisabled).toBeUndefined();
+    expect(r.primaryDisabledReason).toBeUndefined();
+
+    const g = getGroupedRailCardActions(['confirmado', 'confirmado'], true, true, semAnd);
+    expect(g.primary).toBe('iniciar');
+    expect(g.primaryDisabled).toBeUndefined();
+    expect(g.secondary).not.toContain('transferir');
+  });
 });

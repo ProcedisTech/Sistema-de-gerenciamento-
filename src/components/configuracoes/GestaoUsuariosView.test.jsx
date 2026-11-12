@@ -1,13 +1,19 @@
 import React from "react";
 import { it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
-  render,
   screen,
   fireEvent,
   waitFor,
   cleanup,
 } from "@testing-library/react";
 import { GestaoUsuariosView } from "./GestaoUsuariosView";
+import {
+  montarComRoteador,
+  ultimoRoteador,
+} from "../../test/rotas/montarComRoteador.jsx";
+
+const montar = (props, caminho = "/equipe") =>
+  montarComRoteador(<GestaoUsuariosView {...props} />, { caminho });
 
 const mocks = vi.hoisted(() => ({
   access: {},
@@ -94,7 +100,7 @@ vi.mock("./EquipePessoaView", () => ({
         </button>
       )}
       <button onClick={onBack}>Voltar da pessoa</button>
-      {canSeeConfigAuditoria && <button onClick={() => {}}>Histórico</button>}
+      {canSeeConfigAuditoria && <button onClick={() => { }}>Histórico</button>}
       {canSeeConfigAuditoria && <span>Auditoria: {pessoa.id}</span>}
       {canSeeConfigPerfil && (
         <>
@@ -170,9 +176,9 @@ beforeEach(() => {
             ? [{ id: "dentista", nome: "DENTISTA" }]
             : String(url).endsWith("/perfis-acesso")
               ? [
-                  { id: "dono", codigo: "DONO", nome: "Dono" },
-                  { id: "clinico", nome: "Clínico" },
-                ]
+                { id: "dono", codigo: "DONO", nome: "Dono" },
+                { id: "clinico", nome: "Clínico" },
+              ]
               : [],
     })),
   );
@@ -184,7 +190,7 @@ afterEach(() => {
 });
 
 it("busca por e-mail, filtra quem atende por campo real e distingue convites indisponíveis", async () => {
-  render(<GestaoUsuariosView />);
+  montar();
   await screen.findByRole("button", { name: "Ver Bruno Silva" });
   fireEvent.click(screen.getAllByRole("button", { name: /Atendem na agenda/ })[0]);
   expect(
@@ -200,11 +206,11 @@ it("busca por e-mail, filtra quem atende por campo real e distingue convites ind
     target: { value: "não existe" },
   });
   expect(screen.getByText("Nenhuma pessoa encontrada")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: /Convites pendentes/ }));
+  fireEvent.click(screen.getByRole("button", { name: /convites pendentes/i }));
   expect(mocks.toast.info).toHaveBeenCalled();
 });
 it("abre histórico individual e protege dono de desativação", async () => {
-  render(<GestaoUsuariosView />);
+  montar();
   fireEvent.click(await screen.findByRole("button", { name: "Ver Ana Dono" }));
   expect(
     screen.queryByRole("button", { name: "Desativar acesso" }),
@@ -215,7 +221,7 @@ it("abre histórico individual e protege dono de desativação", async () => {
   expect(screen.getByText("Auditoria: owner")).toBeInTheDocument();
 });
 it("mantém navegação novo perfil/convite e não cria contas nos testes", async () => {
-  render(<GestaoUsuariosView />);
+  montar();
   await screen.findByRole("button", { name: "Ver Bruno Silva" });
   fireEvent.click(
     screen.getByRole("button", { name: "Criar perfil de acesso" }),
@@ -232,24 +238,42 @@ it("mantém navegação novo perfil/convite e não cria contas nos testes", asyn
     ),
   ).toBe(true);
 });
-it("posiciona os botões de ação do cabeçalho sem duplicidade e promove Criar perfil de acesso na lateral", async () => {
-  const { container } = render(<GestaoUsuariosView />);
+it("despolui o cabeçalho removendo .phd e histórico/auditoria avulso, promovendo Convidar pessoa para a toolbar e Criar perfil na lateral", async () => {
+  const { container } = montar();
   await screen.findByRole("button", { name: "Ver Bruno Silva" });
-  const acts = container.querySelector(".phd .acts");
-  expect(acts).toBeTruthy();
-  const buttons = Array.from(acts.querySelectorAll("button"));
-  const labels = buttons.map((b) => b.textContent.trim());
-  expect(labels).toEqual(["Histórico / Auditoria", "Convidar pessoa"]);
+  expect(container.querySelector(".phd")).toBeNull();
+  expect(
+    screen.queryByRole("button", { name: "Histórico / Auditoria" }),
+  ).not.toBeInTheDocument();
+  const inviteBtn = container.querySelector(".tool .tool-action-btn");
+  expect(inviteBtn).toBeTruthy();
+  expect(inviteBtn).toHaveTextContent("Convidar pessoa");
   expect(
     screen.getByRole("button", { name: "Criar perfil de acesso" }),
   ).toBeInTheDocument();
+
+  // Verifica cards de KPI limpos e alinhados idênticos a Pacientes (sem subtexto descritivo .kpi-sub, com spacer)
+  const kpiCards = container.querySelectorAll(".kpis .kpi");
+  expect(kpiCards.length).toBe(5);
+  expect(kpiCards[0].classList.contains("on")).toBe(false);
+  expect(kpiCards[0].querySelector(".kpi-top .kpi-label")).toHaveTextContent("ATIVOS");
+  expect(kpiCards[0].querySelector(".kpi-top .kpi-badge")).toBeTruthy();
+  expect(kpiCards[0].querySelector(".kpi-sub-spacer")).toBeTruthy();
+  expect(kpiCards[0].querySelector(".kpi-sub")).toBeNull();
+
+  // Ao clicar no card de ATIVOS, ele ativa o filtro e ganha a classe .on
+  fireEvent.click(kpiCards[0]);
+  expect(kpiCards[0].classList.contains("on")).toBe(true);
+
+  // Verifica que o rail não possui divisores obsoletos de modelos prontos
+  expect(container.querySelectorAll(".rail .rgl")).toHaveLength(0);
 });
 it("mostra falha de carregamento com retry, e não confunde falha com equipe vazia", async () => {
   fetch.mockResolvedValue({
     ok: false,
     json: async () => ({ message: "Falha na equipe" }),
   });
-  render(<GestaoUsuariosView />);
+  montar();
   expect(await screen.findByRole("alert")).toHaveTextContent("Falha na equipe");
   expect(
     screen.queryByText("Nenhuma pessoa encontrada"),
@@ -259,7 +283,7 @@ it("mostra falha de carregamento com retry, e não confunde falha com equipe vaz
 });
 it("oculta ações e histórico para acesso apenas de leitura e não consulta agenda sem permissão", async () => {
   mocks.access = { canSeeConfigEquipe: true };
-  render(<GestaoUsuariosView />);
+  montar();
   await screen.findByRole("button", { name: "Ver Bruno Silva" });
   expect(
     screen.queryByRole("button", { name: "Convidar pessoa" }),
@@ -279,31 +303,31 @@ it("exibe permissões efetivas do Dono sem inventar concessões configuráveis d
   fetch.mockImplementation(async (url, options) =>
     String(url).endsWith("/api/v1/permissoes")
       ? {
-          ok: true,
-          json: async () => [
-            {
-              permissaoId: "view",
-              codigo: "PACIENTE_VER",
-              modulo: "PACIENTES",
-              nome: "Ver pacientes",
-            },
-            {
-              permissaoId: "appear",
-              codigo: "AGENDA_APARECER",
-              modulo: "AGENDA",
-              nome: "Aparecer",
-            },
-            {
-              permissaoId: "multi",
-              codigo: "AGENDA_MULTI_VER",
-              modulo: "AGENDA",
-              nome: "Multi",
-            },
-          ],
-        }
+        ok: true,
+        json: async () => [
+          {
+            permissaoId: "view",
+            codigo: "PACIENTE_VER",
+            modulo: "PACIENTES",
+            nome: "Ver pacientes",
+          },
+          {
+            permissaoId: "appear",
+            codigo: "AGENDA_APARECER",
+            modulo: "AGENDA",
+            nome: "Aparecer",
+          },
+          {
+            permissaoId: "multi",
+            codigo: "AGENDA_MULTI_VER",
+            modulo: "AGENDA",
+            nome: "Multi",
+          },
+        ],
+      }
       : original(url, options),
   );
-  render(<GestaoUsuariosView />);
+  montar();
   fireEvent.click(await screen.findByRole("button", { name: "Ver Ana Dono" }));
   fireEvent.click(screen.getByRole("button", { name: "Acesso", exact: true }));
   expect(
@@ -339,7 +363,7 @@ function mockOwnerAgendaCatalog() {
 }
 it("salva somente a opção do Dono escolhida e atualiza a sessão", async () => {
   mockOwnerAgendaCatalog();
-  render(<GestaoUsuariosView />);
+  montar();
   fireEvent.click(await screen.findByRole("button", { name: /^Dono / }));
   const accordionToggle = await screen.findByRole("button", {
     name: /Mais configurações|Opções de configuração/i,
@@ -378,7 +402,7 @@ it("salva somente a opção do Dono escolhida e atualiza a sessão", async () =>
 it("mantém o estado anterior quando falha o salvamento da opção do Dono", async () => {
   mockOwnerAgendaCatalog();
   mocks.update.mockRejectedValueOnce(new Error("Falha ao salvar"));
-  render(<GestaoUsuariosView />);
+  montar();
   fireEvent.click(await screen.findByRole("button", { name: /^Dono / }));
   fireEvent.click(
     await screen.findByRole("button", {
@@ -397,7 +421,7 @@ it("mantém o estado anterior quando falha o salvamento da opção do Dono", asy
 it("não oferece controles do Dono para outro membro autenticado", async () => {
   mocks.currentRoleUserId = "member";
   mockOwnerAgendaCatalog();
-  render(<GestaoUsuariosView />);
+  montar();
   fireEvent.click(await screen.findByRole("button", { name: /^Dono / }));
   expect(
     screen.queryByRole("button", {
@@ -417,7 +441,7 @@ it("bloqueia as opções do Dono quando não consegue carregar permissões", asy
       ? { ok: false }
       : original(url, options),
   );
-  render(<GestaoUsuariosView />);
+  montar();
   fireEvent.click(await screen.findByRole("button", { name: /^Dono / }));
   fireEvent.click(
     await screen.findByRole("button", {
@@ -441,7 +465,7 @@ it("bloqueia as opções do Dono quando não consegue carregar permissões", asy
 
 it("abre e fecha os RNFs da agenda ao clicar para maximizar o espaço", async () => {
   mockOwnerAgendaCatalog();
-  render(<GestaoUsuariosView />);
+  montar();
   fireEvent.click(await screen.findByRole("button", { name: /^Dono / }));
   const accordionToggle = await screen.findByRole("button", {
     name: /Mais configurações|Opções de configuração/i,
@@ -486,7 +510,7 @@ it("mantém a referência Agenda sincronizada com os nove módulos ao mudar uma 
     }
     return response;
   });
-  const { container } = render(<GestaoUsuariosView />);
+  const { container } = montar();
   fireEvent.click(await screen.findByRole("button", { name: /^Dono / }));
   fireEvent.click(
     await screen.findByRole("button", {
@@ -520,16 +544,9 @@ it("mantém a referência Agenda sincronizada com os nove módulos ao mudar uma 
   expect(container.querySelectorAll(".areas .area")).toHaveLength(9);
 });
 
-it("targetUserId abre o próprio perfil e propaga atualização para lista e cabeçalho", async () => {
-  const onClearTargetUserId = vi.fn();
+it("endereço do próprio perfil abre o cadastro pessoal e propaga atualização para lista e cabeçalho", async () => {
   const onPerfilAtualizado = vi.fn();
-  const view = render(
-    <GestaoUsuariosView
-      targetUserId="owner"
-      onClearTargetUserId={onClearTargetUserId}
-      onPerfilAtualizado={onPerfilAtualizado}
-    />,
-  );
+  montar({ onPerfilAtualizado }, "/equipe/owner");
   expect(
     await screen.findByRole("heading", { name: "Ana Dono" }),
   ).toBeInTheDocument();
@@ -541,19 +558,13 @@ it("targetUserId abre o próprio perfil e propaga atualização para lista e cab
     expect.objectContaining({ nomeCompleto: "Nome atualizado" }),
   );
   fireEvent.click(screen.getByRole("button", { name: "Voltar da pessoa" }));
-  expect(onClearTargetUserId).toHaveBeenCalledOnce();
-  view.rerender(
-    <GestaoUsuariosView
-      onClearTargetUserId={onClearTargetUserId}
-      onPerfilAtualizado={onPerfilAtualizado}
-    />,
-  );
+  expect(ultimoRoteador().state.location.pathname).toBe("/equipe");
   expect(
-    screen.getByRole("button", { name: "Ver Nome atualizado" }),
+    await screen.findByRole("button", { name: "Ver Nome atualizado" }),
   ).toBeInTheDocument();
 });
 it("target de terceiro abre os detalhes sem cadastro pessoal", async () => {
-  render(<GestaoUsuariosView targetUserId="member" />);
+  montar({}, "/equipe/member");
   expect(
     await screen.findByRole("heading", { name: "Bruno Silva" }),
   ).toBeInTheDocument();
@@ -568,7 +579,7 @@ it("usuário sem USUARIO_VER abre somente a si via perfil, sem buscar equipe ou 
     nomeCompleto: "Ana Pessoal",
     telefone: "11987654321",
   });
-  render(<GestaoUsuariosView targetUserId="me" />);
+  montar({}, "/equipe/me");
   expect(
     await screen.findByRole("heading", { name: "Ana Pessoal" }),
   ).toBeInTheDocument();
@@ -583,7 +594,7 @@ it("usuário sem USUARIO_VER abre somente a si via perfil, sem buscar equipe ou 
 });
 it("sem permissão de equipe não abre target de outro membro", async () => {
   mocks.access = { canSeeConfigEquipe: false };
-  render(<GestaoUsuariosView targetUserId="member" />);
+  montar({}, "/equipe/member");
   expect(
     screen.getByText("Você não tem permissão para visualizar a equipe."),
   ).toBeInTheDocument();
@@ -592,7 +603,7 @@ it("sem permissão de equipe não abre target de outro membro", async () => {
 });
 
 it("abre popover de filtros, filtra por status e agenda, e limpa filtros com badge reativo", async () => {
-  render(<GestaoUsuariosView />);
+  montar();
   await screen.findByRole("button", { name: "Ver Bruno Silva" });
 
   const filterBtn = screen.getByRole("button", { name: "Filtros" });
@@ -630,7 +641,7 @@ it("abre popover de filtros, filtra por status e agenda, e limpa filtros com bad
 });
 
 it("abre menu de ordenação e seleciona opções de ordenação", async () => {
-  render(<GestaoUsuariosView />);
+  montar();
   await screen.findByRole("button", { name: "Ver Bruno Silva" });
 
   const sortBtn = screen.getByRole("button", { name: "Opções de ordenação" });
@@ -651,7 +662,7 @@ it("abre menu de ordenação e seleciona opções de ordenação", async () => {
 });
 
 it("permite filtrar equipe usando os chips rápidos integrados abaixo da busca", async () => {
-  render(<GestaoUsuariosView />);
+  montar();
   await screen.findByRole("button", { name: "Ver Bruno Silva" });
 
   const quickChips = screen.getByLabelText("Filtros rápidos de status");
@@ -676,8 +687,47 @@ it("permite filtrar equipe usando os chips rápidos integrados abaixo da busca",
   expect(screen.queryByText(/Status: Ativos/)).not.toBeInTheDocument();
 });
 
+it("aplica filtros de forma acumulativa entre múltiplos chips e pílulas ativas", async () => {
+  montar();
+  await screen.findByRole("button", { name: "Ver Bruno Silva" });
+
+  const quickChips = screen.getByLabelText("Filtros rápidos de status");
+
+  const chipAtivos = Array.from(quickChips.querySelectorAll(".quick-chip")).find((c) =>
+    c.textContent.includes("Ativos"),
+  );
+  const chipAgenda = Array.from(quickChips.querySelectorAll(".quick-chip")).find((c) =>
+    c.textContent.includes("Atendem na agenda"),
+  );
+
+  // 1. Clica em "Ativos"
+  fireEvent.click(chipAtivos);
+  expect(chipAtivos).toHaveClass("active");
+  expect(screen.getByText(/Status: Ativos/)).toBeInTheDocument();
+
+  // 2. Clica em "Atendem na agenda" sem desativar "Ativos" (acumulativo)
+  fireEvent.click(chipAgenda);
+  expect(chipAtivos).toHaveClass("active");
+  expect(chipAgenda).toHaveClass("active");
+  expect(screen.getByText(/Status: Ativos/)).toBeInTheDocument();
+  expect(screen.getByText(/Agenda: Atendem/)).toBeInTheDocument();
+
+  // 3. Remove a pílula de "Status: Ativos" via botão ✕
+  const removeStatusBtn = screen.getByRole("button", { name: "Remover filtro de status" });
+  fireEvent.click(removeStatusBtn);
+  expect(screen.queryByText(/Status: Ativos/)).not.toBeInTheDocument();
+  // "Agenda: Atendem" continua ativo!
+  expect(chipAgenda).toHaveClass("active");
+  expect(screen.getByText(/Agenda: Atendem/)).toBeInTheDocument();
+
+  // 4. Limpar todos limpa o que restava
+  const clearBtn = screen.getByRole("button", { name: "Limpar todos" });
+  fireEvent.click(clearBtn);
+  expect(screen.queryByText(/Agenda: Atendem/)).not.toBeInTheDocument();
+});
+
 it("abre a ficha do usuário ao clicar em qualquer lugar do bloco retangular da linha", async () => {
-  render(<GestaoUsuariosView />);
+  montar();
   await screen.findByRole("button", { name: "Ver Bruno Silva" });
 
   const row = screen.getByRole("button", { name: "Abrir ficha de Bruno Silva" });
@@ -689,7 +739,7 @@ it("abre a ficha do usuário ao clicar em qualquer lugar do bloco retangular da 
 });
 
 it("abre a ficha do usuário ao clicar na badge de perfil dentro da linha", async () => {
-  render(<GestaoUsuariosView />);
+  montar();
   await screen.findByRole("button", { name: "Ver Bruno Silva" });
 
   const row = screen.getByRole("button", { name: "Abrir ficha de Bruno Silva" });
@@ -701,7 +751,7 @@ it("abre a ficha do usuário ao clicar na badge de perfil dentro da linha", asyn
 });
 
 it("abre a ficha do usuário via teclado com tecla Enter no bloco retangular", async () => {
-  render(<GestaoUsuariosView />);
+  montar();
   await screen.findByRole("button", { name: "Ver Bruno Silva" });
 
   const row = screen.getByRole("button", { name: "Abrir ficha de Bruno Silva" });
@@ -710,7 +760,7 @@ it("abre a ficha do usuário via teclado com tecla Enter no bloco retangular", a
 });
 
 it("não abre a ficha do usuário ao clicar no botão do WhatsApp", async () => {
-  render(<GestaoUsuariosView />);
+  montar();
   await screen.findByRole("button", { name: "Ver Bruno Silva" });
 
   const row = screen.getByRole("button", { name: "Abrir ficha de Bruno Silva" });
@@ -724,3 +774,113 @@ it("não abre a ficha do usuário ao clicar no botão do WhatsApp", async () => 
   }
 });
 
+it("renderiza o botão 'Adicionar membros' antes de 'Editar perfil' e abre o modal de vinculação ao clicar", async () => {
+  const { container } = montar();
+  await screen.findByRole("button", { name: "Ver Bruno Silva" });
+
+  // Seleciona o perfil "Clínico" no container .pchips
+  const pchips = container.querySelector(".pchips");
+  const profileButton = Array.from(pchips.querySelectorAll("button")).find((b) =>
+    b.textContent.includes("Clínico"),
+  );
+  expect(profileButton).toBeTruthy();
+  fireEvent.click(profileButton);
+
+  // O cabeçalho do perfil selecionado deve exibir "Adicionar membros"
+  const addMembersBtn = await screen.findByRole("button", {
+    name: /Adicionar membros/i,
+  });
+  expect(addMembersBtn).toBeInTheDocument();
+
+  // Verifica que existe o botão de editar ou usar como base
+  const actionBtn = screen.getByRole("button", {
+    name: /(Editar perfil|Usar como base)/i,
+  });
+  expect(actionBtn).toBeInTheDocument();
+
+  // Verifica que "Adicionar membros" precede o botão de edição na ordem do DOM
+  expect(
+    addMembersBtn.compareDocumentPosition(actionBtn) &
+    Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+
+  // Clica em "Adicionar membros"
+  fireEvent.click(addMembersBtn);
+
+  // Modal deve abrir com o título e lista de membros elegíveis (excluindo Dono)
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  expect(
+    screen.getByRole("heading", { name: "Adicionar Membros ao Perfil" }),
+  ).toBeInTheDocument();
+  expect(screen.queryByText("Ana Dono")).not.toBeInTheDocument();
+});
+
+
+
+it("abre a ficha do perfil ao clicar no rail, e fechar a ficha (✕) remove o banner e o filtro", async () => {
+  const { container } = montar();
+  await screen.findByRole("button", { name: "Ver Bruno Silva" });
+
+  // Clica no perfil "Clínico" no Rail lateral
+  const railItems = container.querySelectorAll(".rail .rit");
+  const clinicoItem = Array.from(railItems).find((item) =>
+    item.textContent.includes("Clínico"),
+  );
+  expect(clinicoItem).toBeTruthy();
+  fireEvent.click(clinicoItem);
+
+  // A ficha .pban deve estar visível
+  const pban = container.querySelector(".pban");
+  expect(pban).toBeInTheDocument();
+  expect(pban).toHaveTextContent("Clínico");
+
+  // Barra de pílulas deve exibir filtro ativo do perfil
+  expect(screen.getByText(/Perfil: Clínico/)).toBeInTheDocument();
+
+  // Clica no botão de fechar (✕) da ficha
+  const closePbanBtn = screen.getByRole("button", {
+    name: "Fechar ficha do perfil e remover filtro",
+  });
+  expect(closePbanBtn).toBeInTheDocument();
+  fireEvent.click(closePbanBtn);
+
+  // Banner recolhe e filtro é removido
+  expect(container.querySelector(".pban")).toBeNull();
+  expect(screen.queryByText(/Perfil: Clínico/)).not.toBeInTheDocument();
+});
+
+it("abre o modal 'Todos os Perfis', permite busca, fixar/desafixar perfil no rail e abrir ficha", async () => {
+  const { container } = montar();
+  await screen.findByRole("button", { name: "Ver Bruno Silva" });
+
+  // Clica no botão de ver todos os perfis
+  const seeAllBtn = screen.getByRole("button", {
+    name: /Ver todos os \d+ perfis/i,
+  });
+  expect(seeAllBtn).toBeInTheDocument();
+  fireEvent.click(seeAllBtn);
+
+  // Modal aberto
+  const modal = screen.getByRole("dialog", {
+    name: "Todos os Perfis de Acesso",
+  });
+  expect(modal).toBeInTheDocument();
+
+  // Testa busca no modal
+  const searchInput = screen.getByLabelText("Buscar perfil na lista completa");
+  fireEvent.change(searchInput, { target: { value: "Clínico" } });
+  expect(modal.querySelector(".modal-perfil-name")).toHaveTextContent("Clínico");
+
+  // Testa fixar/desafixar
+  const pinBtn = screen.getByRole("button", { name: /Fixar Clínico|Desafixar Clínico/i });
+  expect(pinBtn).toBeInTheDocument();
+  fireEvent.click(pinBtn);
+
+  // Clica no botão Ficha para abrir a ficha do perfil
+  const fichaBtn = screen.getByRole("button", { name: "Abrir ficha de Clínico" });
+  fireEvent.click(fichaBtn);
+
+  // Modal fecha e ficha abre na tela principal
+  expect(screen.queryByRole("dialog", { name: "Todos os Perfis de Acesso" })).not.toBeInTheDocument();
+  expect(container.querySelector(".pban")).toHaveTextContent("Clínico");
+});

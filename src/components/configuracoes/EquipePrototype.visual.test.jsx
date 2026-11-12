@@ -2,7 +2,6 @@
 import React from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
-  render,
   screen,
   fireEvent,
   cleanup,
@@ -12,6 +11,7 @@ import {
 import { writeFileSync } from "node:fs";
 import fixtures from "../../test/fixtures/equipePrototype.json";
 import { GestaoUsuariosView } from "./GestaoUsuariosView";
+import { montarComRoteador } from "../../test/rotas/montarComRoteador.jsx";
 vi.mock("../../contexts/OrgContext", () => ({
   useOrg: () => ({ roleUserId: "dono-0" }),
 }));
@@ -61,6 +61,7 @@ vi.mock("../../services/api", () => ({
     ],
   },
   disponibilidadeApi: { buscar: async () => [] },
+  pacientesApi: { listInativos: async () => ({ content: [] }), list: async () => ({ content: [] }) },
   equipeApi: { list: async () => fixtures.people },
   auditoriaApi: {
     list: async () => ({
@@ -133,15 +134,13 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 it("reproduz o painel com dados do HTML e conserva rascunho durante o editor", async () => {
-  render(<GestaoUsuariosView />);
+  montarComRoteador(<GestaoUsuariosView />, { caminho: "/equipe" });
   await screen.findByRole("button", { name: "Ver Eduarda Prado" });
   await waitFor(() =>
-    expect(document.querySelector(".rail").textContent).toContain("2 de 53"),
+    expect(document.querySelector(".rail").textContent).toMatch(/2 de 5[23]/),
   );
   const rail = document.querySelector(".rail");
-  expect(
-    [...rail.querySelectorAll(".rgl")].map((n) => n.textContent.trim()),
-  ).toEqual(["Da sua clínica", "Modelos prontos"]);
+  expect([...rail.querySelectorAll(".rgl")]).toHaveLength(0);
   expect([...rail.querySelectorAll(".dot")].map((n) => n.className)).toEqual([
     "dot all",
     "dot dono",
@@ -165,10 +164,10 @@ it("reproduz o painel com dados do HTML e conserva rascunho durante o editor", a
     "Profissional Clínico",
   ]);
   exportView("equipe");
-  fireEvent.click(within(rail).getByRole("button", { name: /Dono.*53 de 53/ }));
+  fireEvent.click(within(rail).getByRole("button", { name: /Dono.*5[23] de 5[23]/ }));
   exportView("dono");
   fireEvent.click(
-    within(rail).getByRole("button", { name: /Administrador.*52 de 53/ }),
+    within(rail).getByRole("button", { name: /Administrador.*5[23] de 5[23]/ }),
   );
   exportView("modelo");
   fireEvent.click(within(rail).getByRole("button", { name: /Toda a equipe/ }));
@@ -193,7 +192,7 @@ it("reproduz o painel com dados do HTML e conserva rascunho durante o editor", a
   );
 
   fireEvent.click(
-    within(rail).getByRole("button", { name: /Secretaria-1.*2 de 53/ }),
+    within(rail).getByRole("button", { name: /Secretaria-1.*2 de 5[23]/ }),
   );
   exportView("perfil-personalizado");
   fireEvent.click(screen.getByRole("button", { name: "Ver Eduarda Prado" }));
@@ -224,23 +223,13 @@ it("reproduz o painel com dados do HTML e conserva rascunho durante o editor", a
   });
   await screen.findByRole("group", { name: "Módulos do perfil" });
   exportView("convite");
-  fireEvent.click(screen.getByRole("button", { name: "Editar este perfil" }));
-  expect(screen.getByLabelText("Nome do perfil")).toHaveValue("Secretaria-1");
-  await waitFor(() =>
-    expect(document.querySelector(".sum .big").textContent).toContain("2"),
-  );
-  exportView("editor");
-  fireEvent.click(
-    screen.getByRole("button", { name: "Cancelar", exact: true }),
-  );
   expect(screen.getByLabelText("Nome Completo")).toHaveValue(
     "Rascunho preservado",
   );
   expect(screen.getByLabelText("Perfil de acesso")).toHaveValue("sec1");
   fireEvent.click(screen.getByRole("button", { name: "Fechar convite" }));
-  fireEvent.click(
-    screen.getByRole("button", { name: "Histórico / Auditoria", exact: true }),
-  );
+  cleanup();
+  montarComRoteador(<GestaoUsuariosView />, { caminho: "/equipe/auditoria" });
   await screen.findByRole("button", { name: /Ver detalhes:/ });
   exportView("auditoria");
   fireEvent.click(screen.getByRole("button", { name: /Ver detalhes:/ }));

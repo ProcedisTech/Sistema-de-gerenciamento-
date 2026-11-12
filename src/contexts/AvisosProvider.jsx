@@ -31,8 +31,14 @@ export function AvisosProvider({
   children,
   criarLeitor = criarLeitorAvisos,
   degradadoMs = DEGRADADO_INTERVALO_MS,
+  emConsulta = false,
 }) {
   const inscritosRef = useRef(new Set());
+  // Ref (não dependência do efeito): recriar o leitor perderia o Last-Event-ID.
+  const emConsultaRef = useRef(emConsulta);
+  useEffect(() => {
+    emConsultaRef.current = emConsulta;
+  }, [emConsulta]);
   const [statusLeitor, setStatusLeitor] = useState(STATUS_LEITOR.PARADO);
   const [visivel, setVisivel] = useState(abaVisivel);
 
@@ -52,6 +58,7 @@ export function AvisosProvider({
     if (!ativo || !orgId) return undefined;
     const leitor = criarLeitor({
       orgId,
+      obterOciosoMs: () => (emConsultaRef.current ? 30 * 60_000 : 10 * 60_000),
       // Toda conexão relê (a aba pode ter perdido avisos sem Last-Event-ID válido) e avisa quem assina.
       onConectado: ({ primeiro }) => {
         recarregarTodos();

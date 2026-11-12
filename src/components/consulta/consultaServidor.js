@@ -153,10 +153,44 @@ export function linhaDoItemServidor(item) {
     nomeProcedimentoCatalogoId: cat,
     planejamentoItemId: item?.planejamentoItemId ?? null,
     isAgendaRetorno: String(item?.agendaTipoProcedimentoCodigo || '').toLowerCase() === 'retorno',
+    tipoAgendaCodigo: item?.agendaTipoProcedimentoCodigo ?? null,
     observacoesExecucao: texto(item?.observacaoExecucao),
     orient: orientacoesNormalizadas(item?.orientacoes),
     // NÃO DETERMINADO: o AtendimentoItemDTO não diz se o item está ligado a um PF legado; vale `false`.
     legado: false,
+  };
+}
+
+/** Linha de agenda do tipo Consulta sem catálogo: fica na sessão, mas não vai ao mapa nem à pergunta do catálogo. */
+export function ehLinhaConsultaSemCatalogo(linha) {
+  if (String(linha?.tipoAgendaCodigo ?? '').trim().toUpperCase() !== 'CONSULTA') return false;
+  return !idOuNulo(linha?.nomeProcedimentoCatalogoId ?? linha?.catalogoProcedimentoSaudeId);
+}
+
+/** D1: com outra linha na sessão, o marcador da agenda (Consulta sem catálogo) nunca é o ativo. */
+export function indiceAtivoSemMarcador(sessao, indice) {
+  if (!Array.isArray(sessao) || !ehLinhaConsultaSemCatalogo(sessao[indice])) return indice;
+  const alvo = sessao.findIndex((l) => !ehLinhaConsultaSemCatalogo(l));
+  return alvo >= 0 ? alvo : indice;
+}
+
+/**
+ * Nomes das perguntas depois do encerrar ("Salvar como padrão?" e "Catálogo") e o "já vinculado ao catálogo", pela
+ * regra de hoje: todos os itens da sessão (inclusive o item só com nome), menos a linha do tipo Consulta sem catálogo; sem itens, o procedimento da jornada.
+ */
+export function perguntasDaSessao({ procedimentosSessao, nomeProcedimento, nomeProcedimentoCatalogoId }) {
+  const sessaoBruta = Array.isArray(procedimentosSessao) ? procedimentosSessao : [];
+  const sessao = sessaoBruta.filter(p => !ehLinhaConsultaSemCatalogo(p));
+  const nomesArray = sessaoBruta.length > 0
+    ? sessao.map(p => String(p.procedimentoNome || p.nomeProcedimento || '').trim()).filter(Boolean)
+    : [String(nomeProcedimento || '').trim()].filter(Boolean);
+  return {
+    nomesUnicos: [...new Set(nomesArray)],
+    jaVinculadoAoCatalogo: (snapshotNome) =>
+      sessao.some(
+        p => (p.procedimentoNome === snapshotNome || p.nomeProcedimento === snapshotNome) &&
+             (p.nomeProcedimentoCatalogoId || p.catalogoProcedimentoSaudeId)
+      ) || (nomeProcedimento === snapshotNome && nomeProcedimentoCatalogoId),
   };
 }
 
@@ -230,6 +264,9 @@ export function mesclarSessao(sessao, itensServidor, pendente) {
     const mem = camposDaLinhaSessao(linha);
     let nova = linha;
     if (idOuNulo(linha?.itemId) !== String(item.id)) nova = { ...nova, itemId: String(item.id) };
+    // A linha que nasce do lote da agenda (criarLoteProcedimentosSessao) vem sem o código do tipo.
+    const tipo = item.agendaTipoProcedimentoCodigo ?? null;
+    if ((nova.tipoAgendaCodigo ?? null) !== tipo) nova = { ...nova, tipoAgendaCodigo: tipo };
     if (srv.obs !== mem.obs && !pendente(`item:${item.id}:obs`)) {
       nova = { ...nova, observacoesExecucao: srv.obs };
     }
@@ -545,7 +582,10 @@ export function textoRetornoSemEncerrar(err, mensagemDoServidor) {
   return msg ? `${RETORNO_SEM_ENCERRAR}: ${msg}` : `${RETORNO_SEM_ENCERRAR}. Clique em Concluir Retorno de novo.`;
 }
 
-const TEXTO_ABANDONADA ='Esta consulta foi encerrada por falta de atividade.';
+const TEXTO_ABANDONADA = 'Esta consulta foi encerrada porque ninguém respondeu ao aviso de 4 h. O que não tinha sido salvo se perdeu.';
+
+/** Quem tenta entrar (ou enviar foto) numa consulta já encerrada por abandono: o caminho é "Iniciar", que começa uma nova. */
+export const TEXTO_ABANDONADA_USE_INICIAR = `${TEXTO_ABANDONADA} Use Iniciar para começar uma nova.`;
 
 /**
  * Toast da consulta abandonada com a tela aberta. Com `n` alterações deste aparelho que não chegaram ao servidor:

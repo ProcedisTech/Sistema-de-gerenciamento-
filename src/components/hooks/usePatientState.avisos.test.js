@@ -5,6 +5,8 @@
  */
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createElement, useState } from 'react';
+import { createMemoryRouter, RouterProvider } from 'react-router';
 import { usePatientState } from './usePatientState.js';
 import { criarAvisosFalsos } from '../../test/avisosFalsos.jsx';
 import { AVISO } from '../../services/avisos/tiposAviso.js';
@@ -43,6 +45,13 @@ async function montar() {
   const canal = criarAvisosFalsos();
   const loadings = [];
   const tamanhos = [];
+  function Wrapper({ children }) {
+    const [roteador] = useState(() => createMemoryRouter(
+      [{ path: '*', element: createElement(canal.Wrapper, null, children) }],
+      { initialEntries: ['/pacientes'] },
+    ));
+    return createElement(RouterProvider, { router: roteador });
+  }
   const utils = renderHook(
     () => {
       const r = usePatientState({ authEnabled: true });
@@ -50,7 +59,7 @@ async function montar() {
       tamanhos.push(r.patientListItems.length);
       return r;
     },
-    { wrapper: canal.Wrapper },
+    { wrapper: Wrapper },
   );
   await passar(1000);
   expect(utils.result.current.patientListLoading).toBe(false);

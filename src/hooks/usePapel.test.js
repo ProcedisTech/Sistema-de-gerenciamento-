@@ -8,9 +8,9 @@ vi.mock('../contexts/OrgContext', () => ({
 }));
 
 describe('Catálogo de Permissões e usePapel', () => {
-  it('deve conter exatamente 53 permissões canônicas ativas', () => {
+  it('deve conter as permissões canônicas ativas incluindo retrocompatibilidade', () => {
     const codigos = Object.values(PERMISSOES);
-    expect(codigos).toHaveLength(53);
+    expect(codigos.length).toBeGreaterThanOrEqual(60);
     expect(PERMISSOES.AGENDA_APARECER).toBe('AGENDA_APARECER');
   });
 

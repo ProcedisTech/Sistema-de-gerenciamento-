@@ -7,7 +7,7 @@ import { isValidAdvanceOffer } from '../../utils/agendaAdvanceOffer.js';
 import { isAgendaNoShow } from '../../utils/agendaCancelamentoMotivo.js';
 import { getTimingBadge, getExecutionSummary } from '../../utils/agendaTimingBadges.js';
 import { getConsultaEmAndamento } from '../../utils/agendaCardActions.js';
-import { ConsultaEmAndamentoChip } from './AgendaRailCardActions.jsx';
+import { ConsultaEmAndamentoChip, ProfissionalSubstituidoBadge } from './AgendaRailCardActions.jsx';
 import {
   BLOQUEIO_HATCH_BG,
   bloqueioHoraFimLabel,
@@ -224,6 +224,10 @@ export function AgendaAppointmentSummaryCard({
     : STATUS_BADGE_CLASSES[appointment.status] || STATUS_BADGE_CLASSES.pendente;
 
   const isPanel = variant === 'panel' || variant === 'highlight';
+  const foiSubstituido = Boolean(
+    appointment.profissionalOriginalNome &&
+      appointment.profissionalOriginalNome !== appointment.profissionalNome,
+  );
   // Consulta em andamento: só quem abriu vê "Voltar à consulta"; para os outros o botão some.
   const mostrarPrincipal = andamento.emAndamento
     ? andamento.minha
@@ -290,9 +294,15 @@ export function AgendaAppointmentSummaryCard({
                 {metaLine}
               </p>
               {(showProfissional || appointment.profissionalNome) && appointment.profissionalNome ? (
-                <div className="mt-0.5 flex items-center gap-1 text-xs text-ink-500" title={appointment.profissionalNome}>
+                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-500" title={appointment.profissionalNome}>
                   <Stethoscope className="h-3.5 w-3.5 text-ink-400 shrink-0" />
                   <span className="truncate">{appointment.profissionalNome}</span>
+                  {foiSubstituido ? (
+                    <ProfissionalSubstituidoBadge
+                      profissionalOriginalNome={appointment.profissionalOriginalNome}
+                      motivoTrocaProfissional={appointment.motivoTrocaProfissional}
+                    />
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -392,6 +402,14 @@ export function AgendaAppointmentSummaryCard({
           ) : null}
 
           <p className="mt-0.5 truncate text-[11px] font-medium text-[#555]">{metaParts.join(' · ')}</p>
+          {foiSubstituido ? (
+            <div className="mt-1">
+              <ProfissionalSubstituidoBadge
+                profissionalOriginalNome={appointment.profissionalOriginalNome}
+                motivoTrocaProfissional={appointment.motivoTrocaProfissional}
+              />
+            </div>
+          ) : null}
 
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             {andamento.emAndamento ? <ConsultaEmAndamentoChip /> : null}
@@ -505,9 +523,15 @@ export function AgendaAppointmentSummaryCard({
               ) : null}
             </div>
           ) : null}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <UserRound className="h-3.5 w-3.5 text-[#888888]" />
             <span>{appointment.profissionalNome}</span>
+            {foiSubstituido ? (
+              <ProfissionalSubstituidoBadge
+                profissionalOriginalNome={appointment.profissionalOriginalNome}
+                motivoTrocaProfissional={appointment.motivoTrocaProfissional}
+              />
+            ) : null}
           </div>
         </div>
 
