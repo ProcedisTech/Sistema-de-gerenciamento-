@@ -1,5 +1,6 @@
 /** Menu "Configurações" (e atalhos do catálogo) dentro de Configurações com horários sujos: guarda igual à antiga. */
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { irPeloMenu } from './irPeloMenu.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { assentarMuito, montarApp, TIMEOUT } from '../consulta/appConsulta.jsx';
@@ -14,12 +15,12 @@ const rotas = [['GET', /^\/api\/v1\/organizacoes\/[^/]+\/horarios$/, () => grade
 const MODAL = 'Você tem alterações não salvas no horário de atendimento. Deseja sair sem salvar?';
 const modal = () => screen.queryByRole('heading', { name: 'Alterações não salvas' });
 const noHorarios = () => screen.queryByRole('switch', { name: /Terça-feira (in)?ativo/ }) !== null;
-// Último botão por nome = menu de navegação (no jsdom, o móvel); o 1º dentro de Configurações é o breadcrumb da tela.
-const menuConfig = () => fireEvent.click(screen.getAllByRole('button', { name: /^Configurações$/ }).at(-1));
+// Configurações fica dentro do "Menu" da barra de baixo (decisão 12); o 1º dentro de Configurações é o breadcrumb da tela.
+const menuConfig = () => irPeloMenu(/^Configurações$/);
 
 async function abrirHorarios({ sujar }) {
   await montarApp({ view: 'pacientes', rotas });
-  menuConfig();
+  await menuConfig();
   await assentarMuito();
   fireEvent.click(screen.getAllByText(/Horários, feriados e mensagens/)[0]);
   await assentarMuito();
@@ -42,7 +43,7 @@ describe('Guarda de horários não salvos ao clicar Configurações no menu', ()
     await abrirHorarios({ sujar: true });
     await waitFor(() => expect(noHorarios()).toBe(true));
 
-    menuConfig();
+    await menuConfig();
     await assentarMuito();
     await waitFor(() => expect(modal()).not.toBeNull());
     expect(await screen.findByText(MODAL)).toBeTruthy();
@@ -52,7 +53,7 @@ describe('Guarda de horários não salvos ao clicar Configurações no menu', ()
     await waitFor(() => expect(noHorarios()).toBe(true));
     expect(await screen.findByRole('switch', { name: 'Terça-feira ativo' })).toBeTruthy();
 
-    menuConfig();
+    await menuConfig();
     await assentarMuito();
     expect(await screen.findByText(MODAL)).toBeTruthy();
     fireEvent.click(await screen.findByRole('button', { name: 'Sair sem salvar' }));
@@ -79,7 +80,7 @@ describe('Guarda de horários não salvos ao clicar Configurações no menu', ()
   it('(d) sem alteração, Configurações no menu volta ao hub sem modal', async () => {
     await abrirHorarios({ sujar: false });
     await waitFor(() => expect(noHorarios()).toBe(true));
-    menuConfig();
+    await menuConfig();
     await assentarMuito();
     await waitFor(() => expect(noHorarios()).toBe(false)); // sinal positivo antes da negativa
     await waitFor(() => expect(modal()).toBeNull());

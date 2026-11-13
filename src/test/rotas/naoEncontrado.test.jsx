@@ -1,5 +1,6 @@
 /** Caminho desconhecido logado: "Página não encontrada" dentro do shell; /entrar logado sem marca volta a /pacientes. */
 import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { abrirMenu } from './irPeloMenu.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { TIMEOUT, assentarMuito, montarApp } from '../consulta/appConsulta.jsx';
@@ -25,7 +26,8 @@ describe('rota desconhecida e /entrar logado', () => {
     await assentarMuito(8);
 
     expect(screen.getByText('Página não encontrada')).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: /Sair do sistema/i }).length).toBeGreaterThan(0);
+    expect((await abrirMenu()).getByRole('button', { name: /^Sair do sistema$/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar menu' }));
     expect(r.state.location.pathname).toBe('/xyz');
 
     fireEvent.click(screen.getByText('Ir para Pacientes'));

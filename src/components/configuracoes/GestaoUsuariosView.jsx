@@ -25,10 +25,14 @@ import { Switch } from "../shared/Switch";
 import EquipePessoaView from "./EquipePessoaView";
 import {
   profileType,
-  sortPrototypeProfiles,
+  prunePinnedProfileIds,
   effectiveProfilePermissions,
   summarizeModules,
+  catalogFunctionTotal,
+  profileFunctionCount,
 } from "./equipePrototypeUtils";
+import { useChipsQueCabem } from "./useChipsQueCabem";
+import { useFocoPreso } from "./useFocoPreso";
 import "./equipePrototypeBase.css";
 import "./gestaoEquipe.css";
 import { useNavigate } from "react-router";
@@ -36,6 +40,14 @@ import { useRotaAtual } from "../../rotas/useRotaAtual.js";
 import { caminhos } from "../../rotas/caminhos.js";
 import NaoEncontrado from "../../rotas/NaoEncontrado.jsx";
 import { useAgoraDaClinica } from "../hooks/useAgoraDaClinica.js";
+import { useEntradaTela } from "../../hooks/useEntradaTela.js";
+import { FiltrosFolha } from "./FiltrosFolha";
+import { AtribuirPerfilModal } from "./AtribuirPerfilModal";
+import {
+  compareMembersByHierarchy,
+  contarPrecisamDeVoce,
+  sortProfilesByHierarchy,
+} from "./equipePrototypeUtils";
 
 export function GestaoUsuariosView({
   onDisponibilidadeInvalidate,
@@ -43,6 +55,7 @@ export function GestaoUsuariosView({
   onNavigateAgenda,
   onSelectPatient,
   onPerfilAtualizado,
+  onEquipeDirtyChange = () => {},
 }) {
   const rota = useRotaAtual();
   const navigate = useNavigate();
@@ -106,7 +119,6 @@ export function GestaoUsuariosView({
   const [selectedAtendimentoFilters, setSelectedAtendimentoFilters] = useState([]); // 'hoje', 'mes'
   const [viewingProfileId, setViewingProfileId] = useState(null); // string | null (profile cuja ficha está aberta no .pban)
   const [isTodosPerfisModalOpen, setIsTodosPerfisModalOpen] = useState(false);
-  const [profileSearchInFilter, setProfileSearchInFilter] = useState("");
   const [todosPerfisSearch, setTodosPerfisSearch] = useState("");
   const [pinnedProfileIds, setPinnedProfileIds] = useState(() => {
     try {
@@ -119,8 +131,12 @@ export function GestaoUsuariosView({
   });
   const [loadError, setLoadError] = useState("");
   const detailId = resolvedTarget ? String(resolvedTarget) : null;
-  const [sortOption, setSortOption] = useState("az"); // 'az' | 'za' | 'perfil' | 'atendimentos'
+  const [sortOption, setSortOption] = useState("hier"); // 'hier' | 'az' | 'za' | 'perfil' | 'atendimentos'
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
+  const [atribuirPessoa, setAtribuirPessoa] = useState(null);
+  const filterBtnRef = useRef(null);
+  // Só nos blocos de conteúdo; a chave não muda ao filtrar, buscar ou salvar.
+  const entrada = useEntradaTela("lista");
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const [agendaAvailabilityFilter, setAgendaAvailabilityFilter] = useState("all"); // 'all' | 'yes' | 'no'
   const [periodo, setPeriodo] = useState("mes");
@@ -415,6 +431,11 @@ export function GestaoUsuariosView({
     return [];
   }, [selectedAgendaFilters, agendaAvailabilityFilter]);
 
+  // Calculado aqui (não em sortedProfiles, declarado mais abaixo): mesma ordem de hierarquia do perfil.
+  const porHierarquia = compareMembersByHierarchy(
+    sortProfilesByHierarchy(perfisAcesso, permissionsByProfile, permissoes),
+    nameOf,
+  );
   const filteredUsers = usuarios
     .filter((u) => {
       const text = [
@@ -440,6 +461,9 @@ export function GestaoUsuariosView({
         matchesStatus = u.ativo !== false;
       } else if (effectiveStatusFilters.includes("inativos") && !effectiveStatusFilters.includes("ativos")) {
         matchesStatus = u.ativo === false;
+      }
+      if (effectiveStatusFilters.includes("semperfil") && !(u.ativo !== false && !u.perfilAcessoId)) {
+        matchesStatus = false;
       }
 
       // 4. Agenda (atendem / não atendem)
@@ -493,6 +517,7 @@ export function GestaoUsuariosView({
       return matchesSearch && matchesProfile && matchesStatus && matchesAgenda && matchesAtend;
     })
     .sort((a, b) => {
+      if (sortOption === "hier") return porHierarquia(a, b);
       if (sortOption === "za") {
         return nameOf(b).localeCompare(nameOf(a), "pt-BR");
       }
@@ -615,7 +640,10 @@ export function GestaoUsuariosView({
   const count = (profile) =>
     usuarios.filter((u) => u.ativo !== false && u.perfilAcessoId === profile.id)
       .length;
-  const sortedProfiles = sortPrototypeProfiles(perfisAcesso);
+  const sortedProfiles = useMemo(
+    () => sortProfilesByHierarchy(perfisAcesso, permissionsByProfile, permissoes),
+    [perfisAcesso, permissionsByProfile, permissoes],
+  );
 
   const activePinnedProfileIds = useMemo(() => {
     if (pinnedProfileIds && pinnedProfileIds.length > 0) {
@@ -631,21 +659,62 @@ export function GestaoUsuariosView({
     return sortedProfiles.slice(0, 7);
   }, [sortedProfiles, activePinnedProfileIds]);
 
+  // o perfil escolhido nunca some da barra, mesmo sem estar fixado
+  const barProfiles =
+    selectedProfile && !railProfiles.some((p) => p.id === selectedProfile.id)
+      ? [...railProfiles, selectedProfile]
+      : railProfiles;
+  const modalPerfisRef = useRef(null);
+  useFocoPreso(modalPerfisRef, isTodosPerfisModalOpen, () =>
+    setIsTodosPerfisModalOpen(false),
+  );
+  const chipsRef = useRef(null);
+  useChipsQueCabem(
+    chipsRef,
+    [
+      loading,
+      detailId,
+      activeTab,
+      viewingProfileId,
+      effectiveProfileIds.join(","),
+      barProfiles.map((p) => `${p.id}:${count(p)}`).join(","),
+    ].join("|"),
+  );
+
+  const savePinned = (next) => {
+    setPinnedProfileIds(next);
+    try {
+      localStorage.setItem(`procedi_pinned_profiles_${orgId}`, JSON.stringify(next));
+    } catch {
+      // ignore
+    }
+  };
+
+  // Ao carregar os perfis, ids guardados que não existem mais saem da lista (só regrava se mudou).
+  useEffect(() => {
+    if (!pinnedProfileIds) return;
+    const pruned = prunePinnedProfileIds(pinnedProfileIds, perfisAcesso);
+    if (pruned.length !== pinnedProfileIds.length) savePinned(pruned);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [perfisAcesso]);
+
   const togglePinProfile = (id) => {
     const strId = String(id);
-    setPinnedProfileIds((prev) => {
-      const current = prev && prev.length > 0 ? prev : sortedProfiles.slice(0, 7).map((p) => String(p.id));
-      const next = current.includes(strId)
+    const current = activePinnedProfileIds;
+    savePinned(
+      current.includes(strId)
         ? current.filter((item) => item !== strId)
-        : [...current, strId];
-      try {
-        localStorage.setItem(`procedi_pinned_profiles_${orgId}`, JSON.stringify(next));
-      } catch {
-        // ignore
-      }
-      return next;
-    });
+        : [...current, strId],
+    );
   };
+  const pinnedCount = sortedProfiles.filter((p) =>
+    activePinnedProfileIds.includes(String(p.id)),
+  ).length;
+  const allPinned = sortedProfiles.length > 0 && pinnedCount === sortedProfiles.length;
+  const pinAllProfiles = () => savePinned(sortedProfiles.map((p) => String(p.id)));
+  // como no protótipo: "Desafixar todos" deixa só o Dono
+  const unpinAllProfiles = () =>
+    savePinned(sortedProfiles.filter((p) => p.codigo === "DONO").map((p) => String(p.id)));
 
   const handleSelectProfileFromRail = (profile) => {
     const strId = String(profile.id);
@@ -686,7 +755,7 @@ export function GestaoUsuariosView({
         <b className="trunc">{profile.nome}</b>
         <span>
           {profileIds(profile)
-            ? `${profileIds(profile).length} de ${permissoes.length} · ${attends(profile) ? "atende" : "não atende"}`
+            ? `${profileFunctionCount(profileIds(profile), permissoes, profile.codigo === "DONO")} de ${catalogFunctionTotal(permissoes)} · ${attends(profile) ? "atende" : "não atende"}`
             : previewLoading
               ? "Carregando funções…"
               : "Funções indisponíveis"}
@@ -695,8 +764,8 @@ export function GestaoUsuariosView({
       <span className="ct">{count(profile)}</span>
     </button>
   );
-  const backToTeam = () => {
-    navigate(caminhos.equipe());
+  const backToTeam = (opts) => {
+    navigate(caminhos.equipe(), { state: opts?.semGuarda ? { semGuarda: true } : undefined });
   };
   const saveAccess = async (person, changes) => {
     if (!canManageUsers || person.perfilAcessoCodigo === "DONO") return;
@@ -785,6 +854,42 @@ export function GestaoUsuariosView({
     month: "long",
     timeZone: "UTC",
   }).format(new Date(`${hojeIso || "2026-01-01"}T12:00:00Z`));
+  const alternar = (setter, chave, limpa) => (e) => {
+    setter((prev) =>
+      e.target.checked ? [...prev.filter((x) => x !== chave), chave] : prev.filter((x) => x !== chave),
+    );
+    limpa?.();
+  };
+  const comAtendimento = (cond) =>
+    agenda
+      ? usuarios.filter((u) =>
+          agenda.some((a) => (a.profissionalRoleUserId || a.roleUserId) === u.id && cond(a)),
+        ).length
+      : "—";
+  const gruposFolha = !isFilterPopoverOpen ? [] : [
+    {
+      titulo: "Situação",
+      opcoes: [
+        { id: "ativos", rotulo: "Ativos", n: stats.ativos, marcado: effectiveStatusFilters.includes("ativos"), onToggle: alternar(setSelectedStatusFilters, "ativos", () => setStatusFilter("")) },
+        { id: "inativos", rotulo: "Desativados", n: usuarios.length - stats.ativos, marcado: effectiveStatusFilters.includes("inativos"), onToggle: alternar(setSelectedStatusFilters, "inativos", () => setStatusFilter("")) },
+        { id: "semperfil", rotulo: "Sem perfil", n: contarPrecisamDeVoce(usuarios), marcado: effectiveStatusFilters.includes("semperfil"), onToggle: alternar(setSelectedStatusFilters, "semperfil") },
+      ],
+    },
+    {
+      titulo: "Agenda",
+      opcoes: [
+        { id: "yes", rotulo: "Atendem na agenda", n: stats.atendem, marcado: effectiveAgendaFilters.includes("yes"), onToggle: alternar(setSelectedAgendaFilters, "yes", () => setAgendaAvailabilityFilter("all")) },
+        { id: "no", rotulo: "Não atendem", n: usuarios.filter((u) => u.apareceNaAgenda !== true).length, marcado: effectiveAgendaFilters.includes("no"), onToggle: alternar(setSelectedAgendaFilters, "no", () => setAgendaAvailabilityFilter("all")) },
+      ],
+    },
+    {
+      titulo: "Atendimentos",
+      opcoes: [
+        { id: "hoje", rotulo: "Com atendimento hoje", n: comAtendimento((a) => a.dataAgendamento === hojeIso), marcado: selectedAtendimentoFilters.includes("hoje"), onToggle: alternar(setSelectedAtendimentoFilters, "hoje") },
+        { id: "mes", rotulo: `Com atendimento em ${monthName}`, n: comAtendimento((a) => String(a.statusCodigo).toUpperCase() === "REALIZADO" && a.dataAgendamento?.startsWith(hojeIso.slice(0, 7))), marcado: selectedAtendimentoFilters.includes("mes"), onToggle: alternar(setSelectedAtendimentoFilters, "mes") },
+      ],
+    },
+  ];
   return (
     <div className="prototype-equipe">
       {loadError ? (
@@ -867,6 +972,10 @@ export function GestaoUsuariosView({
           roles={roles}
           perfisAcesso={perfisAcesso}
           onPeriodoChange={setPeriodo}
+          permissionsByProfile={permissionsByProfile}
+          canEditPerfis={!selfOnly && canEditConfigPerfil}
+          viewerIsDono={Boolean(isDono)}
+          onDirtyChange={onEquipeDirtyChange}
         />
       ) : selfOnly ? (
         <p role="status">Carregando seu usuário…</p>
@@ -882,8 +991,9 @@ export function GestaoUsuariosView({
           onPerfilParaAbrirConsumido={() => setPerfilParaAbrirNaAba(null)}
           criarNovoNonce={criarNovoNonce}
           canEdit={canEditConfigPerfil}
-          onBack={() => {
-            backToTeam();
+          onDirtyChange={onEquipeDirtyChange}
+          onBack={(opts) => {
+            backToTeam(opts);
             if (inviteDraft) setShowInviteModal(true);
           }}
           onSaved={(profile) => {
@@ -924,7 +1034,7 @@ export function GestaoUsuariosView({
               </span>
             </div>
           )}
-          <div className="kpis">
+          <div className="kpis" role="group" aria-label="Filtros rápidos de status">
             {[
               {
                 id: "ativos",
@@ -955,13 +1065,13 @@ export function GestaoUsuariosView({
                 icon: "steth",
               },
               {
-                id: "conv",
-                label: "CONVITES PENDENTES",
-                value: "—",
+                id: "precisam",
+                label: "PRECISAM DE VOCÊ",
+                value: contarPrecisamDeVoce(usuarios),
                 badgeClass: "kpi-badge-slate",
-                icon: "mail",
+                icon: "info",
               },
-            ].map(({ id, label, value, badgeClass, icon }) => {
+            ].map(({ id, label, value, badgeClass, icon }, indice) => {
               const isKpiActive =
                 id === "ativos"
                   ? selectedStatusFilters.includes("ativos")
@@ -971,27 +1081,26 @@ export function GestaoUsuariosView({
                       ? selectedAtendimentoFilters.includes("hoje")
                       : id === "mes"
                         ? selectedAtendimentoFilters.includes("mes")
-                        : false;
+                        : selectedStatusFilters.includes("semperfil");
               return (
                 <button
                   type="button"
                   key={id}
-                  className={`kpi ${isKpiActive ? "on" : ""}`}
+                  className={`kpi ${isKpiActive ? "on" : ""} ${entrada(`agenda-delay-${[100, 150, 200, 250, 250][indice]}`)}`}
+                  aria-pressed={isKpiActive}
                   title={
-                    id === "conv"
-                      ? "Convites pendentes por e-mail ainda não disponíveis na API."
+                    id === "precisam"
+                      ? "Pessoas ativas sem perfil de acesso: elas não conseguem entrar."
                       : !canSeeAgendaMulti && (id === "hoje" || id === "mes")
                         ? "Dados da agenda disponíveis para seu acesso."
                         : undefined
                   }
                   onClick={() => {
-                    if (id === "conv") {
-                      toast.info(
-                        "O sistema atual cria o acesso diretamente. Convites pendentes por e-mail ainda não estão disponíveis.",
+                    if (id === "precisam") {
+                      setSelectedStatusFilters((prev) =>
+                        prev.includes("semperfil") ? prev.filter((s) => s !== "semperfil") : [...prev, "semperfil"]
                       );
-                      return;
-                    }
-                    if (id === "ativos") {
+                    } else if (id === "ativos") {
                       setSelectedStatusFilters((prev) =>
                         prev.includes("ativos") ? prev.filter((s) => s !== "ativos") : [...prev, "ativos"]
                       );
@@ -1037,7 +1146,7 @@ export function GestaoUsuariosView({
             </p>
           )}
           <div className="ws">
-            <aside className="rail">
+            <aside className={`rail ${entrada("agenda-delay-150")}`}>
               <div className="rail-h">
                 <PrototypeIcon name="shield" />
                 Perfis de acesso<small>{perfisAcesso.length}</small>
@@ -1080,41 +1189,59 @@ export function GestaoUsuariosView({
               )}
             </aside>
             <div style={{ minWidth: 0 }}>
-              <div className="pchips">
-                <button
-                  className={effectiveProfileIds.length === 0 && !viewingProfileId ? "on" : ""}
-                  onClick={handleSelectAllFromRail}
-                >
-                  Toda a equipe <i>{stats.ativos}</i>
-                </button>
-                {railProfiles.map((p) => (
-                  <button
-                    key={p.id}
-                    className={viewingProfileId === String(p.id) || effectiveProfileIds.includes(String(p.id)) ? "on" : ""}
-                    onClick={() => handleSelectProfileFromRail(p)}
-                  >
-                    <PrototypeIcon
-                      name={p.codigo === "DONO" ? "crown" : "shield"}
-                      size="s"
-                    />
-                    {p.nome} <i>{count(p)}</i>
-                  </button>
-                ))}
-                {perfisAcesso.length > 0 && (
+              <div className={`pchips ${entrada("agenda-delay-150")}`}>
+                <div className="pcw" ref={chipsRef}>
                   <button
                     type="button"
-                    onClick={() => setIsTodosPerfisModalOpen(true)}
-                    className="pchip-more"
+                    data-fixo
+                    aria-pressed={effectiveProfileIds.length === 0 && !viewingProfileId}
+                    className={`toque:min-h-[44px] ${effectiveProfileIds.length === 0 && !viewingProfileId ? "on" : ""}`}
+                    onClick={handleSelectAllFromRail}
                   >
-                    Ver todos ({perfisAcesso.length})
+                    <span className="nm">Toda a equipe</span> <i>{stats.ativos}</i>
                   </button>
-                )}
-                {canEditConfigPerfil && (
-                  <button onClick={newProfile}>
-                    <PrototypeIcon name="plus" size="s" />
-                    Novo perfil
-                  </button>
-                )}
+                  {barProfiles.map((p) => {
+                    const on =
+                      viewingProfileId === String(p.id) ||
+                      effectiveProfileIds.includes(String(p.id));
+                    return (
+                      <button
+                        type="button"
+                        key={p.id}
+                        title={p.nome}
+                        aria-pressed={on}
+                        className={`toque:min-h-[44px] ${on ? "on" : ""}`}
+                        onClick={() => handleSelectProfileFromRail(p)}
+                      >
+                        <PrototypeIcon
+                          name={p.codigo === "DONO" ? "crown" : "shield"}
+                          size="s"
+                        />
+                        <span className="nm">{p.nome}</span> <i>{count(p)}</i>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="pcx">
+                  {perfisAcesso.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setIsTodosPerfisModalOpen(true)}
+                      className="pchip-more toque:min-h-[44px]"
+                      aria-label={`Todos os perfis (${perfisAcesso.length})`}
+                    >
+                      <PrototypeIcon name="shield" size="s" />
+                      <span>Todos os perfis</span>
+                      <i>{perfisAcesso.length}</i>
+                    </button>
+                  )}
+                  {canEditConfigPerfil && (
+                    <button type="button" className="np toque:min-h-[44px]" onClick={newProfile}>
+                      <PrototypeIcon name="plus" size="s" />
+                      Novo perfil
+                    </button>
+                  )}
+                </div>
               </div>
               {selectedProfile && (
                 <section className={`pban ${profileType(selectedProfile)}`}>
@@ -1122,7 +1249,7 @@ export function GestaoUsuariosView({
                     <div style={{ minWidth: 0 }}>
                       {badge(selectedProfile)}
                       <h3 style={{ marginTop: 8 }}>{selectedProfile.nome}</h3>
-                      <p>{selectedProfile.descricao || "Sem descrição."}</p>
+                      <p>{selectedProfile.descricao || "Sem descrição"}</p>
                     </div>
                     <div className="ac">
                       {selectedProfile.codigo === "DONO" ? (
@@ -1298,13 +1425,15 @@ export function GestaoUsuariosView({
                     <>
                       <div className="gauge">
                         <b>
-                          {profileIds(selectedProfile)?.length ?? "—"} de{" "}
-                          {permissoes.length} funções
+                          {profileIds(selectedProfile)
+                            ? profileFunctionCount(profileIds(selectedProfile), permissoes, selectedProfile.codigo === "DONO")
+                            : "—"} de{" "}
+                          {catalogFunctionTotal(permissoes)} funções
                         </b>
                         <span className="bar">
                           <i
                             style={{
-                              width: `${((profileIds(selectedProfile)?.length || 0) / (permissoes.length || 1)) * 100}%`,
+                              width: `${(profileFunctionCount(profileIds(selectedProfile), permissoes, selectedProfile.codigo === "DONO") / (catalogFunctionTotal(permissoes) || 1)) * 100}%`,
                             }}
                           />
                         </span>
@@ -1321,7 +1450,12 @@ export function GestaoUsuariosView({
                             ? "Atende na agenda"
                             : "Não atende"}
                         </span>
-                        <span>· {count(selectedProfile)} pessoas</span>
+                        <span>
+                          ·{" "}
+                          {count(selectedProfile)
+                            ? `${count(selectedProfile)} ${count(selectedProfile) === 1 ? "pessoa" : "pessoas"}`
+                            : "ninguém usa"}
+                        </span>
                       </div>
                       <div className="areas">
                         {summarizeModules(
@@ -1336,6 +1470,14 @@ export function GestaoUsuariosView({
                               <PrototypeIcon name={m.icon} size="s" />
                               <span className="trunc">{m.name}</span>
                             </b>
+                            <i className="pips" aria-hidden="true">
+                              {[1, 2, 3].map((n) => (
+                                <u
+                                  key={n}
+                                  className={n <= (m.k === "c" ? 2 : Number(m.k)) ? "on" : ""}
+                                />
+                              ))}
+                            </i>
                             <span className={`l${m.k}`}>
                               {m.k === "c" ? "Parcial" : m.t}
                             </span>
@@ -1370,13 +1512,10 @@ export function GestaoUsuariosView({
                   </button>
                 )}
 
-                <div
-                  className="filter-wrapper"
-                  ref={filterPopoverRef}
-                  style={{ position: "relative" }}
-                >
+                <div className="filter-wrapper" style={{ position: "relative" }}>
                   <button
                     type="button"
+                    ref={filterBtnRef}
                     className={`filter-btn ${activeFiltersCount > 0 ? "has-filters" : ""}`}
                     onClick={() => {
                       setIsFilterPopoverOpen((prev) => !prev);
@@ -1395,217 +1534,26 @@ export function GestaoUsuariosView({
                     )}
                   </button>
 
-                  {isFilterPopoverOpen && (
-                    <div
-                      className="filter-popover"
-                      role="dialog"
-                      aria-label="Opções de filtros"
-                    >
-                      <div className="popover-h">
-                        <h3>Filtrar Pessoas</h3>
-                        {activeFiltersCount > 0 && (
-                          <button
-                            type="button"
-                            className="btn-clear-all"
-                            onClick={clearAllFilters}
-                          >
-                            Limpar
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="popover-section">
-                        <span className="section-title">Status do Acesso</span>
-                        <div className="popover-options-vertical">
-                          <label className="popover-checkbox-row">
-                            <input
-                              type="checkbox"
-                              checked={effectiveStatusFilters.includes("ativos")}
-                              onChange={(e) => {
-                                setSelectedStatusFilters((prev) =>
-                                  e.target.checked
-                                    ? [...prev.filter((s) => s !== "ativos"), "ativos"]
-                                    : prev.filter((s) => s !== "ativos"),
-                                );
-                                setStatusFilter("");
-                              }}
-                              aria-label="Apenas Ativos"
-                            />
-                            <span>Apenas Ativos</span>
-                          </label>
-                          <label className="popover-checkbox-row">
-                            <input
-                              type="checkbox"
-                              checked={effectiveStatusFilters.includes("inativos")}
-                              onChange={(e) => {
-                                setSelectedStatusFilters((prev) =>
-                                  e.target.checked
-                                    ? [...prev.filter((s) => s !== "inativos"), "inativos"]
-                                    : prev.filter((s) => s !== "inativos"),
-                                );
-                                setStatusFilter("");
-                              }}
-                              aria-label="Apenas Inativos"
-                            />
-                            <span>Apenas Inativos</span>
-                          </label>
-                        </div>
-                      </div>
-
-                      <div className="popover-section">
-                        <div className="popover-section-header">
-                          <span className="section-title">Perfil de Acesso</span>
-                          {perfisAcesso.length > 0 && (
-                            <button
-                              type="button"
-                              className="popover-link-action"
-                              onClick={() => {
-                                setIsFilterPopoverOpen(false);
-                                setIsTodosPerfisModalOpen(true);
-                              }}
-                            >
-                              Ver todos ({perfisAcesso.length})
-                            </button>
-                          )}
-                        </div>
-                        <div className="popover-search-input-wrap">
-                          <PrototypeIcon name="search" size="s" />
-                          <input
-                            type="text"
-                            placeholder="Buscar perfil..."
-                            value={profileSearchInFilter}
-                            onChange={(e) => setProfileSearchInFilter(e.target.value)}
-                            aria-label="Buscar perfil no filtro"
-                            className="popover-mini-search"
-                          />
-                        </div>
-                        <div className="popover-profiles-list">
-                          {perfisAcesso
-                            .filter((p) =>
-                              p.nome
-                                .toLowerCase()
-                                .includes(profileSearchInFilter.toLowerCase()),
-                            )
-                            .map((p) => {
-                              const strId = String(p.id);
-                              const isChecked = effectiveProfileIds.includes(strId);
-                              return (
-                                <label key={p.id} className="popover-checkbox-row">
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={(e) => {
-                                      setSelectedProfileIds((prev) =>
-                                        e.target.checked
-                                          ? [...prev.filter((id) => id !== strId), strId]
-                                          : prev.filter((id) => id !== strId),
-                                      );
-                                      if (filterLevel === strId) setFilterLevel("");
-                                    }}
-                                    aria-label={p.nome}
-                                  />
-                                  <span className={`dot ${profileType(p)} mini`}>
-                                    <PrototypeIcon
-                                      name={p.codigo === "DONO" ? "crown" : "shield"}
-                                      size="s"
-                                    />
-                                  </span>
-                                  <span className="popover-profile-name">{p.nome}</span>
-                                  <span className="popover-profile-count">{count(p)}</span>
-                                </label>
-                              );
-                            })}
-                        </div>
-                      </div>
-
-                      <div className="popover-section">
-                        <span className="section-title">
-                          Disponibilidade na Agenda
-                        </span>
-                        <div className="popover-options-vertical">
-                          <label className="popover-checkbox-row">
-                            <input
-                              type="checkbox"
-                              checked={effectiveAgendaFilters.includes("yes")}
-                              onChange={(e) => {
-                                setSelectedAgendaFilters((prev) =>
-                                  e.target.checked
-                                    ? [...prev.filter((a) => a !== "yes"), "yes"]
-                                    : prev.filter((a) => a !== "yes"),
-                                );
-                                setAgendaAvailabilityFilter("all");
-                              }}
-                              aria-label="Atendem na agenda"
-                            />
-                            <span>Atendem na agenda</span>
-                          </label>
-                          <label className="popover-checkbox-row">
-                            <input
-                              type="checkbox"
-                              checked={effectiveAgendaFilters.includes("no")}
-                              onChange={(e) => {
-                                setSelectedAgendaFilters((prev) =>
-                                  e.target.checked
-                                    ? [...prev.filter((a) => a !== "no"), "no"]
-                                    : prev.filter((a) => a !== "no"),
-                                );
-                                setAgendaAvailabilityFilter("all");
-                              }}
-                              aria-label="Não atendem"
-                            />
-                            <span>Não atendem</span>
-                          </label>
-                        </div>
-                      </div>
-
-                      <div className="popover-section">
-                        <span className="section-title">Atendimentos</span>
-                        <div className="popover-options-vertical">
-                          <label className="popover-checkbox-row">
-                            <input
-                              type="checkbox"
-                              checked={selectedAtendimentoFilters.includes("hoje")}
-                              onChange={(e) => {
-                                setSelectedAtendimentoFilters((prev) =>
-                                  e.target.checked
-                                    ? [...prev.filter((h) => h !== "hoje"), "hoje"]
-                                    : prev.filter((h) => h !== "hoje"),
-                                );
-                              }}
-                              aria-label="Atendimentos hoje"
-                            />
-                            <span>Atendimentos hoje</span>
-                          </label>
-                          <label className="popover-checkbox-row">
-                            <input
-                              type="checkbox"
-                              checked={selectedAtendimentoFilters.includes("mes")}
-                              onChange={(e) => {
-                                setSelectedAtendimentoFilters((prev) =>
-                                  e.target.checked
-                                    ? [...prev.filter((m) => m !== "mes"), "mes"]
-                                    : prev.filter((m) => m !== "mes"),
-                                );
-                              }}
-                              aria-label={`Atendimentos em ${monthName}`}
-                            />
-                            <span>Atendimentos em {monthName}</span>
-                          </label>
-                        </div>
-                      </div>
-
-                      <div className="popover-actions">
-                        <button
-                          type="button"
-                          className="btn-s"
-                          style={{ width: "100%" }}
-                          onClick={() => setIsFilterPopoverOpen(false)}
-                        >
-                          Fechar
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  <FiltrosFolha
+                    aberto={isFilterPopoverOpen}
+                    onFechar={() => setIsFilterPopoverOpen(false)}
+                    retornoFocoRef={filterBtnRef}
+                    total={filteredUsers.length}
+                    nFiltros={activeFiltersCount}
+                    onLimpar={clearAllFilters}
+                    perfis={sortProfilesByHierarchy(perfisAcesso, permissionsByProfile, permissoes)}
+                    alcance={(p) => profileFunctionCount(profileIds(p), permissoes, p.codigo === "DONO")}
+                    totalCatalogo={catalogFunctionTotal(permissoes)}
+                    uso={count}
+                    perfisSelecionados={effectiveProfileIds}
+                    onPerfil={(strId, marcado) => {
+                      setSelectedProfileIds((prev) =>
+                        marcado ? [...prev.filter((id) => id !== strId), strId] : prev.filter((id) => id !== strId),
+                      );
+                      if (filterLevel === strId) setFilterLevel("");
+                    }}
+                    grupos={gruposFolha}
+                  />
                 </div>
 
                 <div
@@ -1626,12 +1574,14 @@ export function GestaoUsuariosView({
                   >
                     <PrototypeIcon name="sort" size="s" />
                     <span className="lbl">
-                      {sortOption === "az"
+                      {sortOption === "hier"
+                        ? "Hierarquia"
+                        : sortOption === "az"
                         ? "Nome (A–Z)"
                         : sortOption === "za"
                           ? "Nome (Z–A)"
                           : sortOption === "perfil"
-                            ? "Perfil de acesso"
+                            ? "Perfil de acesso (A–Z)"
                             : "Mais atendimentos"}
                     </span>
                   </button>
@@ -1643,9 +1593,10 @@ export function GestaoUsuariosView({
                       aria-label="Menu de ordenação"
                     >
                       {[
+                        { id: "hier", label: "Hierarquia" },
                         { id: "az", label: "Nome (A–Z)" },
                         { id: "za", label: "Nome (Z–A)" },
-                        { id: "perfil", label: "Perfil de acesso" },
+                        { id: "perfil", label: "Perfil de acesso (A–Z)" },
                         { id: "atendimentos", label: "Mais atendimentos" },
                       ].map((opt) => (
                         <button
@@ -1676,76 +1627,6 @@ export function GestaoUsuariosView({
                       Limpar filtros
                     </button>
                   )}
-              </div>
-
-              <div
-                className="quick-chips"
-                aria-label="Filtros rápidos de status"
-              >
-                <button
-                  type="button"
-                  className={`quick-chip ${activeFiltersCount === 0 && !searchName ? "active" : ""}`}
-                  onClick={clearAllFilters}
-                >
-                  <span>Todos</span>
-                  <span className="chip-count">{usuarios.length}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`quick-chip ${selectedStatusFilters.includes("ativos") ? "active" : ""}`}
-                  onClick={() =>
-                    setSelectedStatusFilters((prev) =>
-                      prev.includes("ativos")
-                        ? prev.filter((s) => s !== "ativos")
-                        : [...prev, "ativos"]
-                    )
-                  }
-                >
-                  <span>Ativos</span>
-                  <span className="chip-count">{stats.ativos}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`quick-chip ${selectedAgendaFilters.includes("yes") ? "active" : ""}`}
-                  onClick={() =>
-                    setSelectedAgendaFilters((prev) =>
-                      prev.includes("yes")
-                        ? prev.filter((a) => a !== "yes")
-                        : [...prev, "yes"]
-                    )
-                  }
-                >
-                  <span>Atendem na agenda</span>
-                  <span className="chip-count">{stats.atendem}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`quick-chip ${selectedAtendimentoFilters.includes("hoje") ? "active" : ""}`}
-                  onClick={() =>
-                    setSelectedAtendimentoFilters((prev) =>
-                      prev.includes("hoje")
-                        ? prev.filter((h) => h !== "hoje")
-                        : [...prev, "hoje"]
-                    )
-                  }
-                >
-                  <span>Atendimentos hoje</span>
-                  <span className="chip-count">{stats.hoje ?? "—"}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`quick-chip ${selectedAtendimentoFilters.includes("mes") ? "active" : ""}`}
-                  onClick={() =>
-                    setSelectedAtendimentoFilters((prev) =>
-                      prev.includes("mes")
-                        ? prev.filter((m) => m !== "mes")
-                        : [...prev, "mes"]
-                    )
-                  }
-                >
-                  <span>Atendimentos em {monthName}</span>
-                  <span className="chip-count">{stats.mes ?? "—"}</span>
-                </button>
               </div>
 
               {activeFiltersCount > 0 && (
@@ -1810,6 +1691,21 @@ export function GestaoUsuariosView({
                           setSelectedStatusFilters((prev) => prev.filter((s) => s !== "inativos"));
                         }}
                         aria-label="Remover filtro de status inativos"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  )}
+                  {selectedStatusFilters.includes("semperfil") && (
+                    <span className="active-pill">
+                      Status: Sem perfil
+                      <button
+                        type="button"
+                        className="active-pill-remove"
+                        onClick={() => {
+                          setSelectedStatusFilters((prev) => prev.filter((s) => s !== "semperfil"));
+                        }}
+                        aria-label="Remover filtro de sem perfil"
                       >
                         ✕
                       </button>
@@ -1887,12 +1783,55 @@ export function GestaoUsuariosView({
                 </div>
               )}
               <div className="lst" aria-label="Pessoas da equipe">
-                <div className="lhd">
-                  <span>Pessoa e cargo</span>
-                  <span>Perfil de acesso</span>
-                  <span>Hoje</span>
-                  <span className="h-mes">Atendimentos</span>
-                  <span />
+                <div className="lhd" role="row">
+                  {[
+                    ["Pessoa e cargo", ["az", "za"], sortOption === "az" ? "za" : "az", "Ordenar por nome", ""],
+                    ["Perfil de acesso", ["hier", "perfil"], "hier", "Ordenar pela hierarquia do perfil", ""],
+                  ].map(([rotulo, ativas, alvo, dica, extra]) => (
+                    <div
+                      key={rotulo}
+                      role="columnheader"
+                      className={extra}
+                      aria-sort={
+                        ativas.includes(sortOption)
+                          ? ["az", "perfil"].includes(sortOption) ? "ascending" : "descending"
+                          : "none"
+                      }
+                    >
+                      <button
+                        type="button"
+                        className={`lhd-sort ${ativas.includes(sortOption) ? "so" : ""}`}
+                        title={dica}
+                        onClick={() => setSortOption(alvo)}
+                      >
+                        {rotulo}
+                        {ativas.includes(sortOption) && (
+                          <span aria-hidden="true" className="lhd-seta">
+                            {["az", "perfil"].includes(sortOption) ? "↑" : "↓"}
+                          </span>
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                  <span role="columnheader">Hoje</span>
+                  <div
+                    role="columnheader"
+                    className="h-mes"
+                    aria-sort={sortOption === "atendimentos" ? "descending" : "none"}
+                  >
+                    <button
+                      type="button"
+                      className={`lhd-sort ${sortOption === "atendimentos" ? "so" : ""}`}
+                      title="Ordenar por atendimentos no mês"
+                      onClick={() => setSortOption("atendimentos")}
+                    >
+                      Atendimentos
+                      {sortOption === "atendimentos" && (
+                        <span aria-hidden="true" className="lhd-seta">↓</span>
+                      )}
+                    </button>
+                  </div>
+                  <span aria-hidden="true" />
                 </div>
                 {filteredUsers.length ? (
                   filteredUsers.map((u) => {
@@ -1902,9 +1841,23 @@ export function GestaoUsuariosView({
                     const today = appointmentsFor(u).filter(
                       (a) => a.dataAgendamento === hojeIso,
                     );
+                    const semPerfil = u.ativo !== false && !u.perfilAcessoId;
+                    const botaoAtribuir =
+                      semPerfil && canManageUsers && u.perfilAcessoCodigo !== "DONO" ? (
+                        <button
+                          type="button"
+                          className="btn-s atr-perfil"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setAtribuirPessoa(u);
+                          }}
+                        >
+                          Atribuir perfil
+                        </button>
+                      ) : null;
                     return (
                       <div
-                        className="row"
+                        className={`row ${semPerfil ? "row-aviso" : ""} ${entrada("agenda-delay-200")}`}
                         key={u.id}
                         role="button"
                         tabIndex={0}
@@ -1931,7 +1884,10 @@ export function GestaoUsuariosView({
                             </span>
                           </span>
                         </div>
-                        <div className="c-pf">{badge(pf)}</div>
+                        <div className="c-pf">
+                          {badge(pf)}
+                          {botaoAtribuir}
+                        </div>
                         <div className="c-hoje">
                           {u.apareceNaAgenda ? (
                             <div className="today">
@@ -2016,6 +1972,7 @@ export function GestaoUsuariosView({
                               ? `${today.length} hoje`
                               : "Não atende"}
                           </span>
+                          {botaoAtribuir}
                         </div>
                       </div>
                     );
@@ -2031,6 +1988,22 @@ export function GestaoUsuariosView({
           </div>
         </>
       )}
+      <AtribuirPerfilModal
+        aberto={Boolean(atribuirPessoa)}
+        pessoa={atribuirPessoa}
+        perfis={perfisAcesso}
+        permissionsByProfile={permissionsByProfile}
+        catalogo={permissoes}
+        onFechar={() => setAtribuirPessoa(null)}
+        onConfirmar={async (perfilId) => {
+          try {
+            await saveAccess(atribuirPessoa, { perfilAcessoId: perfilId });
+            setAtribuirPessoa(null);
+          } catch (err) {
+            toast.error(getApiErrorToastMessage(err, "Não foi possível atribuir o perfil."));
+          }
+        }}
+      />
       {showInviteModal && (
         <InviteModal
           roles={roles}
@@ -2081,6 +2054,7 @@ export function GestaoUsuariosView({
             >
               <div
                 className="modal-card modal-todos-perfis"
+                ref={modalPerfisRef}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="modalTodosPerfisTitulo"
@@ -2091,8 +2065,8 @@ export function GestaoUsuariosView({
                       <PrototypeIcon name="shield" size="m" />
                     </div>
                     <div className="modal-header-text">
-                      <h3 id="modalTodosPerfisTitulo">Todos os Perfis de Acesso</h3>
-                      <p>Consulte e fixe perfis na barra lateral da clínica.</p>
+                      <h3 id="modalTodosPerfisTitulo">Todos os perfis de acesso</h3>
+                      <p>Consulte e escolha quais perfis ficam na barra da equipe.</p>
                     </div>
                   </div>
                   <button
@@ -2113,7 +2087,16 @@ export function GestaoUsuariosView({
                     value={todosPerfisSearch}
                     onChange={(e) => setTodosPerfisSearch(e.target.value)}
                     aria-label="Buscar perfil na lista completa"
+                    data-foco-inicial
+                    className="toque:text-base"
                   />
+                  <button
+                    type="button"
+                    className="btn-s sm toque:min-h-[44px] shrink-0"
+                    onClick={allPinned ? unpinAllProfiles : pinAllProfiles}
+                  >
+                    {allPinned ? "Desafixar todos" : "Fixar todos"}
+                  </button>
                 </div>
 
                 <div className="modal-perfis-list">
@@ -2124,7 +2107,9 @@ export function GestaoUsuariosView({
                     .map((p) => {
                       const strId = String(p.id);
                       const isPinned = activePinnedProfileIds.includes(strId);
-                      const funcoesCount = profileIds(p)?.length ?? 0;
+                      const funcoesCount = profileIds(p)
+                        ? profileFunctionCount(profileIds(p), permissoes, p.codigo === "DONO")
+                        : 0;
                       return (
                         <div key={p.id} className="modal-perfil-card">
                           <div className="modal-perfil-select">
@@ -2136,8 +2121,15 @@ export function GestaoUsuariosView({
                             </span>
                             <div className="modal-perfil-info">
                               <b className="modal-perfil-name">{p.nome}</b>
+                              <span className="modal-perfil-alcance" aria-hidden="true">
+                                <i
+                                  style={{
+                                    width: `${Math.max((funcoesCount / (catalogFunctionTotal(permissoes) || 1)) * 100, 3)}%`,
+                                  }}
+                                />
+                              </span>
                               <span className="modal-perfil-meta">
-                                {count(p)} membro(s) · {funcoesCount} de {permissoes.length} funções ·{" "}
+                                {count(p)} membro(s) · {funcoesCount} de {catalogFunctionTotal(permissoes)} funções ·{" "}
                                 <span className={attends(p) ? "meta-atende" : "meta-nao-atende"}>
                                   {attends(p) ? "Atende na agenda" : "Não atende"}
                                 </span>
@@ -2148,7 +2140,7 @@ export function GestaoUsuariosView({
                           <div className="modal-perfil-actions">
                             <button
                               type="button"
-                              className={`btn-pin ${isPinned ? "pinned" : ""}`}
+                              className={`btn-pin toque:min-h-[44px] shrink-0 ${isPinned ? "pinned" : ""}`}
                               onClick={() => togglePinProfile(strId)}
                               title={isPinned ? "Desafixar da barra lateral" : "Fixar na barra lateral"}
                               aria-label={isPinned ? `Desafixar ${p.nome}` : `Fixar ${p.nome}`}
@@ -2159,14 +2151,14 @@ export function GestaoUsuariosView({
 
                             <button
                               type="button"
-                              className="btn-s btn-ficha"
+                              className="btn-s btn-ficha toque:min-h-[44px] shrink-0"
                               onClick={() => {
                                 setViewingProfileId(strId);
                                 setIsTodosPerfisModalOpen(false);
                               }}
-                              aria-label={`Abrir ficha de ${p.nome}`}
+                              aria-label={`Ver ficha de ${p.nome}`}
                             >
-                              Ficha
+                              Ver ficha
                             </button>
                           </div>
                         </div>
@@ -2176,15 +2168,28 @@ export function GestaoUsuariosView({
 
                 <div className="modal-footer">
                   <span className="modal-footer-stats">
-                    Total de <b>{sortedProfiles.length}</b> {sortedProfiles.length === 1 ? "perfil cadastrado" : "perfis cadastrados"}
+                    <b>{pinnedCount}</b> de {sortedProfiles.length} fixados na barra
                   </span>
                   <div className="modal-footer-actions">
+                    {canEditConfigPerfil && (
+                      <button
+                        type="button"
+                        className="btn-s toque:min-h-[44px]"
+                        onClick={() => {
+                          setIsTodosPerfisModalOpen(false);
+                          newProfile();
+                        }}
+                      >
+                        <PrototypeIcon name="plus" size="s" />
+                        Criar perfil
+                      </button>
+                    )}
                     <button
                       type="button"
-                      className="btn-p"
+                      className="btn-p toque:min-h-[44px]"
                       onClick={() => setIsTodosPerfisModalOpen(false)}
                     >
-                      Fechar
+                      Pronto
                     </button>
                   </div>
                 </div>

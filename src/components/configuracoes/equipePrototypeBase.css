@@ -19,12 +19,9 @@
   --app-red: #ef4444;
   --app-red-soft: #fef2f2;
   --app-orange: #c2410c;
-  font:
-    14px/1.45 system-ui,
-    -apple-system,
-    "Segoe UI",
-    Roboto,
-    sans-serif;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.45;
   color: var(--app-ink);
   min-width: 0;
 }

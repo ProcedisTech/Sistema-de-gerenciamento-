@@ -570,3 +570,62 @@ export function isProfileNameDuplicate(
   });
 }
 
+
+// ---- Onda 1: contagem de funcoes, hierarquia e pendencias da equipe ----
+const semAgendaAparecer = (p) => p?.codigo !== "AGENDA_APARECER";
+export const FUNCOES_PEDEM_SENHA = new Set([
+  "ACESSO_COLABORADORES_INATIVAR",
+  "PACIENTE_INATIVAR",
+]);
+export function catalogFunctionTotal(catalog) {
+  return (catalog || []).filter(semAgendaAparecer).length;
+}
+export function profileFunctionCount(ids, catalog, isOwner = false) {
+  if (isOwner) return catalogFunctionTotal(catalog);
+  const validos = new Set(
+    (catalog || []).filter(semAgendaAparecer).map((p) => p.permissaoId),
+  );
+  return (ids || []).filter((id) => validos.has(id)).length;
+}
+const byNamePt = (a, b) =>
+  String(a || "").localeCompare(String(b || ""), "pt-BR", {
+    sensitivity: "base",
+  });
+export function sortProfilesByHierarchy(profiles, idsByProfile, catalog) {
+  const count = (p) =>
+    p.codigo === "DONO"
+      ? Infinity
+      : idsByProfile?.[p.id]
+        ? profileFunctionCount(idsByProfile[p.id], catalog)
+        : -1;
+  return [...profiles].sort(
+    (a, b) =>
+      (count(a) === count(b) ? 0 : count(b) > count(a) ? 1 : -1) ||
+      byNamePt(a.nome, b.nome),
+  );
+}
+export function compareMembersByHierarchy(orderedProfiles, nameOf) {
+  const pos = (m) => {
+    const i = orderedProfiles.findIndex(
+      (p) => m.perfilAcessoId != null && String(p.id) === String(m.perfilAcessoId),
+    );
+    return i < 0 ? Infinity : i;
+  };
+  return (a, b) => {
+    const pa = pos(a);
+    const pb = pos(b);
+    if (pa !== pb) return pa < pb ? -1 : 1;
+    return byNamePt(nameOf(a), nameOf(b));
+  };
+}
+export function prunePinnedProfileIds(saved, profiles) {
+  if (!Array.isArray(saved)) return saved;
+  if (!profiles || profiles.length === 0) return saved;
+  const existentes = new Set(profiles.map((p) => String(p.id)));
+  return saved.filter((id) => existentes.has(String(id)));
+}
+// Mesmos campos da tela: ativo = `ativo !== false`; sem perfil = sem `perfilAcessoId`.
+export function contarPrecisamDeVoce(equipe) {
+  return (equipe || []).filter((u) => u.ativo !== false && !u.perfilAcessoId)
+    .length;
+}

@@ -601,12 +601,34 @@
 .prototype-perfil-editor .btn-danger:hover {
   background: #be123c;
 }
+/* Barra Salvar fixa em qualquer largura (decisão 14); sem animação de entrada em ancestral. */
+.prototype-perfil-editor {
+  padding-bottom: 72px;
+}
+.prototype-perfil-editor .sticky-sum {
+  display: flex;
+  position: fixed;
+  left: var(--sidebar-w, 220px);
+  right: 0;
+  bottom: 0;
+  margin: 0;
+  background: #fff;
+  border-top: 1px solid var(--app-border);
+  padding: 12px 32px;
+  align-items: center;
+  gap: 12px;
+  z-index: 4;
+}
+.prototype-perfil-editor .sticky-sum .sum-txt {
+  flex: 1;
+  min-width: 0;
+}
 @media (max-width: 1279px) {
   .prototype-perfil-editor .ed {
     grid-template-columns: 1fr;
   }
-  .prototype-perfil-editor .sum-col {
-    display: none;
+  .prototype-perfil-editor .sum {
+    position: static;
   }
   .prototype-perfil-editor {
     padding-bottom: 72px;
@@ -614,7 +636,7 @@
   .prototype-perfil-editor .sticky-sum {
     display: flex;
     position: fixed;
-    left: 220px;
+    left: var(--sidebar-w, 220px);
     right: 0;
     bottom: 0;
     margin: 0;
@@ -625,14 +647,11 @@
     gap: 12px;
     z-index: 4;
   }
-  .prototype-perfil-editor .ed-bar > .btn-p {
-    display: none;
-  }
 }
 @media (max-width: 1023px) {
   .prototype-perfil-editor .sticky-sum {
-    left: 0;
-    bottom: 64px;
+    left: var(--sidebar-w, 0px);
+    bottom: var(--bottom-nav-h, 64px);
     margin: 0;
     padding: 12px 24px;
   }
@@ -669,11 +688,41 @@
   .prototype-perfil-editor .mod-x {
     flex-wrap: wrap;
   }
+  .prototype-perfil-editor {
+    padding-bottom: 96px;
+  }
   .prototype-perfil-editor .sticky-sum {
     left: 0;
-    bottom: 64px;
+    bottom: var(--bottom-nav-h, 64px);
     margin: 0;
     padding: 10px 16px;
+    flex-wrap: wrap;
+  }
+  .prototype-perfil-editor .sticky-sum .sum-txt {
+    flex: 0 0 100%;
+  }
+  .prototype-perfil-editor .sticky-sum b {
+    display: block;
+    white-space: nowrap;
+  }
+  .prototype-perfil-editor .sticky-sum .sum-resto {
+    display: block;
+    white-space: normal;
+  }
+  .prototype-perfil-editor .sticky-sum .sum-sep {
+    display: none;
+  }
+  .prototype-perfil-editor .sticky-sum .sum-membros {
+    display: none;
+  }
+  .prototype-perfil-editor .sticky-sum button {
+    flex: 1 1 auto;
+    min-height: 44px;
+  }
+}
+@media (max-width: 399px) {
+  .prototype-perfil-editor .sticky-sum .sum-btn-ico {
+    display: none;
   }
 }
 

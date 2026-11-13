@@ -3,8 +3,8 @@ import { PERMISSOES, PERFIS_ACESSO, PESOS_PERFIL } from '../constants/permissoes
 
 export { PERMISSOES, PERFIS_ACESSO, PESOS_PERFIL };
 
-export function usePapel() {
-  const { papel, permissoes = [], roleUserId = '' } = useOrg();
+/** Cálculo puro (sem hooks): usePapel e navGrupos.menuParaFuncoes usam a mesma regra. */
+export function papelDe({ papel, permissoes = [], roleUserId = '' } = {}) {
 
   // ── Hierarquia de pesos ──────────────────────────────────────────────────
   const getPeso = (p) => PESOS_PERFIL[p] || 0;
@@ -341,4 +341,8 @@ export function usePapel() {
     canSeeNotificacoes,
     canManageMsgTemplates,
   };
+}
+
+export function usePapel() {
+  return papelDe(useOrg());
 }

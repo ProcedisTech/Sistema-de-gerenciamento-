@@ -29,6 +29,8 @@ import {
   effectiveProfilePermissions,
   profileType,
   summarizeModules,
+  catalogFunctionTotal,
+  profileFunctionCount,
   PROTOTYPE_OPERATIONAL_CODES as OPERACIONAIS,
   PROTOTYPE_ROOT_CODES as RAIZES,
   getActiveDependentPermissions,
@@ -52,6 +54,7 @@ import {
 } from "../../services/api";
 import { supabase } from "../../lib/supabaseClient";
 import { Switch } from "../shared/Switch";
+import { useEntradaTela } from "../../hooks/useEntradaTela";
 import DisponibilidadeProfissionalModal from "./DisponibilidadeProfissionalModal";
 import "./equipePrototypeBase.css";
 import "./gestaoEquipe.css";
@@ -59,6 +62,49 @@ import "./equipePessoa.css";
 import "./invitePrototype.css";
 import "./gestaoPerfilEditor.css";
 import { hhmm } from "./horarioSemanaUtils";
+import { menuParaFuncoes } from "../layout/navGrupos";
+import { AtribuirPerfilModal } from "./AtribuirPerfilModal";
+import { useFocoPreso } from "./useFocoPreso";
+import PreviaAcessoView from "./PreviaAcessoView";
+import { usePreviaAcesso } from "../../contexts/PreviaAcessoContext";
+
+/** Trocar de aba com alteração de acesso não salva: confirmação antes de perder o que foi marcado. */
+function ConfirmaSairSemSalvar({ onContinuar, onSair }) {
+  const painelRef = useRef(null);
+  useFocoPreso(painelRef, true, onContinuar);
+  return createPortal(
+    <div className="fixed inset-0 z-[300] grid place-items-center bg-slate-900/50 p-4">
+      <div
+        ref={painelRef}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="sairSemSalvarTitulo"
+        className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl"
+      >
+        <h3 id="sairSemSalvarTitulo" className="mb-2 text-lg font-bold text-slate-900">
+          Sair sem salvar?
+        </h3>
+        <p className="mb-5 text-sm text-slate-500">
+          As mudanças de acesso desta pessoa ainda não foram salvas e se perdem se você sair.
+        </p>
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn-s toque:min-h-[44px]" onClick={onSair}>
+            Sair sem salvar
+          </button>
+          <button
+            type="button"
+            className="btn-p toque:min-h-[44px]"
+            data-foco-inicial=""
+            onClick={onContinuar}
+          >
+            Continuar editando
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
 
 const TABS = [
   ["geral", "Visão geral"],
@@ -147,62 +193,88 @@ const WEEK_DAYS = [
   [6, "Sábado"],
   [0, "Domingo"],
 ];
-const groupDayLabel = (days) => {
-  if (days.length === 1) return days[0].label;
-  const separator = days.length === 2 ? " e " : " a ";
-  return `${days[0].label}${separator}${days.at(-1).label}`;
+const PERIODOS = [
+  ["mes", "Este mês"],
+  ["3m", "Últimos 3 meses"],
+  ["ano", "Este ano"],
+];
+const DIA_CURTO = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const DIA_LONGO = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+const MES_CURTO = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const addDias = (iso, n) => {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return calendarIso(d);
+};
+const diaSemanaDe = (iso) => new Date(`${iso}T12:00:00Z`).getUTCDay();
+const segundaDe = (iso) => addDias(iso, -((diaSemanaDe(iso) + 6) % 7));
+const minutosDe = (a) => {
+  const from = timeMinutes(a.horaInicio),
+    to = timeMinutes(a.horaFim);
+  return from != null && to != null && to >= from ? to - from : 0;
+};
+const horasTxt = (min) => {
+  const h = Math.floor(min / 60),
+    m = min % 60;
+  return h && m ? `${h} h ${m} min` : h ? `${h} h` : `${m} min`;
 };
 
-function WeekSchedule({ availability }) {
-  const days = WEEK_DAYS.map(([day, label]) => {
-    const turns = availability
+// Uma linha por dia (segunda a domingo); os turnos do dia ficam separados por "pausa".
+function WeekSchedule({ availability, onDefinir }) {
+  const days = WEEK_DAYS.map(([day, label]) => ({
+    day,
+    label,
+    turns: availability
       .filter((row) => Number(row.diaSemana) === day && row.ativo !== false)
       .map((row) => ({ start: hhmm(row.horaInicio), end: hhmm(row.horaFim) }))
-      .sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
-    return { day, label, turns, routine: JSON.stringify(turns) };
-  });
-  const groups = [];
-  days.forEach((day) => {
-    const previous = groups.at(-1);
-    if (previous?.routine === day.routine) previous.days.push(day);
-    else groups.push({ days: [day], turns: day.turns, routine: day.routine });
-  });
-  const workingGroups = groups.filter((group) => group.turns.length);
-  const offLabel = workingGroups.length
-    ? groups.filter((group) => !group.turns.length)
-        .map((group) => groupDayLabel(group.days)).join(", ")
-    : "Todos os dias";
-
+      .sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end)),
+  }));
+  if (!days.some((d) => d.turns.length))
+    return (
+      <div className="empty" style={{ padding: "18px 8px" }}>
+        <b>Horário de atendimento ainda não definido</b>
+        Sem horário, a agenda aceita marcação em qualquer hora.
+        {onDefinir && (
+          <button
+            type="button"
+            className="btn-s toque:min-h-[44px]"
+            style={{ marginTop: 8 }}
+            onClick={onDefinir}
+          >
+            Definir horário
+          </button>
+        )}
+      </div>
+    );
   return (
     <div className="week">
       <div className="week-groups">
-        {workingGroups.map((group) => (
+        {days.map(({ day, label, turns }) => (
           <div
-            key={group.days[0].day}
-            className={`week-group-row${group.days.length === 1 || group.turns.length > 1 ? " highlighted" : ""}`}
+            key={day}
+            className={`week-group-row${turns.length ? " highlighted" : ""}`}
           >
             <div className="week-group-label">
-              <b>{groupDayLabel(group.days)}</b>
-              {group.turns.length > 1 && (
-                <span className="week-group-pill">{group.turns.length} turnos</span>
-              )}
+              <b>{label}</b>
             </div>
             <div className="week-turns-row">
-              {group.turns.map(({ start, end }, index) => (
-                <React.Fragment key={`${start}-${end}-${index}`}>
-                  {index > 0 && <span className="week-sep"> · </span>}
-                  <span className="week-pill">{`${start} - ${end}`}</span>
-                </React.Fragment>
-              ))}
+              {turns.length ? (
+                turns.map(({ start, end }, index) => (
+                  <React.Fragment key={`${start}-${end}-${index}`}>
+                    {index > 0 && (
+                      <em style={{ fontStyle: "normal", color: "var(--app-muted)" }}>
+                        pausa
+                      </em>
+                    )}
+                    <span className="week-pill">{`${start} - ${end}`}</span>
+                  </React.Fragment>
+                ))
+              ) : (
+                <span style={{ color: "var(--app-muted)" }}>Folga</span>
+              )}
             </div>
           </div>
         ))}
-        {offLabel && (
-          <div className="week-off-row">
-            <span>{offLabel}:</span>
-            <span>Folga</span>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -344,7 +416,11 @@ export default function EquipePessoaView({
   canSeeConfigPerfil: _canSeeConfigPerfil,
   canSeeConfigAuditoria,
   onBack,
-  onEditarPerfil: _onEditarPerfil,
+  onEditarPerfil,
+  canEditPerfis = false,
+  permissionsByProfile,
+  viewerIsDono = false,
+  onDirtyChange,
   onDesativar,
   onDisponibilidade,
   canManageDisponibilidade,
@@ -562,6 +638,13 @@ export default function EquipePessoaView({
     onPerfilAtualizado?.(fields);
   };
   const [tab, setTab] = useState("geral");
+  const [pacienteAbertoId, setPacienteAbertoId] = useState(null);
+  const [agendaSemana, setAgendaSemana] = useState(null);
+  const [agendaDia, setAgendaDia] = useState(null);
+  const [atendBusca, setAtendBusca] = useState("");
+  const [atendProc, setAtendProc] = useState("");
+  // I5a: trocar para `${pessoa.id}:${tab}:${pacienteAbertoId || ""}` quando o estado existir.
+  const entrada = useEntradaTela(`${pessoa.id}:${tab}:${pacienteAbertoId || ""}`);
   const [periodo, setPeriodo] = useState("mes");
   const [draftRole, setDraftRole] = useState(pessoa.roleId || "");
   const [draftPerfil, setDraftPerfil] = useState(pessoa.perfilAcessoId || "");
@@ -781,12 +864,25 @@ export default function EquipePessoaView({
       status(a) === "REALIZADO" &&
       a.dataAgendamento?.slice(0, 7) === hojeIso?.slice(0, 7),
   );
-  const history = ownAgenda.filter((a) =>
-    ["REALIZADO", "FALTOU", "FALTA"].includes(status(a)),
+  const history = useMemo(
+    () => ownAgenda.filter((a) => ["REALIZADO", "FALTOU", "FALTA"].includes(status(a))),
+    [ownAgenda],
+  );
+  const selectedPeriod = (() => {
+    if (!hojeIso) return "";
+    if (periodo === "ano") return `${hojeIso.slice(0, 4)}-01-01`;
+    if (periodo === "mes") return `${hojeIso.slice(0, 7)}-01`;
+    const date = new Date(`${hojeIso.slice(0, 7)}-01T12:00:00Z`);
+    date.setUTCMonth(date.getUTCMonth() - 2);
+    return calendarIso(date);
+  })();
+  const periodHistory = useMemo(
+    () => history.filter((a) => a.dataAgendamento >= selectedPeriod && a.dataAgendamento <= hojeIso),
+    [history, selectedPeriod, hojeIso],
   );
   const patients = useMemo(() => {
     return Array.from(
-      history
+      periodHistory
         .filter((a) => status(a) === "REALIZADO")
         .reduce((map, a) => {
           const prior = map.get(a.pacienteId);
@@ -825,7 +921,7 @@ export default function EquipePessoaView({
         }, new Map())
         .values(),
     );
-  }, [history, inactivePatientIds, patientDetailsMap]);
+  }, [periodHistory, inactivePatientIds, patientDetailsMap]);
 
   const activePatients = useMemo(() => patients.filter((p) => p.ativo !== false), [patients]);
   const inactivePatients = useMemo(() => patients.filter((p) => p.ativo === false), [patients]);
@@ -978,6 +1074,56 @@ export default function EquipePessoaView({
     String(draftPerfil) !== String(pessoa.perfilAcessoId || "") ||
     isPerfilCustomizado;
 
+  const [abaPendente, setAbaPendente] = useState(null);
+  const [showAtribuirPerfil, setShowAtribuirPerfil] = useState(false);
+  const sujoAcesso = isAccessDirty && Boolean(canManageUsers) && !owner;
+  const onDirtyRef = useRef(onDirtyChange);
+  useEffect(() => {
+    onDirtyRef.current = onDirtyChange;
+  });
+  useEffect(() => {
+    onDirtyRef.current?.(sujoAcesso);
+  }, [sujoAcesso]);
+  useEffect(() => () => onDirtyRef.current?.(false), []);
+  const irParaAba = (id) => {
+    if (tab === "acesso" && id !== "acesso" && sujoAcesso) setAbaPendente(id);
+    else setTab(id);
+  };
+  const descartarAcesso = () => {
+    setDraftRole(pessoa.roleId || "");
+    setDraftPerfil(pessoa.perfilAcessoId || "");
+    setPermissoesDoNivel([...(permissoesPerfil || [])]);
+    originalPermissoesRef.current = [...(permissoesPerfil || [])];
+    permissionRequest.current++;
+    setLoadingTemplate(false);
+    setSaveError("");
+  };
+  const contagemAcesso = diffCalculado.total || 1;
+  const confirmarAtribuirPerfil = (perfilId) => {
+    setShowAtribuirPerfil(false);
+    return executarSalvarAcessoDireto(perfilId, pessoa.roleId || draftRole);
+  };
+  const avisoSemPerfil = !pessoa.perfilAcessoId ? (
+    <div
+      role="status"
+      className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+    >
+      <AlertTriangle className="h-5 w-5 shrink-0" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        <b>{first} está sem perfil de acesso.</b> Sem perfil, a pessoa não consegue entrar em nenhuma área do sistema.
+      </span>
+      {canManageUsers && !owner && (
+        <button
+          type="button"
+          className="btn-p shrink-0 toque:min-h-[44px]"
+          onClick={() => setShowAtribuirPerfil(true)}
+        >
+          Atribuir perfil
+        </button>
+      )}
+    </div>
+  ) : null;
+
   const membrosVinculadosAoPerfil = useMemo(() => {
     if (!draftPerfil) return [];
     return (pessoas || []).filter(
@@ -1005,7 +1151,7 @@ export default function EquipePessoaView({
     </div>
   ) : null;
   const noAppointments = (
-    <div className="box">
+    <div className={`box ${entrada("agenda-delay-300")}`.trim()}>
       <div className="empty">
         <I name="caloff" size="l" />
         <b>{first} não atende pacientes</b>O perfil{" "}
@@ -1017,11 +1163,6 @@ export default function EquipePessoaView({
       </div>
     </div>
   );
-  const countCatalog = owner
-    ? permissoes.filter(
-        (p) => !["AGENDA_APARECER", "AGENDA_MULTI_VER"].includes(p.codigo),
-      )
-    : permissoes;
   const summary = (
     <div
       style={{
@@ -1035,7 +1176,7 @@ export default function EquipePessoaView({
       <span style={{ color: "var(--app-muted)", fontSize: 13 }}>
         {permissionUnavailable
           ? permissionState
-          : `${effectiveIds.filter((id) => countCatalog.some((p) => p.permissaoId === id)).length} de ${countCatalog.length} funções`}
+          : `${profileFunctionCount(effectiveIds, permissoes, owner)} de ${catalogFunctionTotal(permissoes)} funções`}
       </span>
     </div>
   );
@@ -1205,6 +1346,7 @@ export default function EquipePessoaView({
 
   const handleSalvarAcessoClick = () => {
     if (!isAccessDirty || owner || !canManageUsers) return;
+    if (isPerfilCustomizado && !canEditPerfis) return;
     if (isPerfilCustomizado) {
       if (draftProfileType === "cli") {
         setDecisaoTipo("existente");
@@ -1323,31 +1465,321 @@ export default function EquipePessoaView({
       setInativarSubmitting(false);
     }
   };
-  const selectedPeriod = (() => {
-    if (!hojeIso) return "";
-    if (periodo === "ano") return `${hojeIso.slice(0, 4)}-01-01`;
-    if (periodo === "mes") return `${hojeIso.slice(0, 7)}-01`;
-    const date = new Date(`${hojeIso.slice(0, 7)}-01T12:00:00Z`);
-    date.setUTCMonth(date.getUTCMonth() - 2);
-    return calendarIso(date);
-  })();
-  const periodHistory = history.filter(
-    (a) => a.dataAgendamento >= selectedPeriod && a.dataAgendamento <= hojeIso,
+  const periodoRotulo = PERIODOS.find(([v]) => v === periodo)?.[1] || "";
+  const seletorPeriodo = (
+    <div className="flt" role="group" aria-label="Período">
+      {PERIODOS.map(([value, label]) => (
+        <button
+          key={value}
+          type="button"
+          className={`toque:min-h-[44px] ${periodo === value ? "on" : ""}`}
+          onClick={() => {
+            setPeriodo(value);
+            setAtendProc("");
+            onPeriodoChange?.(value);
+          }}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+  const podeEditarHorario = canManageDisponibilidade ?? Boolean(onDisponibilidade);
+  const abrirHorario = () =>
+    onDisponibilidade
+      ? onDisponibilidade(pessoa, refreshAvailability)
+      : setShowAvailability(true);
+  // Visão geral: o dia de hoje (sem cancelados) e o próximo ainda por atender.
+  const hojeVivos = today.filter((a) => status(a) !== "CANCELADO");
+  const hojeFeitos = hojeVivos.filter((a) => status(a) === "REALIZADO");
+  const hojeProximo = hojeVivos.find(
+    (a) => !["REALIZADO", "FALTOU", "FALTA"].includes(status(a)),
+  );
+  // Agenda: a semana (segunda a domingo) só com o que já foi carregado.
+  const semanaIni = hojeIso ? agendaSemana || segundaDe(hojeIso) : "";
+  const semanaDias = semanaIni ? Array.from({ length: 7 }, (_, i) => addDias(semanaIni, i)) : [];
+  const diaSel = agendaDia || hojeIso;
+  const turnosDoDia = (iso) =>
+    (availability?.data || []).filter(
+      (r) => Number(r.diaSemana) === diaSemanaDe(iso) && r.ativo !== false,
+    );
+  // Carregado = de selectedPeriod ao fim do mês de hojeIso (mesma conta da busca em GestaoUsuariosView).
+  const fimDoMes = hojeIso
+    ? `${hojeIso.slice(0, 7)}-${String(new Date(Date.UTC(+hojeIso.slice(0, 4), +hojeIso.slice(5, 7), 0)).getUTCDate()).padStart(2, "0")}`
+    : "";
+  const foraDoCarregado = (iso) => !!hojeIso && (iso < selectedPeriod || iso > fimDoMes);
+  const temHorario = (availability?.data || []).some((r) => r.ativo !== false);
+  const agendaDoDia = (iso) =>
+    ownAgenda.filter((a) => a.dataAgendamento === iso && status(a) !== "CANCELADO");
+  // Atendimentos: busca por paciente e chip por procedimento sobre o período.
+  const atendProcs = useMemo(
+    () =>
+      Object.entries(
+        periodHistory.reduce((map, a) => {
+          map[procedure(a)] = (map[procedure(a)] || 0) + 1;
+          return map;
+        }, {}),
+      ).sort((a, b) => b[1] - a[1]),
+    [periodHistory],
+  );
+  const procAtivo = atendProcs.some(([n]) => n === atendProc) ? atendProc : "";
+  const buscaAtend = atendBusca.trim().toLowerCase();
+  const atendLista = useMemo(
+    () =>
+      periodHistory.filter(
+        (a) =>
+          (!procAtivo || procedure(a) === procAtivo) &&
+          (!buscaAtend || (a.pacienteNome || "").toLowerCase().includes(buscaAtend)),
+      ),
+    [periodHistory, procAtivo, buscaAtend],
+  );
+  const atendFeitos = useMemo(() => atendLista.filter((a) => status(a) === "REALIZADO"), [atendLista]);
+  const atendFaltas = atendLista.length - atendFeitos.length;
+  const atendTotalMin = useMemo(() => atendFeitos.reduce((sum, a) => sum + minutosDe(a), 0), [atendFeitos]);
+  const atendPacientes = useMemo(() => new Set(atendFeitos.map((a) => a.pacienteId)).size, [atendFeitos]);
+  // Pacientes: a ficha do profissional com o paciente, dentro da aba.
+  const pacAberto = patients.find((p) => String(p.id) === String(pacienteAbertoId));
+  const pacAtendimentos = useMemo(
+    () =>
+      pacAberto
+        ? periodHistory
+            .filter(
+              (a) =>
+                status(a) === "REALIZADO" &&
+                String(a.pacienteId) === String(pacAberto.id),
+            )
+            .reverse()
+        : [],
+    [pacAberto, periodHistory],
+  );
+  const fichaPaciente = pacAberto && (
+    <div className={`box ${entrada("agenda-delay-300")}`.trim()}>
+      <button
+        type="button"
+        className="btn-g toque:min-h-[44px]"
+        onClick={() => setPacienteAbertoId(null)}
+      >
+        <span aria-hidden="true">‹ </span>
+        Pacientes de {first}
+      </button>
+      <div className="flex flex-wrap items-center gap-3 my-3">
+        <span
+          className="av shrink-0"
+          style={{
+            width: 48,
+            height: 48,
+            background: pacAberto.ativo === false ? "#94a3b8" : "var(--app-accent)",
+          }}
+        >
+          {pacAberto.photo ? <img src={pacAberto.photo} alt="" /> : initials(pacAberto.name)}
+        </span>
+        <div className="min-w-0">
+          <small className="block text-slate-500">{first} com</small>
+          <h3 className="trunc font-bold text-app-ink">{pacAberto.name}</h3>
+        </div>
+        {onSelectPatient && (
+          <button
+            type="button"
+            className="btn-s ml-auto toque:min-h-[44px]"
+            onClick={() =>
+              onSelectPatient({
+                ...pacAberto,
+                status: pacAberto.ativo ? "ativo" : "inativo",
+                isAtivo: pacAberto.ativo,
+              })
+            }
+          >
+            Ficha completa do paciente
+          </button>
+        )}
+      </div>
+      <h4>
+        <I name="hist" />
+        Atendimentos realizados
+        <small>{periodoRotulo}</small>
+      </h4>
+      <ul className="m-0 p-0 list-none">
+        {pacAtendimentos.map((a) => (
+          <li
+            key={a.id}
+            className="grid grid-cols-[3rem_1fr_auto_auto] items-center gap-3 border-b border-slate-100 py-2 text-sm"
+          >
+            <span className="m shrink-0">{dateLabel(a.dataAgendamento).slice(0, 5)}</span>
+            <span className="trunc">{procedure(a)}</span>
+            <span className="m shrink-0">{duration(a)}</span>
+            <span className={`sc ${statusClass(a)} shrink-0`}>{statusLabel(a)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+  // Quem não atende: o que a pessoa pode fazer, o que não pode e o menu que ela vê.
+  const comAcesso = modules.filter((m) => m.k !== "0");
+  const semAcesso = modules.filter((m) => m.k === "0");
+  const menuGrupos =
+    !attends && !permissionUnavailable
+      ? (() => {
+          const ids = new Set(effectiveIds);
+          return menuParaFuncoes(
+            new Set(permissoes.filter((p) => ids.has(p.permissaoId)).map((p) => p.codigo)),
+          );
+        })()
+      : [];
+  const previa = usePreviaAcesso();
+  const idsPerfilPessoa = permissionsByProfile?.[pessoa.perfilAcessoId] ?? permissoesPerfil;
+  const podeVerComo = viewerIsDono && !isSelf && !owner && Boolean(pessoa.perfilAcessoId);
+  const verComoBtn = (rotulo) =>
+    podeVerComo && (
+      <button
+        type="button"
+        className="btn-s"
+        disabled={permissionUnavailable || !Array.isArray(idsPerfilPessoa)}
+        onClick={() =>
+          previa.entrar({
+            pessoaId: pessoa.id,
+            nome: first,
+            perfil: perfil?.nome || pessoa.perfilAcessoNome,
+            codigos: (permissoes || [])
+              .filter((c) => idsPerfilPessoa.includes(c.permissaoId))
+              .map((c) => c.codigo),
+          })
+        }
+      >
+        {rotulo} {first}
+      </button>
+    );
+  const naoAtendeGeral = (
+    <div className={`g2 ${entrada("agenda-delay-300")}`.trim()}>
+      <div>
+        <div className="box">
+          <h4>
+            <I name="shield" />O que {first} pode fazer
+            <small>
+              <button
+                className="btn-g"
+                onClick={() => irParaAba("acesso")}
+                style={{ minHeight: 0, padding: 0 }}
+              >
+                ver acesso
+              </button>
+            </small>
+          </h4>
+          {summary}
+          {!permissionUnavailable && (
+            <>
+              {comAcesso.map((m) => {
+                const funcoes = m.selected.filter((p) => !RAIZES.has(p.codigo));
+                return (
+                  <div key={m.key} className="border-b border-slate-100 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="shrink-0">
+                        <I name={m.icon} />
+                      </span>
+                      <b>{m.name}</b>
+                      <span className="ml-auto shrink-0 text-xs text-slate-500">{m.t}</span>
+                    </div>
+                    <p className="m-0 mt-1 text-xs text-slate-600">
+                      {funcoes.slice(0, 4).map((p) => p.nome).join(" · ") || "Só entra na área."}
+                      {funcoes.length > 4 && ` e mais ${funcoes.length - 4}`}
+                    </p>
+                  </div>
+                );
+              })}
+              {semAcesso.length > 0 && (
+                <div className="pt-3">
+                  <b>Não tem acesso a</b>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {semAcesso.map((m) => (
+                      <span
+                        key={m.key}
+                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-500"
+                      >
+                        <span className="shrink-0">
+                          <I name={m.icon} />
+                        </span>
+                        {m.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+      <div>
+        <div className="box">
+          <h4>O menu de {first}</h4>
+          <p className="m-0 text-xs text-slate-500">
+            É o que aparece para a pessoa ao entrar.
+          </p>
+          {menuGrupos.map((g) => (
+            <div key={g.id} className="mt-3">
+              <small className="block text-slate-500">{g.titulo}</small>
+              {g.itens.map((item) => {
+                const Icone = item.icon;
+                return (
+                  <div key={item.view} className="flex items-center gap-2 py-1">
+                    <Icone className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    {item.label}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+          {verComoBtn("Ver o sistema como")}
+        </div>
+        {noAppointments}
+      </div>
+    </div>
   );
   let body;
   if (tab === "geral")
     body = !attends ? (
-      noAppointments
+      naoAtendeGeral
     ) : (
-      <div className="g2">
+      <div className={`g2 ${entrada("agenda-delay-300")}`.trim()}>
         <div>
           <div className="box">
             <h4>
               <I name="cal" />
               Hoje, {dateLabel(hojeIso)}
-              <small>{agendaNotice ? "—" : today.length} atendimentos</small>
+              <small>
+                <button
+                  className="btn-g"
+                  onClick={() => irParaAba("agenda")}
+                  style={{ minHeight: 0, padding: 0 }}
+                >
+                  abrir agenda
+                </button>
+              </small>
             </h4>
-            {agendaNotice || <Timeline items={today} />}
+            {agendaNotice ||
+              (hojeVivos.length ? (
+                <>
+                  <p className="m-0 text-base font-bold text-app-ink">
+                    {`${hojeFeitos.length} de ${hojeVivos.length} atendidos`}
+                  </p>
+                  <p className="m-0 mt-1 text-sm text-slate-600">
+                    {hojeProximo ? (
+                      <>
+                        Próximo:{" "}
+                        <b>
+                          {hojeProximo.horaInicio?.slice(0, 5) || "—"} ·{" "}
+                          {hojeProximo.pacienteNome || "Paciente não informado"}
+                        </b>{" "}
+                        · {procedure(hojeProximo)}
+                      </>
+                    ) : (
+                      "Nada mais por atender hoje."
+                    )}
+                  </p>
+                </>
+              ) : (
+                <div className="empty" style={{ padding: 20 }}>
+                  Nada marcado para hoje.
+                </div>
+              ))}
           </div>
           <div className="box">
             <h4>
@@ -1356,56 +1788,14 @@ export default function EquipePessoaView({
               <small>
                 <button
                   className="btn-g"
-                  onClick={() => setTab("agenda")}
+                  onClick={() => irParaAba("agenda")}
                   style={{ minHeight: 0, padding: 0 }}
                 >
                   ver agenda
                 </button>
               </small>
             </h4>
-            {agendaNotice || <Timeline items={upcoming.slice(0, 4)} dates />}
-          </div>
-        </div>
-        <div>
-          <div className="box">
-            <h4>
-              <I name="hist" />
-              Horário de atendimento
-              {(canManageDisponibilidade ?? Boolean(onDisponibilidade)) && (
-                <small>
-                  <button
-                    className="btn-g"
-                    style={{ minHeight: 0, padding: 0 }}
-                    onClick={() =>
-                      onDisponibilidade
-                        ? onDisponibilidade(pessoa, refreshAvailability)
-                        : setShowAvailability(true)
-                    }
-                  >
-                    editar
-                  </button>
-                </small>
-              )}
-            </h4>
-            {!canReadAvailability ? (
-              <div className="help">
-                Você não tem permissão para consultar os horários.
-              </div>
-            ) : !availability ? (
-              <div role="status">Carregando horários…</div>
-            ) : availability.error ? (
-              <div role="alert">
-                {availability.error}
-                <button
-                  className="btn-s"
-                  onClick={() => setAvailabilityReload((value) => value + 1)}
-                >
-                  Tentar novamente
-                </button>
-              </div>
-            ) : (
-              <WeekSchedule availability={availability.data} />
-            )}
+            {agendaNotice || <Timeline items={upcoming.slice(0, 3)} dates />}
           </div>
           <div className="box">
             <h4>
@@ -1433,12 +1823,82 @@ export default function EquipePessoaView({
               </div>
             )}
           </div>
+        </div>
+        <div>
+          <div className="box">
+            <h4>
+              <I name="hist" />
+              Horário de atendimento
+              {podeEditarHorario && (
+                <small>
+                  <button
+                    className="btn-g"
+                    style={{ minHeight: 0, padding: 0 }}
+                    onClick={abrirHorario}
+                  >
+                    editar
+                  </button>
+                </small>
+              )}
+            </h4>
+            {!canReadAvailability ? (
+              <div className="help">
+                Você não tem permissão para consultar os horários.
+              </div>
+            ) : !availability ? (
+              <div role="status">Carregando horários…</div>
+            ) : availability.error ? (
+              <div role="alert">
+                {availability.error}
+                <button
+                  className="btn-s"
+                  onClick={() => setAvailabilityReload((value) => value + 1)}
+                >
+                  Tentar novamente
+                </button>
+              </div>
+            ) : (
+              <WeekSchedule
+                availability={availability.data}
+                onDefinir={podeEditarHorario ? abrirHorario : undefined}
+              />
+            )}
+          </div>
           <div className="box">
             <h4>
               <I name="shield" />
               Acesso
+              <small>
+                <button
+                  className="btn-g"
+                  onClick={() => irParaAba("acesso")}
+                  style={{ minHeight: 0, padding: 0 }}
+                >
+                  ver acesso
+                </button>
+              </small>
             </h4>
             {summary}
+            {modules.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {modules.map((m) => (
+                  <span
+                    key={m.key}
+                    title={`${m.name}: ${m.t}`}
+                    className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs ${
+                      m.k === "0"
+                        ? "border-slate-200 text-slate-400"
+                        : "border-teal-200 bg-teal-50 text-teal-800"
+                    }`}
+                  >
+                    <span className="shrink-0">
+                      <I name={m.icon} />
+                    </span>
+                    {m.name}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1447,26 +1907,106 @@ export default function EquipePessoaView({
     body = !attends ? (
       noAppointments
     ) : (
-      <div className="box">
-        <h4>
-          <I name="cal" />
-          Próximos 7 dias
-          <small>{agendaNotice ? "—" : upcoming.length} agendamentos</small>
-        </h4>
+      <div className={`box ${entrada("agenda-delay-300")}`.trim()}>
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <button
+            type="button"
+            className="btn-s toque:min-h-[44px]"
+            aria-label="Semana anterior"
+            onClick={() => {
+              setAgendaSemana(addDias(semanaIni, -7));
+              setAgendaDia(addDias(semanaIni, -7));
+            }}
+          >
+            <span aria-hidden="true">‹</span>
+          </button>
+          <b>
+            {semanaDias.length
+              ? `${+semanaDias[0].slice(8)}${semanaDias[0].slice(5, 7) !== semanaDias[6].slice(5, 7) ? ` ${MES_CURTO[+semanaDias[0].slice(5, 7) - 1]}` : ""} a ${+semanaDias[6].slice(8)} de ${MES_CURTO[+semanaDias[6].slice(5, 7) - 1]}`
+              : "—"}
+          </b>
+          <button
+            type="button"
+            className="btn-s toque:min-h-[44px]"
+            aria-label="Próxima semana"
+            onClick={() => {
+              setAgendaSemana(addDias(semanaIni, 7));
+              setAgendaDia(addDias(semanaIni, 7));
+            }}
+          >
+            <span aria-hidden="true">›</span>
+          </button>
+          {(semanaIni !== segundaDe(hojeIso || "") || diaSel !== hojeIso) && (
+            <button
+              type="button"
+              className="btn-g toque:min-h-[44px]"
+              onClick={() => {
+                setAgendaSemana(null);
+                setAgendaDia(null);
+              }}
+            >
+              Hoje
+            </button>
+          )}
+        </div>
         {agendaNotice || (
           <>
-            <div className="day">Hoje · {dateLabel(hojeIso)}</div>
-            <Timeline items={today} />
-            {Array.from(new Set(upcoming.map((a) => a.dataAgendamento))).map(
-              (day) => (
-                <React.Fragment key={day}>
-                  <div className="day">{dateLabel(day)}</div>
-                  <Timeline
-                    items={upcoming.filter((a) => a.dataAgendamento === day)}
-                  />
-                </React.Fragment>
-              ),
+            <div className="grid grid-cols-7 gap-1.5 mb-3" role="group" aria-label="Dias da semana">
+              {semanaDias.map((d) => {
+                const n = agendaDoDia(d).length;
+                const folga = temHorario && !turnosDoDia(d).length;
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    aria-pressed={d === diaSel}
+                    className={`flex min-w-0 flex-col items-center rounded-lg border px-1 py-2 text-xs toque:min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 ${
+                      d === diaSel
+                        ? "border-teal-600 bg-teal-50 text-teal-900"
+                        : "border-slate-200 bg-white text-slate-700"
+                    }${d === hojeIso ? " font-bold" : ""}`}
+                    onClick={() => setAgendaDia(d)}
+                  >
+                    <small>{DIA_CURTO[diaSemanaDe(d)]}</small>
+                    <b className="text-base">{+d.slice(8)}</b>
+                    <i className="not-italic text-slate-500">
+                      {foraDoCarregado(d) ? "—" : n ? `${n} atend.` : folga ? "folga" : "livre"}
+                    </i>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="day">
+              {DIA_LONGO[diaSemanaDe(diaSel)]} · {dateLabel(diaSel)}
+              {diaSel === hojeIso ? " · hoje" : ""}
+              {temHorario &&
+                (turnosDoDia(diaSel).length > 0 ||
+                  !foraDoCarregado(diaSel)) && (
+                <small>
+                  {" "}
+                  ·{" "}
+                  {turnosDoDia(diaSel).length
+                    ? turnosDoDia(diaSel)
+                        .map((r) => `${hhmm(r.horaInicio)}-${hhmm(r.horaFim)}`)
+                        .join(" e ")
+                    : "Folga"}
+                </small>
+              )}
+            </div>
+            {foraDoCarregado(diaSel) ? (
+              <div className="empty" style={{ padding: 20 }}>
+                Fora do período carregado
+              </div>
+            ) : agendaDoDia(diaSel).length ? (
+              <Timeline items={agendaDoDia(diaSel)} />
+            ) : (
+              <div className="empty" style={{ padding: 20 }}>
+                {temHorario && !turnosDoDia(diaSel).length
+                  ? "Folga"
+                  : "Nada marcado para este dia."}
+              </div>
             )}
+            <p className="help">Mostra só o que já foi carregado da agenda.</p>
           </>
         )}
       </div>
@@ -1475,106 +2015,152 @@ export default function EquipePessoaView({
     body = !attends ? (
       noAppointments
     ) : (
-      <div className="box">
-        <div className="flt">
-          {[
-            ["mes", "Este mês"],
-            ["3m", "Últimos 3 meses"],
-            ["ano", "Este ano"],
-          ].map(([value, label]) => (
-            <button
-              key={value}
-              className={periodo === value ? "on" : ""}
-              onClick={() => {
-                setPeriodo(value);
-                onPeriodoChange?.(value);
-              }}
-            >
-              {label}
-            </button>
-          ))}
+      <div className={`box ${entrada("agenda-delay-300")}`.trim()}>
+        <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3">
+          {seletorPeriodo}
+          {!agendaNotice && (
+            <label className="relative block w-full max-w-xs">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 shrink-0 text-slate-400" />
+              <input
+                type="text"
+                value={atendBusca}
+                onChange={(e) => setAtendBusca(e.target.value)}
+                placeholder="Buscar paciente"
+                aria-label="Buscar paciente"
+                className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-base text-slate-800 placeholder-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 lg:text-sm toque:min-h-[44px] toque:text-base"
+              />
+            </label>
+          )}
         </div>
         {agendaNotice || (
-          <div style={{ overflowX: "auto" }}>
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Data</th>
-                  <th>Paciente</th>
-                  <th className="hm">Procedimento</th>
-                  <th className="hm">Duração</th>
-                  <th>Situação</th>
-                </tr>
-              </thead>
-              <tbody>
-                {periodHistory.map((a) => (
-                  <tr key={a.id}>
-                    <td className="m">
-                      {dateLabel(a.dataAgendamento).slice(0, 5)}
-                    </td>
-                    <td>
-                      {onSelectPatient && a.pacienteId ? (
-                        <button
-                          type="button"
-                          className="hover:underline text-left font-bold cursor-pointer text-app-ink bg-transparent p-0 border-0 inline-flex items-center gap-1.5"
-                          onClick={() => {
-                            const isRowInativo = a.pacienteAtivo === false || inactivePatientIds.has(String(a.pacienteId));
-                            onSelectPatient({
-                              id: a.pacienteId,
-                              name: a.pacienteNome || "Paciente não informado",
-                              photo: a.pacienteFotoUrl,
-                              cpf: a.pacienteCpf,
-                              ativo: !isRowInativo,
-                              status: isRowInativo ? "inativo" : "ativo",
-                            });
-                          }}
-                          aria-label={`Abrir histórico de ${a.pacienteNome || "paciente"}`}
-                        >
-                          <span>{a.pacienteNome || "Paciente não informado"}</span>
-                          {(a.pacienteAtivo === false || inactivePatientIds.has(String(a.pacienteId))) && (
-                            <span className="text-[10px] font-extrabold tracking-wider uppercase px-1.5 py-0.2 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                              INATIVO
-                            </span>
-                          )}
-                        </button>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5">
-                          <b>{a.pacienteNome || "Paciente não informado"}</b>
-                          {(a.pacienteAtivo === false || inactivePatientIds.has(String(a.pacienteId))) && (
-                            <span className="text-[10px] font-extrabold tracking-wider uppercase px-1.5 py-0.2 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                              INATIVO
-                            </span>
-                          )}
-                        </span>
-                      )}
-                    </td>
-                    <td className="hm">{procedure(a)}</td>
-                    <td className="hm m">{duration(a)}</td>
-                    <td>
-                      <span className={`sc ${statusClass(a)}`}>
-                        {statusLabel(a)}
-                      </span>
-                    </td>
+          <>
+            <div className="flt" role="group" aria-label="Procedimento">
+              <button
+                type="button"
+                className={`toque:min-h-[44px] ${procAtivo ? "" : "on"}`}
+                onClick={() => setAtendProc("")}
+              >
+                Todos <span className="ml-1 shrink-0 opacity-70">{periodHistory.length}</span>
+              </button>
+              {atendProcs.map(([nome, qtd]) => (
+                <button
+                  key={nome}
+                  type="button"
+                  className={`toque:min-h-[44px] ${procAtivo === nome ? "on" : ""}`}
+                  onClick={() => setAtendProc(nome)}
+                >
+                  {nome} <span className="ml-1 shrink-0 opacity-70">{qtd}</span>
+                </button>
+              ))}
+            </div>
+            <div
+              className="my-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-slate-600"
+              role="group"
+              aria-label="Totais"
+            >
+              <span>
+                <b>{atendFeitos.length}</b>{" "}
+                {atendFeitos.length === 1 ? "realizado" : "realizados"}
+              </span>
+              <span>
+                <b>{atendPacientes}</b> {atendPacientes === 1 ? "paciente" : "pacientes"}
+              </span>
+              <span>
+                <b>{horasTxt(atendTotalMin)}</b> em atendimento
+              </span>
+              {atendFaltas > 0 && (
+                <span>
+                  <b>{atendFaltas}</b> {atendFaltas === 1 ? "falta" : "faltas"}
+                </span>
+              )}
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Paciente</th>
+                    <th className="hm">Procedimento</th>
+                    <th className="hm">Duração</th>
+                    <th>Situação</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            {!periodHistory.length && (
-              <div className="empty">Nenhum atendimento neste período.</div>
-            )}
-          </div>
+                </thead>
+                <tbody>
+                  {atendLista.map((a) => (
+                    <tr key={a.id}>
+                      <td className="m">
+                        {dateLabel(a.dataAgendamento).slice(0, 5)}
+                      </td>
+                      <td>
+                        {onSelectPatient && a.pacienteId ? (
+                          <button
+                            type="button"
+                            className="hover:underline text-left font-bold cursor-pointer text-app-ink bg-transparent p-0 border-0 inline-flex items-center gap-1.5"
+                            onClick={() => {
+                              const isRowInativo = a.pacienteAtivo === false || inactivePatientIds.has(String(a.pacienteId));
+                              onSelectPatient({
+                                id: a.pacienteId,
+                                name: a.pacienteNome || "Paciente não informado",
+                                photo: a.pacienteFotoUrl,
+                                cpf: a.pacienteCpf,
+                                ativo: !isRowInativo,
+                                status: isRowInativo ? "inativo" : "ativo",
+                              });
+                            }}
+                            aria-label={`Abrir histórico de ${a.pacienteNome || "paciente"}`}
+                          >
+                            <span>{a.pacienteNome || "Paciente não informado"}</span>
+                            {(a.pacienteAtivo === false || inactivePatientIds.has(String(a.pacienteId))) && (
+                              <span className="text-[10px] font-extrabold tracking-wider uppercase px-1.5 py-0.2 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                                INATIVO
+                              </span>
+                            )}
+                          </button>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5">
+                            <b>{a.pacienteNome || "Paciente não informado"}</b>
+                            {(a.pacienteAtivo === false || inactivePatientIds.has(String(a.pacienteId))) && (
+                              <span className="text-[10px] font-extrabold tracking-wider uppercase px-1.5 py-0.2 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                                INATIVO
+                              </span>
+                            )}
+                          </span>
+                        )}
+                      </td>
+                      <td className="hm">{procedure(a)}</td>
+                      <td className="hm m">{duration(a)}</td>
+                      <td>
+                        <span className={`sc ${statusClass(a)}`}>
+                          {statusLabel(a)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!atendLista.length && (
+                <div className="empty">
+                  {periodHistory.length
+                    ? "Nenhum atendimento com esses filtros."
+                    : "Nenhum atendimento neste período."}
+                </div>
+              )}
+            </div>
+          </>
         )}
       </div>
     );
   else if (tab === "pacs")
     body = !attends ? (
       noAppointments
+    ) : pacAberto ? (
+      fichaPaciente
     ) : (
-      <div className="box">
+      <div className={`box ${entrada("agenda-delay-300")}`.trim()}>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 mb-3">
           <h4>
             <I name="users" />
-            Pacientes que {first} atendeu
+            Pacientes atendidos · {periodoRotulo}
             <small>
               {agendaNotice
                 ? "—"
@@ -1584,8 +2170,9 @@ export default function EquipePessoaView({
             </small>
           </h4>
         </div>
+        {seletorPeriodo}
         {!agendaNotice && (
-          <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2.5 my-3">
             {/* Campo de Busca por Nome */}
             <div className="relative flex-1 min-w-[200px] max-w-sm">
               <input
@@ -1593,7 +2180,7 @@ export default function EquipePessoaView({
                 value={patientSearchTerm}
                 onChange={(e) => setPatientSearchTerm(e.target.value)}
                 placeholder="Buscar paciente por nome..."
-                className="w-full h-9 pl-8 pr-8 text-xs text-slate-800 placeholder-slate-400 bg-white border border-slate-200 rounded-lg shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-all"
+                className="w-full h-9 pl-8 pr-8 text-base lg:text-xs toque:text-base toque:min-h-[44px] text-slate-800 placeholder-slate-400 bg-white border border-slate-200 rounded-lg shadow-2xs hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus:border-teal-600 transition-all"
                 aria-label="Buscar paciente por nome"
               />
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -1780,21 +2367,14 @@ export default function EquipePessoaView({
               <button
                 type="button"
                 key={p.id}
-                className={`pci pci-clickable cursor-pointer transition-colors ${
+                className={`pci pci-clickable cursor-pointer transition-colors toque:min-h-[44px] ${
                   !p.ativo ? "bg-amber-50/20 hover:bg-amber-50/50 border-amber-200/50" : "hover:bg-slate-50"
                 }`}
-                disabled={!onSelectPatient}
                 aria-label={`Abrir histórico de ${p.name}`}
-                onClick={() => onSelectPatient?.({ ...p, status: p.ativo ? "ativo" : "inativo", isAtivo: p.ativo })}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    onSelectPatient?.({ ...p, status: p.ativo ? "ativo" : "inativo", isAtivo: p.ativo });
-                  }
-                }}
+                onClick={() => setPacienteAbertoId(p.id)}
               >
                 <span
-                  className="av"
+                  className="av shrink-0"
                   style={{
                     width: 40,
                     height: 40,
@@ -1879,8 +2459,13 @@ export default function EquipePessoaView({
       <div className="acesso-container">
         {/* Coluna Principal: Dois Cards */}
         <div className="acesso-main-column">
+          {saveError && !sujoAcesso && (
+            <div className="acesso-error-text" role="alert" style={{ marginBottom: 10 }}>
+              {saveError}
+            </div>
+          )}
           {/* Card 1: Cargo na Clínica */}
-          <div className="acesso-card">
+          <div className={`acesso-card ${entrada("agenda-delay-300")}`.trim()}>
             <div className="acesso-card-header">
               <span className="acesso-card-icon-badge">
                 <I name="ucog" />
@@ -1954,7 +2539,7 @@ export default function EquipePessoaView({
           </div>
 
           {/* Card 2: Perfil e Níveis de Acesso */}
-          <div className="acesso-card" style={{ marginTop: 14 }}>
+          <div className={`acesso-card ${entrada("agenda-delay-300")}`.trim()} style={{ marginTop: 14 }}>
             <div className="acesso-card-header">
               <span className="acesso-card-icon-badge">
                 <I name="shield" />
@@ -2394,7 +2979,7 @@ export default function EquipePessoaView({
                                 <span className="trunc">{m.description}</span>
                               </span>
                             </div>
-                            {!owner && canManageUsers && (
+                            {!owner && canManageUsers && canEditPerfis && (
                               <div className="lv" role="group" aria-label={`Nível em ${m.name}`}>
                                 {(m.editing?.length > 0 ? ["1", "2", "3", "0"] : ["1", "3", "0"]).map((key) => {
                                   const isAtivo = m.k === key;
@@ -2423,6 +3008,20 @@ export default function EquipePessoaView({
                                 `${m.selected.length} de ${m.permissions.length} funções`
                               )}
                             </span>
+                            {m.key === "agenda" && !owner && pessoa.perfilAcessoId && (
+                              <span className="acesso-agenda-perfil" style={{ fontSize: 12, color: "var(--app-muted)" }}>
+                                As opções de agenda vêm do perfil <b>{perfil?.nome || pessoa.perfilAcessoNome || "atual"}</b>.
+                                {canEditPerfis && onEditarPerfil && (
+                                  <button
+                                    type="button"
+                                    className="btn-g shrink-0 toque:min-h-[44px]"
+                                    onClick={() => onEditarPerfil(pessoa.perfilAcessoId)}
+                                  >
+                                    Mudar no perfil
+                                  </button>
+                                )}
+                              </span>
+                            )}
                             {m.permissions.length > 0 && (
                               <button
                                 type="button"
@@ -2471,7 +3070,7 @@ export default function EquipePessoaView({
                                       <input
                                         type="checkbox"
                                         checked={checked}
-                                        disabled={owner || !canManageUsers}
+                                        disabled={owner || !canManageUsers || !canEditPerfis}
                                         aria-label={permission.nome}
                                         onChange={() => togglePermissao(permission.permissaoId, m)}
                                       />
@@ -2499,43 +3098,39 @@ export default function EquipePessoaView({
                 )}
               </>
             )}
-
-            {/* Rodapé com Feedback e Botão Salvar */}
-            {canManageUsers && !owner && (
-              <div className="acesso-actions-footer">
-                <div className="acesso-feedback-area">
-                  {isAccessDirty && (
-                    <span className="acesso-dirty-badge">
-                      {isPerfilCustomizado
-                        ? "Permissões personalizadas pendentes de salvamento"
-                        : "Alterações pendentes de salvamento"}
-                    </span>
-                  )}
-                  {saveError && (
-                    <div className="acesso-error-text" role="alert">
-                      {saveError}
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  className="btn-p h-9 px-4 rounded-lg bg-[#00a88e] hover:bg-[#00967f] text-white text-[13px] font-semibold transition-all shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={!isAccessDirty || saving}
-                  onClick={handleSalvarAcessoClick}
-                >
-                  {saving ? "Salvando…" : "Salvar acesso"}
-                </button>
-              </div>
-            )}
           </div>
         </div>
+        <aside className="acesso-menu-aside" aria-label={`O menu de ${first}`}>
+          <h3 style={{ margin: 0, fontSize: 15 }}>O menu de {first}</h3>
+          <p style={{ margin: "4px 0 8px", fontSize: 12, color: "var(--app-muted)" }}>
+            É o que aparece para a pessoa ao entrar.
+          </p>
+          {permissionUnavailable ? (
+            <p style={{ margin: 0, fontSize: 12, color: "var(--app-muted)" }}>Disponível quando as funções carregarem.</p>
+          ) : (
+            <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 6 }}>
+              {menuParaFuncoes(
+                (permissoes || [])
+                  .filter((c) => effectiveIds.includes(c.permissaoId))
+                  .map((c) => c.codigo),
+              )
+                .flatMap((g) => g.itens)
+                .map((it) => (
+                  <li key={it.view} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                    <it.icon size={16} className="shrink-0" aria-hidden="true" />
+                    {it.label}
+                  </li>
+                ))}
+            </ul>
+          )}
+        </aside>
       </div>
     );
   else
     body = canSeeConfigAuditoria ? (
       <AuditoriaView roleUserId={pessoa.id} />
     ) : (
-      <div className="box">
+      <div className={`box ${entrada("agenda-delay-300")}`.trim()}>
         <div className="empty">
           Você não tem permissão para consultar o histórico.
         </div>
@@ -2550,7 +3145,7 @@ export default function EquipePessoaView({
           canManageUsers={canManageUsers}
           onAlterarAcesso={() => {
             setShowCadastroModal(false);
-            setTab("acesso");
+            irParaAba("acesso");
             requestAnimationFrame(() => {
               if (typeof tabsContainerRef.current?.scrollIntoView === "function") {
                 tabsContainerRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -2575,7 +3170,7 @@ export default function EquipePessoaView({
           <span className="trunc">{isSelf ? "Meu Perfil" : name}</span>
         </div>
       )}
-      <section className="hero">
+      <section className={`hero ${entrada("agenda-delay-100")}`.trim()}>
         <div className={`cov ${owner ? "dono" : ""}`} />
         <div className="bd">
           <span
@@ -2628,6 +3223,7 @@ export default function EquipePessoaView({
                 WhatsApp
               </a>
             )}
+            {verComoBtn("Ver como")}
             {attends && canSeeAgenda && (
               <button
                 className="btn-p"
@@ -2680,11 +3276,12 @@ export default function EquipePessoaView({
           </span>
         </div>
       </section>
+      {avisoSemPerfil}
       {attends && (
-        <div className="pk">
+        <div className={`pk ${entrada("agenda-delay-200")}`.trim()}>
           {[
             ["Atendimentos neste mês", monthDone.length, ""],
-            ["Pacientes atendidos", patients.length, ""],
+            ["Pacientes atendidos", new Set(monthDone.map((a) => a.pacienteId)).size, ""],
             [
               "Hoje",
               today.length,
@@ -2714,7 +3311,7 @@ export default function EquipePessoaView({
             aria-selected={tab === id}
             aria-controls="pessoa-painel"
             className={`tab${tab === id ? " on" : ""}`}
-            onClick={() => setTab(id)}
+            onClick={() => irParaAba(id)}
           >
             {label}
           </button>
@@ -2725,8 +3322,71 @@ export default function EquipePessoaView({
         role="tabpanel"
         aria-labelledby={`pessoa-tab-${tab}`}
       >
-        {body}
+        {previa.ativa && previa.pessoaId === pessoa.id ? (
+          <PreviaAcessoView
+            nome={previa.nome}
+            perfil={previa.perfil}
+            codigos={previa.codigos}
+            catalogo={permissoes}
+          />
+        ) : (
+          body
+        )}
       </div>
+      {tab === "acesso" &&
+        sujoAcesso &&
+        !(previa.ativa && previa.pessoaId === pessoa.id) &&
+        createPortal(
+          <div className="acesso-barra-salvar" role="region" aria-label="Salvar acesso">
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <b>{contagemAcesso}</b>{" "}
+              {contagemAcesso === 1 ? "alteração não salva" : "alterações não salvas"}
+              {diffCalculado.total > 0 &&
+                ` · ${diffCalculado.adicionadas} a mais · ${diffCalculado.desmarcadas} a menos`}
+              {saveError && (
+                <span className="acesso-error-text" role="alert" style={{ display: "block" }}>
+                  {saveError}
+                </span>
+              )}
+            </span>
+            <button
+              type="button"
+              className="btn-s shrink-0 toque:min-h-[44px]"
+              disabled={saving}
+              onClick={descartarAcesso}
+            >
+              Descartar
+            </button>
+            <button
+              type="button"
+              className="btn-p shrink-0 toque:min-h-[44px]"
+              disabled={saving || (isPerfilCustomizado && !canEditPerfis)}
+              onClick={handleSalvarAcessoClick}
+            >
+              {saving ? "Salvando…" : "Salvar acesso"}
+            </button>
+          </div>,
+          document.body,
+        )}
+      {abaPendente && (
+        <ConfirmaSairSemSalvar
+          onContinuar={() => setAbaPendente(null)}
+          onSair={() => {
+            descartarAcesso();
+            setTab(abaPendente);
+            setAbaPendente(null);
+          }}
+        />
+      )}
+      <AtribuirPerfilModal
+        aberto={showAtribuirPerfil}
+        pessoa={pessoa}
+        perfis={perfisAcesso}
+        permissionsByProfile={permissionsByProfile || {}}
+        catalogo={permissoes}
+        onConfirmar={confirmarAtribuirPerfil}
+        onFechar={() => setShowAtribuirPerfil(false)}
+      />
       {showAvailability && (
         <DisponibilidadeProfissionalModal
           roleUserId={pessoa.id}

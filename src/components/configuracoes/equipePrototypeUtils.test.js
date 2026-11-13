@@ -12,7 +12,14 @@ import {
   getPrerequisitesForPermission,
   generateUniqueProfileName,
   isProfileNameDuplicate,
-} from './equipePrototypeUtils';
+  catalogFunctionTotal,
+  profileFunctionCount,
+  sortProfilesByHierarchy,
+  compareMembersByHierarchy,
+  prunePinnedProfileIds,
+  contarPrecisamDeVoce,
+  FUNCOES_PEDEM_SENHA,
+} from "./equipePrototypeUtils";
 const catalog = [
  {permissaoId:'ver',codigo:'PACIENTE_VER',modulo:'Pacientes'},
  {permissaoId:'criar',codigo:'PACIENTE_CRIAR',modulo:'Pacientes'},
@@ -341,3 +348,84 @@ describe('hierarquia de permissões (1: Ver, 2: Criar, 3: Editar/Operar, 4: Excl
 
 
 
+
+describe('Onda 1: funcoes, hierarquia e pendencias', () => {
+  const cat = [
+    { permissaoId: 'p1', codigo: 'AGENDA_VER', nome: 'Ver', moduloCodigo: 'AGENDA' },
+    { permissaoId: 'p2', codigo: 'AGENDA_CRIAR', nome: 'Criar', moduloCodigo: 'AGENDA' },
+    { permissaoId: 'p3', codigo: 'AGENDA_APARECER', nome: 'Aparecer', moduloCodigo: 'AGENDA' },
+  ];
+  it('total ignora AGENDA_APARECER', () => {
+    expect(catalogFunctionTotal(cat)).toBe(2);
+  });
+  it('contagem do perfil ignora APARECER e id inexistente; Dono mostra o total', () => {
+    expect(profileFunctionCount(['p1', 'p3', 'id-inexistente'], cat)).toBe(1);
+    expect(profileFunctionCount([], cat, true)).toBe(2);
+  });
+  const mk = (n) => Array.from({ length: n }, (_, i) => ({ permissaoId: `x${i}`, codigo: `C_${i}` }));
+  it('perfis: Dono, mais funcoes, empate por nome, sem entrada por ultimo', () => {
+    const big = mk(10);
+    const perfis = [
+      { id: 'w', nome: 'W', codigo: 'W' },
+      { id: 'x', nome: 'X', codigo: 'X' },
+      { id: 'z', nome: 'Z', codigo: 'Z' },
+      { id: 'd', nome: 'Dono', codigo: 'DONO' },
+      { id: 'a', nome: 'Alfa', codigo: 'A' },
+    ];
+    const ids = {
+      d: [],
+      x: big.slice(0, 5).map((p) => p.permissaoId),
+      a: big.slice(0, 5).map((p) => p.permissaoId),
+      z: big.map((p) => p.permissaoId),
+    };
+    const out = sortProfilesByHierarchy(perfis, ids, big);
+    expect(out.map((p) => p.nome)).toEqual(['Dono', 'Z', 'Alfa', 'X', 'W']);
+    expect(perfis[0].nome).toBe('W');
+  });
+  it('dois Donos empatam na hierarquia e caem no nome', () => {
+    const perfis = [
+      { id: 'c', nome: 'Comum', codigo: 'C' },
+      { id: 'b', nome: 'Dono B', codigo: 'DONO' },
+      { id: 'a', nome: 'Dono A', codigo: 'DONO' },
+    ];
+    const out = sortProfilesByHierarchy(perfis, { c: ['x0'] }, [{ permissaoId: 'x0', codigo: 'C_0' }]);
+    expect(out.map((p) => p.nome)).toEqual(['Dono A', 'Dono B', 'Comum']);
+  });
+  it('pessoas: sem perfil por ultimo, empate pelo nome', () => {
+    const ordered = [{ id: 'd' }, { id: 'z' }];
+    const cmp = compareMembersByHierarchy(ordered, (m) => m.nome);
+    const pessoas = [
+      { nome: 'Ana', perfilAcessoId: null },
+      { nome: 'Zeca', perfilAcessoId: 'd' },
+      { nome: 'Bia', perfilAcessoId: 'z' },
+      { nome: 'Caio', perfilAcessoId: 'd' },
+      { nome: 'Fantasma', perfilAcessoId: 'nao-existe' },
+    ];
+    expect([...pessoas].sort(cmp).map((p) => p.nome)).toEqual(['Caio', 'Zeca', 'Bia', 'Ana', 'Fantasma']);
+  });
+  it('prune dos fixados', () => {
+    expect(prunePinnedProfileIds(['a', 'zz'], [{ id: 'a' }])).toEqual(['a']);
+    expect(prunePinnedProfileIds(['a'], [])).toEqual(['a']);
+    expect(prunePinnedProfileIds(null, [{ id: 'a' }])).toBeNull();
+  });
+  it('prune dos fixados: valor que nao e lista volta como veio, sem lancar', () => {
+    const perfis = [{ id: 'a' }];
+    expect(prunePinnedProfileIds(['a'], perfis)).toEqual(['a']);
+    expect(() => prunePinnedProfileIds(5, perfis)).not.toThrow();
+    expect(prunePinnedProfileIds(5, perfis)).toBe(5);
+    expect(() => prunePinnedProfileIds({}, perfis)).not.toThrow();
+    expect(prunePinnedProfileIds({}, perfis)).toEqual({});
+  });
+  it('contarPrecisamDeVoce: so ativa sem perfil', () => {
+    expect(
+      contarPrecisamDeVoce([
+        { ativo: true, perfilAcessoId: null },
+        { ativo: false, perfilAcessoId: null },
+        { ativo: true, perfilAcessoId: 'p' },
+      ]),
+    ).toBe(1);
+  });
+  it('FUNCOES_PEDEM_SENHA tem exatamente as 2', () => {
+    expect([...FUNCOES_PEDEM_SENHA].sort()).toEqual(['ACESSO_COLABORADORES_INATIVAR', 'PACIENTE_INATIVAR']);
+  });
+});

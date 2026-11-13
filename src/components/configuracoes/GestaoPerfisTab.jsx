@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Shield, X, Lock, Users, Loader2, AlertTriangle } from "lucide-react";
+import { Shield, X, Lock, Users, Loader2, AlertTriangle, KeyRound, Search, Trash2 } from "lucide-react";
 import { resolveApiUrl } from "../../config/apiEnv";
-import { getApiErrorDetail } from "../../services/api";
+import { equipeApi, getApiErrorDetail } from "../../services/api";
 import { useToast } from "../../contexts/useToast.js";
 import {
   PRESETS_PERFIS,
@@ -10,7 +10,12 @@ import {
   PROTOTYPE_OPERATIONAL_CODES as OPERACIONAIS,
   generateUniqueProfileName,
   isProfileNameDuplicate,
+  permissionLevel,
+  catalogFunctionTotal,
+  FUNCOES_PEDEM_SENHA,
 } from "./equipePrototypeUtils";
+import { conferirSenha } from "./conferirSenhaAtual";
+import { menuParaFuncoes } from "../layout/navGrupos";
 import { PrototypeIcon } from "./PrototypeIcon";
 import "./gestaoPerfilEditor.css";
 import "./equipePessoa.css";
@@ -87,6 +92,7 @@ export function GestaoPerfisTab({
   canEdit = false,
   onBack,
   onSaved,
+  onDirtyChange,
 }) {
   const toast = useToast();
   const [editingPerfil, setEditingPerfil] = useState(null);
@@ -103,20 +109,38 @@ export function GestaoPerfisTab({
   const [decisaoTipo, setDecisaoTipo] = useState("existente");
   const [decisaoNomePerfil, setDecisaoNomePerfil] = useState("");
   const [decisaoDescPerfil, setDecisaoDescPerfil] = useState("");
+  const [originais, setOriginais] = useState([]);
+  const [busca, setBusca] = useState("");
+  const [excluirAberto, setExcluirAberto] = useState(false);
+  const [senhaExcluir, setSenhaExcluir] = useState("");
+  const [erroExcluir, setErroExcluir] = useState("");
+  const [excluindo, setExcluindo] = useState(false);
+  const [zeroAberto, setZeroAberto] = useState(false);
   const recemCriadoIdRef = useRef(null);
   const requestId = useRef(0);
 
+  // Declarada antes do efeito do Esc (const não é içada).
+  const fecharExcluir = () => {
+    if (excluindo) return;
+    setExcluirAberto(false);
+    setSenhaExcluir("");
+    setErroExcluir("");
+  };
+
   useEffect(() => {
-    if (!confirmacaoDesativarRaiz && !showDecisaoModal) return;
+    if (!confirmacaoDesativarRaiz && !showDecisaoModal && !excluirAberto && !zeroAberto) return;
     const handleKeyDown = (e) => {
       if (e.key === "Escape") {
         setConfirmacaoDesativarRaiz(null);
         setShowDecisaoModal(false);
+        fecharExcluir();
+        setZeroAberto(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [confirmacaoDesativarRaiz, showDecisaoModal]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fecharExcluir só usa setters e `excluindo` (já nas deps)
+  }, [confirmacaoDesativarRaiz, showDecisaoModal, excluirAberto, excluindo, zeroAberto]);
 
   const modulos = summarizeModules(permissoes, selectedPermissoes)
     .filter((m) => m.permissions.length > 0)
@@ -135,9 +159,7 @@ export function GestaoPerfisTab({
   const ag = Boolean(
     agendaPermissao && selectedPermissoes.includes(agendaPermissao.permissaoId),
   );
-  const funcoesCatalogo = permissoes.filter(
-    (p) => p.codigo !== "AGENDA_APARECER",
-  );
+  const totalFuncoes = catalogFunctionTotal(permissoes);
   const selectedFuncoesCount = selectedPermissoes.filter(
     (id) => !agendaPermissao || id !== agendaPermissao.permissaoId,
   ).length;
@@ -148,6 +170,39 @@ export function GestaoPerfisTab({
           u.ativo !== false,
       )
     : [];
+
+  const membrosTodos = editingPerfil
+    ? usuarios.filter(
+        (u) => String(u.perfilAcessoId) === String(editingPerfil.id),
+      )
+    : [];
+  const podeExcluir = Boolean(
+    canEdit &&
+      editingPerfil &&
+      (editingPerfil.codigo || "").toUpperCase() !== "DONO" &&
+      editingPerfil.padrao !== true &&
+      membrosTodos.length === 0,
+  );
+  const nomeOriginal = editingPerfil
+    ? ehPadrao(editingPerfil)
+      ? getNomeCanonicaPerfil(editingPerfil)
+      : editingPerfil.nome || ""
+    : "";
+  const mudancas =
+    selectedPermissoes.filter((id) => !originais.includes(id)).length +
+    originais.filter((id) => !selectedPermissoes.includes(id)).length +
+    (formData.nome.trim() !== nomeOriginal.trim() ? 1 : 0) +
+    ((formData.descricao || "").trim() !==
+    ((editingPerfil && editingPerfil.descricao) || "").trim()
+      ? 1
+      : 0);
+  const sujo = mudancas > 0;
+  const onDirtyRef = useRef(onDirtyChange);
+  onDirtyRef.current = onDirtyChange;
+  useEffect(() => {
+    onDirtyRef.current?.(sujo);
+  }, [sujo]);
+  useEffect(() => () => onDirtyRef.current?.(false), []);
 
   const isNomeDuplicado = React.useMemo(() => {
     if (decisaoTipo !== "novo") return false;
@@ -181,7 +236,7 @@ export function GestaoPerfisTab({
     apoioBase,
   ].filter(Boolean);
 
-  const buscarPermissoes = async (perfil) => {
+  const buscarPermissoes = async (perfil, definirOriginal = false) => {
     const id = ++requestId.current;
     setLoadingPermissoes(true);
     setErroPermissoes(false);
@@ -211,6 +266,7 @@ export function GestaoPerfisTab({
           }
         }
         setSelectedPermissoes(ids);
+        if (definirOriginal) setOriginais([...ids]);
       }
     } catch {
       if (id === requestId.current) {
@@ -248,8 +304,9 @@ export function GestaoPerfisTab({
     });
     setBaseSelecionada(criar ? String(perfil.id) : "");
     setSelectedPermissoes([]);
+    setOriginais([]);
     setAbertos({});
-    buscarPermissoes(perfil);
+    buscarPermissoes(perfil, !criar);
     onPerfilParaAbrirConsumido?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [perfilParaAbrir, canEdit]);
@@ -260,6 +317,7 @@ export function GestaoPerfisTab({
     setEditingPerfil(null);
     setFormData({ nome: "", descricao: "" });
     setSelectedPermissoes([]);
+    setOriginais([]);
     setBaseSelecionada("branco");
     setAbertos({});
     setLoadingPermissoes(false);
@@ -422,11 +480,15 @@ export function GestaoPerfisTab({
     );
   };
 
-  const salvarPerfil = (event) => {
+  const salvarPerfil = (event, confirmouZero = false) => {
     event?.preventDefault();
     if (!canEdit || saving || loadingPermissoes || erroPermissoes) return;
     if (!formData.nome.trim()) {
       toast.error("O nome do perfil é obrigatório.");
+      return;
+    }
+    if (selectedFuncoesCount === 0 && confirmouZero !== true) {
+      setZeroAberto(true);
       return;
     }
 
@@ -516,7 +578,8 @@ export function GestaoPerfisTab({
         await onReload?.();
         if (permissaoRes.ok) {
           onSaved?.(perfilSalvo);
-          onBack?.();
+          onDirtyChange?.(false);
+          onBack?.({ semGuarda: true });
         }
       } else {
         // Criar novo perfil
@@ -583,7 +646,8 @@ export function GestaoPerfisTab({
         await onReload?.();
         if (permissaoRes.ok) {
           onSaved?.(novoPerfil);
-          onBack?.();
+          onDirtyChange?.(false);
+          onBack?.({ semGuarda: true });
         }
       }
     } catch {
@@ -595,41 +659,101 @@ export function GestaoPerfisTab({
   const saveButton = (
     <button
       type="submit"
-      className="btn-p"
-      disabled={!canEdit || saving || loadingPermissoes || erroPermissoes}
+      disabled={
+        !canEdit ||
+        saving ||
+        loadingPermissoes ||
+        erroPermissoes ||
+        // Perfil existente sem alteração: nada a salvar (a criação recém-feita pode tentar de novo).
+        Boolean(
+          editingPerfil &&
+            !sujo &&
+            recemCriadoIdRef.current !== editingPerfil.id,
+        )
+      }
+      className="btn-p toque:min-h-[44px]"
     >
-      <PrototypeIcon name="check" size="s" />
+      <PrototypeIcon name="check" size="s" className="sum-btn-ico" />
       {saving ? "Salvando..." : "Salvar perfil"}
     </button>
   );
-  const menu = [
-    ["users", "Pacientes", ["PACIENTE_VER"]],
-    ["cal", "Agenda", ["AGENDA_VER", "AGENDA_PROPRIA_VER"]],
-    ["ucog", "Gestão de Equipe", ["USUARIO_VER"]],
-    [
-      "gear",
-      "Configurações",
-      [
-        "CLINICA_EDITAR",
-        "HORARIO_EDITAR",
-        "FERIADO_EDITAR",
-        "CATALOGO_VER",
-        "ANAMNESE_MODELO_VER",
-        "DOC_MODELO_VER",
-        "MSG_TEMPLATE_GERENCIAR",
-      ],
-    ],
+  const itensMenu = menuParaFuncoes(
+    permissoes
+      .filter((p) => selectedPermissoes.includes(p.permissaoId))
+      .map((p) => p.codigo),
+  ).flatMap((g) => g.itens);
+
+  // Ordem: senha, equipe de novo (o servidor não confere se alguém usa), DELETE.
+  const confirmarExclusao = async () => {
+    if (!podeExcluir || excluindo) return;
+    setExcluindo(true);
+    setErroExcluir("");
+    try {
+      const senhaOk = await conferirSenha(senhaExcluir);
+      if (senhaOk === "indisponivel") {
+        setErroExcluir("Não foi possível conferir sua senha. Entre de novo e tente outra vez.");
+        return;
+      }
+      if (senhaOk !== "ok") {
+        setErroExcluir("Senha incorreta. Verifique e tente novamente.");
+        return;
+      }
+      const resp = await equipeApi.list();
+      const equipe = Array.isArray(resp) ? resp : resp?.content || [];
+      const usam = equipe.filter(
+        (u) => String(u.perfilAcessoId) === String(editingPerfil.id),
+      ).length;
+      if (usam > 0) {
+        setErroExcluir(
+          usam === 1
+            ? "1 pessoa usa este perfil. Troque o perfil dela antes de excluir."
+            : `${usam} pessoas usam este perfil. Troque o perfil delas antes de excluir.`,
+        );
+        return;
+      }
+      const res = await fetch(
+        resolveApiUrl(`/api/v1/perfis-acesso/${editingPerfil.id}`),
+        {
+          method: "DELETE",
+          headers: await fetchHeaders(),
+          credentials: "include",
+        },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setErroExcluir(
+          getApiErrorDetail({ body }) || "Não foi possível excluir o perfil.",
+        );
+        return;
+      }
+      toast.success("Perfil excluído.");
+      setSenhaExcluir("");
+      setErroExcluir("");
+      setExcluirAberto(false);
+      onDirtyChange?.(false);
+      onBack?.({ semGuarda: true });
+      await onReload?.();
+    } catch {
+      setErroExcluir("Falha de rede ao excluir o perfil.");
+    } finally {
+      setExcluindo(false);
+    }
+  };
+
+  const termoBusca = busca.trim().toLowerCase();
+  const casaBusca = (p) =>
+    !termoBusca ||
+    `${p.nome || ""} ${p.descricao || ""}`.toLowerCase().includes(termoBusca);
+  const GRUPOS_FUNCAO = [
+    [1, "Ver"],
+    [2, "Fazer"],
+    [3, "Ações sensíveis"],
   ];
-  const temCodigo = (codes) =>
-    permissoes.some(
-      (p) =>
-        codes.includes(p.codigo) && selectedPermissoes.includes(p.permissaoId),
-    );
 
   return (
     <form className="prototype-perfil-editor" onSubmit={salvarPerfil}>
       <div className="crumb">
-        <button type="button" onClick={onBack} disabled={saving}>
+        <button type="button" onClick={() => onBack?.()} disabled={saving}>
           <PrototypeIcon name="cl" size="s" />
           Gestão de Equipe
         </button>
@@ -642,15 +766,6 @@ export function GestaoPerfisTab({
             ? `Editar perfil: ${formData.nome}`
             : "Novo perfil de acesso"}
         </h2>
-        <button
-          type="button"
-          className="btn-s"
-          onClick={onBack}
-          disabled={saving}
-        >
-          Cancelar
-        </button>
-        {canEdit && saveButton}
       </div>
 
       {editingPerfil && (
@@ -891,21 +1006,51 @@ export function GestaoPerfisTab({
                     : "Não foi possível carregar as permissões. Abra o perfil novamente antes de salvar."}
                 </p>
               )}
+              <label className="relative mb-3 block">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 shrink-0 text-slate-400"
+                  aria-hidden="true"
+                />
+                <input
+                  type="search"
+                  className="inp w-full !pl-9 text-base toque:min-h-[44px]"
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  placeholder="Buscar função: cancelar, orçamento, senha…"
+                  aria-label="Buscar função"
+                />
+              </label>
+              {termoBusca && !modulos.some((m) => m.funcoes.some(casaBusca)) && (
+                <p role="status" className="py-4 text-center text-sm text-slate-500">
+                  Nenhuma função com “{busca.trim()}”. Tente outra palavra, como “agenda” ou “excluir”.
+                </p>
+              )}
               {modulos.map((modulo) => {
                 const nivel = nivelModulo(modulo, selectedPermissoes);
-                const open = abertos[modulo.key];
+                const visiveis = modulo.funcoes.filter(casaBusca);
+                if (termoBusca && !visiveis.length) return null;
+                const open = termoBusca ? true : abertos[modulo.key];
                 const temEdicaoOperacional = modulo.funcoes.some(
                   (p) =>
                     OPERACIONAIS.has(p.codigo) && !p.codigo.endsWith("_VER"),
                 );
-                const niveisModulo = temEdicaoOperacional
-                  ? ["1", "2", "3", "0"]
-                  : ["1", "3", "0"];
+                const temSensiveis = modulo.funcoes.some(
+                  (p) => permissionLevel(p) === 3,
+                );
+                // Sem funções além de editar, "Tudo" não existe: tudo marcado vale "Ver e editar".
+                const nivelKey =
+                  nivel.key === "3" && !temSensiveis ? "2" : nivel.key;
+                const niveisModulo = [
+                  "0",
+                  "1",
+                  ...(temEdicaoOperacional ? ["2"] : []),
+                  ...(temSensiveis ? ["3"] : []),
+                ];
                 return (
                   <div key={modulo.key} className="mod">
                     <div className="mod-h">
                       <div className="nm">
-                        <span className="ic">
+                        <span className="ic shrink-0">
                           <PrototypeIcon name={modulo.icon} />
                         </span>
                         <span style={{ minWidth: 0 }}>
@@ -915,7 +1060,7 @@ export function GestaoPerfisTab({
                       </div>
                       <div
                         className="lv"
-                        role="group"
+                        role="radiogroup"
                         aria-label={`Nível em ${modulo.nome}`}
                       >
                         {niveisModulo.map((key) => {
@@ -924,9 +1069,10 @@ export function GestaoPerfisTab({
                           return (
                             <button
                               type="button"
+                              role="radio"
                               key={key}
-                              className={nivel.key === key ? "on" : ""}
-                              aria-pressed={nivel.key === key}
+                              className={`toque:min-h-[44px] ${nivelKey === key ? "on" : ""}`}
+                              aria-checked={nivelKey === key}
                               disabled={isDisabled}
                               title={
                                 isDisabled
@@ -954,12 +1100,12 @@ export function GestaoPerfisTab({
                       {modulo.funcoes.length > 0 && (
                         <button
                           type="button"
-                          className="btn-g expand-functions"
+                          className="btn-g expand-functions toque:min-h-[44px]"
                           aria-expanded={Boolean(open)}
                           onClick={() =>
                             setAbertos((prev) => ({
                               ...prev,
-                              [modulo.key]: !open,
+                              [modulo.key]: !abertos[modulo.key],
                             }))
                           }
                         >
@@ -972,24 +1118,89 @@ export function GestaoPerfisTab({
                     </div>
                     {open && (
                       <div className="perm">
-                        {modulo.funcoes.map((permissao) => {
-                          const checked = selectedPermissoes.includes(
-                            permissao.permissaoId,
+                        {GRUPOS_FUNCAO.map(([lv, titulo]) => {
+                          const doGrupo = modulo.funcoes.filter(
+                            (p) => permissionLevel(p) === lv,
                           );
+                          const mostradas = visiveis.filter(
+                            (p) => permissionLevel(p) === lv,
+                          );
+                          if (!mostradas.length) return null;
+                          const ligadas = doGrupo.filter((p) =>
+                            selectedPermissoes.includes(p.permissaoId),
+                          ).length;
+                          const tituloId = `grp-${modulo.key}-${lv}`;
                           return (
-                            <label
-                              key={permissao.permissaoId}
-                              className={`perm-item${checked ? " on" : ""}`}
+                            <section
+                              key={lv}
+                              role="group"
+                              aria-labelledby={tituloId}
+                              className="col-span-full"
                             >
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={(e) =>
-                                  mudarFuncao(modulo, permissao, e.target.checked)
-                                }
-                              />
-                              <span>{permissao.nome}</span>
-                            </label>
+                              <div className="mb-1.5 mt-1 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                                <span id={tituloId}>{titulo}</span>
+                                <span className="shrink-0 font-semibold normal-case text-slate-400">
+                                  {ligadas}/{doGrupo.length}
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-1 gap-x-2.5 gap-y-1.5 md:grid-cols-2">
+                                {mostradas.map((permissao) => {
+                                  const checked = selectedPermissoes.includes(
+                                    permissao.permissaoId,
+                                  );
+                                  const falta =
+                                    !checked && !RAIZES.has(permissao.codigo)
+                                      ? modulo.raizes.filter(
+                                          (r) =>
+                                            !selectedPermissoes.includes(
+                                              r.permissaoId,
+                                            ),
+                                        )
+                                      : [];
+                                  const nomeId = `fn-${permissao.permissaoId}`;
+                                  const descId = `fd-${permissao.permissaoId}`;
+                                  const descricao = (permissao.descricao || "").trim();
+                                  return (
+                                    <div key={permissao.permissaoId} className="min-w-0">
+                                      <label
+                                        className={`perm-item toque:min-h-[44px]${checked ? " on" : ""}`}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={checked}
+                                          aria-labelledby={nomeId}
+                                          aria-describedby={descricao ? descId : undefined}
+                                          onChange={(e) =>
+                                            mudarFuncao(modulo, permissao, e.target.checked)
+                                          }
+                                        />
+                                        <span className="flex min-w-0 flex-1 flex-col">
+                                          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                            <span id={nomeId}>{permissao.nome}</span>
+                                            {FUNCOES_PEDEM_SENHA.has(permissao.codigo) && (
+                                              <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800">
+                                                <KeyRound className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                                pede senha
+                                              </span>
+                                            )}
+                                          </span>
+                                          {descricao && (
+                                            <span id={descId} className="text-xs font-normal text-slate-500">
+                                              {descricao}
+                                            </span>
+                                          )}
+                                        </span>
+                                      </label>
+                                      {falta.length > 0 && (
+                                        <small className="block px-2.5 pt-0.5 text-[11px] text-slate-500">
+                                          liga junto: {falta.map((r) => r.nome).join(", ")}
+                                        </small>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </section>
                           );
                         })}
                       </div>
@@ -999,30 +1210,71 @@ export function GestaoPerfisTab({
               })}
             </div>
           </fieldset>
-          {canEdit && (
+          {
             <div className="sticky-sum">
-              <span style={{ flex: 1, minWidth: 0 }}>
+              <span className="sum-txt">
                 <b>
-                  {selectedFuncoesCount} de {funcoesCatalogo.length} funções
+                  {sujo
+                    ? `${mudancas} ${mudancas === 1 ? "alteração não salva" : "alterações não salvas"}`
+                    : editingPerfil
+                      ? "Nada para salvar"
+                      : "Perfil novo"}
                 </b>{" "}
-                · {ag ? "atende na agenda" : "não atende"}
+                <span className="sum-resto">
+                  <span className="sum-sep" aria-hidden="true">
+                    {"· "}
+                  </span>
+                  {selectedFuncoesCount} de {totalFuncoes} funções ·{" "}
+                  {ag ? "atende na agenda" : "não atende"}
+                </span>
+                {membros.length > 0 && (
+                  <span className="sum-membros">
+                    {` · vale para ${membros.length} ${membros.length === 1 ? "pessoa" : "pessoas"} assim que salvar`}
+                  </span>
+                )}
               </span>
-              {saveButton}
+              {podeExcluir && (
+                <button
+                  type="button"
+                  className="btn-danger inline-flex shrink-0 items-center gap-1.5 toque:min-h-[44px]"
+                  onClick={() => {
+                    setSenhaExcluir("");
+                    setErroExcluir("");
+                    setExcluirAberto(true);
+                  }}
+                  disabled={saving}
+                >
+                  <Trash2
+                    className="sum-btn-ico h-4 w-4 shrink-0"
+                    aria-hidden="true"
+                  />
+                  Excluir perfil
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn-s shrink-0 toque:min-h-[44px]"
+                onClick={() => onBack?.()}
+                disabled={saving}
+              >
+                Cancelar
+              </button>
+              {canEdit && saveButton}
             </div>
-          )}
+          }
         </div>
         <div className="sum-col">
           <div className="card sum">
             <h3>Resumo do perfil</h3>
             <div className="big">
               {selectedFuncoesCount}{" "}
-              <span>de {funcoesCatalogo.length} funções</span>
+              <span>de {totalFuncoes} funções</span>
             </div>
             <div className="gauge" style={{ margin: "6px 0 10px" }}>
               <span className="bar">
                 <i
                   style={{
-                    width: `${funcoesCatalogo.length ? Math.round((selectedFuncoesCount / funcoesCatalogo.length) * 100) : 0}%`,
+                    width: `${totalFuncoes ? Math.round((selectedFuncoesCount / totalFuncoes) * 100) : 0}%`,
                   }}
                 />
               </span>
@@ -1080,13 +1332,10 @@ export function GestaoPerfisTab({
             <div className="prev">
               <div className="menu-prev">
                 <div className="menu-title">O menu desta pessoa</div>
-                {menu.map(([icon, label, codes]) => (
-                  <div
-                    key={label}
-                    className={`mi${temCodigo(codes) ? "" : " off"}`}
-                  >
-                    <PrototypeIcon name={icon} size="s" />
-                    {label}
+                {itensMenu.map((item) => (
+                  <div key={item.view} className="mi">
+                    <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    {item.label}
                   </div>
                 ))}
               </div>
@@ -1207,6 +1456,154 @@ export function GestaoPerfisTab({
           </div>
         </div>
       )}
+
+      {zeroAberto &&
+        createPortal(
+          <div
+            className="acesso-modal-backdrop font-sans text-slate-800"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="zero-perfil-title"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) setZeroAberto(false);
+            }}
+          >
+            <div
+              className="decisao-modal-card prototype-equipe"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <div className="decisao-modal-head">
+                <div className="decisao-head-left">
+                  <div className="decisao-head-icon shrink-0">
+                    <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" aria-hidden="true" />
+                  </div>
+                  <div>
+                    <h3 id="zero-perfil-title" className="decisao-title">
+                      Salvar sem nenhuma função?
+                    </h3>
+                    <p className="decisao-subtitle">
+                      Quem receber este perfil não vai conseguir entrar em nenhuma área do sistema.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="decisao-modal-foot">
+                <button
+                  type="button"
+                  className="decisao-btn-cancel btn-s toque:min-h-[44px]"
+                  autoFocus
+                  onClick={() => setZeroAberto(false)}
+                >
+                  Voltar e escolher
+                </button>
+                <button
+                  type="button"
+                  className="decisao-btn-confirm btn-p shrink-0 toque:min-h-[44px]"
+                  onClick={() => {
+                    setZeroAberto(false);
+                    salvarPerfil(undefined, true);
+                  }}
+                >
+                  Salvar assim mesmo
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {excluirAberto &&
+        editingPerfil &&
+        createPortal(
+          <div
+            className="acesso-modal-backdrop font-sans text-slate-800"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="excluir-perfil-title"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) fecharExcluir();
+            }}
+          >
+            <div
+              className="decisao-modal-card prototype-equipe"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <div className="decisao-modal-head">
+                <div className="decisao-head-left">
+                  <div className="decisao-head-icon shrink-0">
+                    <Trash2 className="h-5 w-5 shrink-0 text-rose-600" aria-hidden="true" />
+                  </div>
+                  <div>
+                    <h3 id="excluir-perfil-title" className="decisao-title">
+                      Excluir o perfil “{editingPerfil.nome}”?
+                    </h3>
+                    <p className="decisao-subtitle">
+                      Ninguém usa este perfil. A exclusão não pode ser desfeita.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="decisao-modal-body">
+                <label htmlFor="excluir-perfil-senha" className="decisao-label">
+                  Sua senha, para confirmar
+                </label>
+                <input
+                  id="excluir-perfil-senha"
+                  type="password"
+                  autoComplete="off"
+                  autoFocus
+                  className="decisao-input w-full text-base toque:min-h-[44px]"
+                  value={senhaExcluir}
+                  onChange={(e) => {
+                    setSenhaExcluir(e.target.value);
+                    setErroExcluir("");
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && senhaExcluir) {
+                      e.preventDefault();
+                      confirmarExclusao();
+                    }
+                  }}
+                  disabled={excluindo}
+                  aria-invalid={Boolean(erroExcluir)}
+                />
+                {erroExcluir && (
+                  <div
+                    className="mt-2 flex items-start gap-1.5 text-xs font-medium text-rose-600"
+                    role="alert"
+                  >
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-500" />
+                    <span>{erroExcluir}</span>
+                  </div>
+                )}
+              </div>
+              <div className="decisao-modal-foot">
+                <button
+                  type="button"
+                  className="decisao-btn-cancel btn-s toque:min-h-[44px]"
+                  onClick={fecharExcluir}
+                  disabled={excluindo}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg bg-rose-600 px-4 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50 toque:min-h-[44px]"
+                  onClick={confirmarExclusao}
+                  disabled={excluindo || !senhaExcluir}
+                >
+                  {excluindo ? (
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  )}
+                  Excluir perfil
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
 
       {showDecisaoModal &&
         createPortal(

@@ -1,6 +1,6 @@
 import React from 'react';
 import { CalendarPlus, Plus, Search } from 'lucide-react';
-import { usePapel } from '../../hooks/usePapel';
+import { usePapelExibicao, usePreviaAcesso } from '../../contexts/PreviaAcessoContext';
 import { PacienteSearchInput } from '../agenda/PacienteSearchInput.jsx';
 import NotificationBell from './NotificationBell.jsx';
 import { ClinicaIdentityBlock } from './ClinicaIdentityBlock.jsx';
@@ -49,7 +49,8 @@ export function GlobalHeader({
   onOpenPerfilSettings,
   atalhoConsulta = null,
 }) {
-  const { canCreatePacientes, canWriteAgenda, isNivel1, canSeeConfig } = usePapel();
+  const { canCreatePacientes, canWriteAgenda, isNivel1, canSeeConfig, canSeeNotificacoes } = usePapelExibicao();
+  const { ativa: previaAtiva } = usePreviaAcesso();
   const { tituloClinica, clinicaLogoResolved, displayName, shortName, perfilFotoResolved, roleLabel } =
     resolveIdentity({
       clinicaNome,
@@ -147,13 +148,15 @@ export function GlobalHeader({
             </div>
           ) : null}
 
-          <div className="shrink-0">
-            <NotificationBell
-              variant="header"
-              onVerTodas={onOpenNotificacoes}
-              notificacoesRefreshKey={notificacoesRefreshKey}
-            />
-          </div>
+          {!previaAtiva || canSeeNotificacoes ? (
+            <div className="shrink-0">
+              <NotificationBell
+                variant="header"
+                onVerTodas={onOpenNotificacoes}
+                notificacoesRefreshKey={notificacoesRefreshKey}
+              />
+            </div>
+          ) : null}
 
           <UsuarioIdentityCard
             variant="header"

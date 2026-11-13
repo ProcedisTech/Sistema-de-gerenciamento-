@@ -1,6 +1,7 @@
 /** Correção 4 (Testador-C4): lacunas da Onda 3 — POP sempre bloqueado não cria aviso a mais, ficha existente, aviso fantasma, rascunho de termos. */
 import React from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { irPeloMenu } from './irPeloMenu.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { flushSync } from 'react-dom';
@@ -35,7 +36,7 @@ const rotas = [
 ];
 const avisos = () => screen.queryAllByRole('heading', { name: 'Alterações não salvas' });
 const caminho = () => ultimoRoteador().state.location.pathname;
-const menu = async (nome) => { fireEvent.click(screen.getAllByRole('button', { name: nome })[0]); await assentarMuito(); };
+const menu = async (nome) => { if (String(nome) === String(/^Configurações$/)) await irPeloMenu(nome); else fireEvent.click(screen.getAllByRole('button', { name: nome })[0]); await assentarMuito(); };
 const ir = async (d) => { act(() => { ultimoRoteador().navigate(d); }); await assentarMuito(); };
 const campo = () => screen.queryByLabelText('campo-ficha');
 
