@@ -56,7 +56,7 @@ describe('Botao do menu (.procedi-menu-botao)', () => {
     expect(d.border).toBe('1.5px solid #c6a15b')
     expect(d.background).toBe('#fff')
     expect(d.color).toBe('#0d7a5f')
-    expect(d['box-shadow']).toBe('0 2px 8px rgba(198, 161, 91, .28)')
+    expect(d['box-shadow']).toBe('0 2px 8px rgba(198, 161, 91, 0.28)')
     expect(d.transition).toBe('background-color 160ms, border-color 160ms, color 160ms, transform 160ms, box-shadow 160ms')
   })
 
@@ -69,7 +69,7 @@ describe('Botao do menu (.procedi-menu-botao)', () => {
   })
 
   it('so :hover troca a sombra (o anel de foco e box-shadow e nao pode sumir)', () => {
-    expect(unica('.procedi-menu-botao:hover')['box-shadow']).toBe('0 4px 12px rgba(13, 122, 95, .3)')
+    expect(unica('.procedi-menu-botao:hover')['box-shadow']).toBe('0 4px 12px rgba(13, 122, 95, 0.3)')
     expect(unica('.procedi-menu-botao:hover,.procedi-menu-botao:focus-visible')['box-shadow']).toBeUndefined()
   })
 
