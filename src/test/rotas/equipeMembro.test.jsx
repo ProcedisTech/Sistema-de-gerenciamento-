@@ -25,7 +25,14 @@ vi.mock('../../components/configuracoes/InviteModal', () => ({ InviteModal: () =
 vi.mock('../../components/configuracoes/EditRoleModal', () => ({ EditRoleModal: () => null }));
 vi.mock('../../components/configuracoes/DisponibilidadeProfissionalModal', () => ({ default: () => null }));
 vi.mock('../../components/configuracoes/AuditoriaView', () => ({ AuditoriaView: () => <div>Auditoria da clínica</div> }));
-vi.mock('../../components/configuracoes/GestaoPerfisTab', () => ({ GestaoPerfisTab: () => <div>Editor de perfis</div> }));
+vi.mock('../../components/configuracoes/GestaoPerfisTab', () => ({ GestaoPerfisTab: ({ onBack }) => (
+    <div>
+      Editor de perfis
+      <button onClick={() => onBack({ semGuarda: true })}>sair-sem-guarda</button>
+      <button onClick={() => onBack()}>sair-comum</button>
+    </div>
+  ),
+}));
 vi.mock('../../components/configuracoes/EquipePessoaView', () => ({
   default: ({ pessoa }) => <h2>Pessoa: {pessoa.nomeCompleto}</h2>,
 }));
@@ -89,4 +96,18 @@ it('sem permissão de equipe, o próprio perfil continua abrindo', async () => {
   mocks.access = { canSeeConfigEquipe: false };
   montar('/equipe/me');
   expect(await screen.findByText('Pessoa: Ana Pessoal')).toBeInTheDocument();
+});
+
+it('onBack do editor com semGuarda: a navegação leva state.semGuarda (a guarda do App deixa passar)', async () => {
+  montar('/equipe/perfis');
+  fireEvent.click(await screen.findByRole('button', { name: 'sair-sem-guarda' }));
+  await waitFor(() => expect(local()).toBe('/equipe'));
+  expect(ultimoRoteador().state.location.state).toEqual({ semGuarda: true });
+});
+
+it('onBack do editor sem semGuarda: a navegação não leva state (a guarda do App pergunta)', async () => {
+  montar('/equipe/perfis');
+  fireEvent.click(await screen.findByRole('button', { name: 'sair-comum' }));
+  await waitFor(() => expect(local()).toBe('/equipe'));
+  expect(ultimoRoteador().state.location.state).toBeNull();
 });

@@ -34,6 +34,8 @@ import { Sidebar, Stepper, MobileNavigation, GlobalHeader, PageSlot } from './la
 import NotificacoesView from './notificacoes/NotificacoesView.jsx';
 
 import { usePapel } from '../hooks/usePapel';
+import { PreviaAcessoProvider, usePreviaAcesso } from '../contexts/PreviaAcessoContext.jsx';
+import { usePendenciasEquipe } from '../hooks/usePendenciasEquipe';
 import { useAlertasClinicos } from '../hooks/useAlertasClinicos';
 import { useSolicitarAnamneseConsulta } from './consulta/useSolicitarAnamneseConsulta.jsx';
 import { AlertasClinicosPanel } from './patients/AlertasClinicosPanel.jsx';
@@ -238,6 +240,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
     canSeePacientes,
     canStartAtendimento,
   } = usePapel();
+  const { ativa: previaAtiva } = usePreviaAcesso();
   const toast = useToast();
   // ============ ESTADO GLOBAL ============
   const navigate = useNavigate();
@@ -407,6 +410,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
   });
   /** Largura atual da sidebar (64 ou 220) para alinhar barras fixas e fullscreen da avaliação. */
   const [sidebarRailWidthPx, setSidebarRailWidthPx] = useState(220);
+  const { pendencias: pendenciasEquipe, recarregar: recarregarPendencias } = usePendenciasEquipe(Boolean(canSeeConfigEquipe && authSessionReady));
   const [clinicaInfo, setClinicaInfo] = useState({
     nome: 'Procedi',
     logoUrl: '',
@@ -2105,9 +2109,12 @@ function AppRefactoredInner({ onCanalAvisos }) {
   const [isDirtyHorarios, setIsDirtyHorarios] = React.useState(false);
   const [isDirtyFicha, setIsDirtyFicha] = React.useState(false);
   // Guarda só na tela de Configurações; POP (voltar/avançar) ou navegação com state.guarda (irParaTela com guarda).
-  const bloqueio = useBlocker(({ nextLocation, historyAction }) =>
-    (isDirtyHorarios || isDirtyFicha) && activeView === 'configuracoes' &&
-    (nextLocation.state?.guarda === true || historyAction === 'POP'));
+  const [isDirtyEquipe, setIsDirtyEquipe] = React.useState(false);
+  const bloqueio = useBlocker(({ currentLocation, nextLocation, historyAction }) =>
+    ((isDirtyHorarios || isDirtyFicha) && activeView === 'configuracoes' &&
+    (nextLocation.state?.guarda === true || historyAction === 'POP')) ||
+    (isDirtyEquipe && activeView === 'gestao-equipe' && currentLocation.pathname !== nextLocation.pathname &&
+      nextLocation.state?.semGuarda !== true));
 
   React.useEffect(() => {
     if (activeView !== 'consulta' || !journeyState.isAgendaRetorno) return;
@@ -4959,6 +4966,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
         onDiscard={() => {
           setIsDirtyFicha(false);
           setIsDirtyHorarios(false);
+          setIsDirtyEquipe(false);
           bloqueio.proceed?.();
         }}
         message={
@@ -4966,7 +4974,9 @@ function AppRefactoredInner({ onCanalAvisos }) {
             ? 'Você tem alterações não salvas na ficha e no horário de atendimento. Deseja sair sem salvar?'
             : isDirtyFicha
               ? 'Você tem alterações não salvas na ficha de anamnese. Deseja sair sem salvar?'
-              : undefined
+              : isDirtyEquipe
+                ? 'Você tem alterações não salvas na Gestão de equipe.'
+                : undefined
         }
       />
 
@@ -4985,6 +4995,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
         onOpenClinicaSettings={onOpenClinicaSettings}
         onOpenPerfilSettings={onOpenPerfilSettings}
         identidadeNoHeader={identidadeNoHeader}
+        pendenciasEquipe={pendenciasEquipe}
       />
 
       {/* Main Content */}
@@ -4992,8 +5003,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
         className={`flex flex-1 flex-col h-full min-h-0 ${isJornadaView || isConsultaView
           ? 'overflow-hidden pb-[calc(5rem+env(safe-area-inset-bottom,0px))] lg:pb-0'
           : isAgendaView
-            ? 'overflow-hidden max-lg:overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom,0px))] lg:pb-0'
-            : `overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom,0px))] lg:pb-0`
+            ? 'overflow-hidden max-lg:overflow-y-auto pb-[var(--bottom-nav-h)]'
+            : `overflow-y-auto pb-[var(--bottom-nav-h)]`
           }`}
       >
         {/* F7: aviso de alterações que não entraram; no topo do shell, em qualquer tela (consulta, pacientes, perfil). */}
@@ -5950,7 +5961,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
               onOpenClinicaSettings={onOpenClinicaSettings}
               onOpenPerfilSettings={onOpenPerfilSettings}
               atalhoConsulta={
-                canStartAtendimento && minhasCarregadas ? (
+                canStartAtendimento && minhasCarregadas && !previaAtiva ? (
                   <AtalhoConsulta
                     minhas={minhasConsultas}
                     onEntrar={handleAtalhoEntrar}
@@ -6076,7 +6087,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
                       onPerfilAtualizado={(data) => setPerfilInfo((prev) => ({ ...prev, ...data }))}
                       onNavigateAgenda={handleAgendarComProfissional}
                       onSelectPatient={canSeePacientes ? handleOpenPatientFromEquipe : undefined}
-                      onEquipeInvalidate={agendaSchedule.refreshEquipe}
+                      onEquipeInvalidate={() => {
+                        agendaSchedule.refreshEquipe?.();
+                        recarregarPendencias();
+                      }}
                       onPacientesCatalogRefresh={refreshPatientsAndPagedList}
                       onDisponibilidadeInvalidate={handleDisponibilidadeInvalidate}
                       onDirtyHorariosChange={setIsDirtyHorarios}
@@ -6092,9 +6106,13 @@ function AppRefactoredInner({ onCanalAvisos }) {
                         key={`${orgId}-${roleUserId}`}
                         onPerfilAtualizado={(data) => setPerfilInfo((previous) => ({ ...previous, ...data }))}
                         onDisponibilidadeInvalidate={handleDisponibilidadeInvalidate}
-                        onEquipeInvalidate={agendaSchedule.refreshEquipe}
+                        onEquipeInvalidate={() => {
+                          agendaSchedule.refreshEquipe?.();
+                          recarregarPendencias();
+                        }}
                         onNavigateAgenda={handleAgendarComProfissional}
                         onSelectPatient={canSeePacientes ? handleOpenPatientFromEquipe : undefined}
+                        onEquipeDirtyChange={setIsDirtyEquipe}
                       />
                     </div>
                   </RoleGuard>
@@ -6158,10 +6176,9 @@ function AppRefactoredInner({ onCanalAvisos }) {
       {!isJornadaView && !isConsultaView ? (
         <MobileNavigation
           activeView={activeView}
-          onGoPacientes={() => irParaTela('pacientes', { guarda: true })}
-          onGoAgenda={() => irParaTela('agenda', { guarda: true })}
-          onGoGestaoEquipe={() => irParaTela('gestao-equipe', { guarda: true })}
-          onGoConfiguracoes={() => irParaTela('configuracoes', { guarda: true })}
+          pathname={location.pathname}
+          irParaTela={(v) => irParaTela(v, { guarda: true })}
+          pendenciasEquipe={pendenciasEquipe}
           onLogout={sairManual}
         />
       ) : null}
@@ -6328,10 +6345,12 @@ export default function App() {
   const [canalAvisos, setCanalAvisos] = React.useState({ orgId: null, ativo: false, emConsulta: false });
   const chave = useChaveDaSessao();
   return (
+    <PreviaAcessoProvider>
     <DisponibilidadeRevisionProvider>
       <AvisosProvider orgId={canalAvisos.orgId} ativo={canalAvisos.ativo} emConsulta={canalAvisos.emConsulta}>
         <AppRefactoredInner key={chave} onCanalAvisos={setCanalAvisos} />
       </AvisosProvider>
     </DisponibilidadeRevisionProvider>
+    </PreviaAcessoProvider>
   );
 }

@@ -1,5 +1,6 @@
 /** Menu lateral empilha histórico: Voltar/Avançar do navegador andam tela a tela e o app nunca sai. */
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { irPeloMenu } from './irPeloMenu.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { assentarMuito, montarApp, TIMEOUT } from '../consulta/appConsulta.jsx';
@@ -11,7 +12,7 @@ vi.mock('../../contexts/AvisosProvider.jsx', async () => (await import('../consu
 
 const caminho = () => ultimoRoteador().state.location.pathname;
 const clicarMenu = async (nome) => {
-  fireEvent.click(screen.getAllByRole('button', { name: nome })[0]);
+  if (String(nome) === String(/^Configurações$/)) await irPeloMenu(nome); else fireEvent.click(screen.getAllByRole('button', { name: nome })[0]);
   await assentarMuito();
 };
 const irPara = async (delta) => {

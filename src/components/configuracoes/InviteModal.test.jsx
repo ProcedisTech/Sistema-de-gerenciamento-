@@ -1275,7 +1275,7 @@ describe("Edição Interativa de Permissões e Criação de Novo Perfil", () => 
         screen.getByRole("region", { name: "Resumo do perfil de acesso" }),
       ).toBeInTheDocument(),
     );
-    expect(screen.getByText(/funções liberadas/)).toBeInTheDocument();
+    expect(await screen.findByText(/funções liberadas/)).toBeInTheDocument();
     expect(screen.getByText("Modelo pronto · protegido")).toBeInTheDocument();
   });
 

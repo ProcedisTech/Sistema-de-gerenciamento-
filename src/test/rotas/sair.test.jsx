@@ -1,5 +1,6 @@
 /** "Sair" no menu: vai para /entrar, grava a marca de saída manual, remonta a árvore e o novo login cai em /pacientes. */
 import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { irPeloMenu } from './irPeloMenu.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { IDS, agendaDto } from '../encerrar/cenariosEncerrar.js';
@@ -50,7 +51,7 @@ describe('Sair pelo menu', () => {
     clicarBotao('Apenas Sair (Manter em andamento)');
     await assentarMuito(6);
 
-    fireEvent.click(screen.getAllByRole('button', { name: /Sair do sistema/i })[0]);
+    await irPeloMenu(/^Sair do sistema$/i);
     await assentarMuito(8);
 
     await waitFor(() => expect(r.state.location.pathname).toBe(caminhos.entrar()));

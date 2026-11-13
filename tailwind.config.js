@@ -15,6 +15,7 @@ export default {
           sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'system-ui', 'sans-serif'],
           display: ['"Bricolage Grotesque"', 'system-ui', 'sans-serif'],
           mono: ['monospace'],
+          brand: ['"Cormorant Garamond"', 'serif'],
         },
         colors: {
           /**
@@ -123,5 +124,10 @@ export default {
       },
     },
      
-    plugins: [require('@tailwindcss/typography')],
+    plugins: [
+      require('@tailwindcss/typography'),
+      // toque: telas < 1024px ou aparelho de toque (alvo 44px); mouse >= 1024px fica como hoje
+      require('tailwindcss/plugin')(({ addVariant }) =>
+        addVariant('toque', '@media (max-width: 1023px), (pointer: coarse)')),
+    ],
   }

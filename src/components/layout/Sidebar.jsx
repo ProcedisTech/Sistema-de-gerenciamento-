@@ -1,19 +1,109 @@
 import React, { useEffect, useState } from 'react';
-import { CalendarDays, ChevronLeft, History, LogOut, Menu, Settings, Users, UserCog } from 'lucide-react';
+import '@fontsource/cormorant-garamond/latin-600.css';
+import { ChevronDown, ChevronLeft, ChevronRight, LogOut, Menu } from 'lucide-react';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
-import { usePapel } from '../../hooks/usePapel';
+import { usePapelExibicao } from '../../contexts/PreviaAcessoContext';
 import { ClinicaIdentityBlock } from './ClinicaIdentityBlock.jsx';
 import { UsuarioIdentityCard, UsuarioAvatarInner } from './UsuarioIdentityCard.jsx';
 import { ProcediSymbol } from './ProcediSymbol.jsx';
 import { resolveIdentity } from './identityDisplay';
+import { gruposVisiveis } from './navGrupos';
 
-const NAV_ITEMS = [
-  { view: 'pacientes', label: 'Pacientes', icon: Users },
-  { view: 'agenda', label: 'Agenda', icon: CalendarDays },
-  { view: 'gestao-equipe', label: 'Gestão de Equipe', icon: UserCog },
-  { view: 'auditoria', label: 'Auditoria', icon: History },
-  { view: 'configuracoes', label: 'Configurações', icon: Settings },
-];
+const FOCO = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-accent';
+
+function nomeItem(item, pendenciasEquipe) {
+  if (item.view !== 'gestao-equipe' || !(pendenciasEquipe > 0)) return undefined;
+  return `${item.label} · ${pendenciasEquipe} ${pendenciasEquipe === 1 ? 'pendência' : 'pendências'}`;
+}
+
+function Ponto({ className = '' }) {
+  return <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full bg-red-500 ${className}`} />;
+}
+
+/** Menu do trilho recolhido (64px): sem títulos, um traço entre grupos. */
+function NavTrilhoAgrupado({ grupos, activeView, irParaTela, pendenciasEquipe }) {
+  return (
+    <nav className="flex flex-1 flex-col gap-2 px-1 pt-1">
+      {grupos.map((g, idx) => (
+        <React.Fragment key={g.id}>
+          {idx > 0 ? <div aria-hidden className="mx-auto h-px w-6 shrink-0 bg-app-border" /> : null}
+          {g.itens.map((item) => {
+            const NavIcon = item.icon;
+            const aria = nomeItem(item, pendenciasEquipe);
+            return (
+              <button
+                key={item.view}
+                type="button"
+                title={item.label}
+                aria-label={aria}
+                onClick={() => irParaTela(item.view)}
+                className={`relative mx-auto flex h-10 w-10 toque:h-11 toque:w-11 items-center justify-center rounded-xl transition-all ${FOCO} ${
+                  activeView === item.view
+                    ? 'bg-emerald-50 text-app-accent-deep shadow-sm ring-1 ring-emerald-200/60'
+                    : 'text-[#64748b] hover:bg-app-nav-hover active:bg-app-nav-active hover:text-app-accent-deep'
+                }`}
+              >
+                <NavIcon className="h-5 w-5 shrink-0" strokeWidth={2} />
+                {aria ? <Ponto className="absolute right-1 top-1" /> : null}
+              </button>
+            );
+          })}
+        </React.Fragment>
+      ))}
+    </nav>
+  );
+}
+
+/** Menu expandido em grupos que abrem e fecham (estado em memória, vem do Sidebar). */
+function NavGruposAbertos({ grupos, fechados, alternar, activeView, irParaTela, pendenciasEquipe }) {
+  return (
+    <nav className="flex flex-1 flex-col space-y-2 px-2 lg:px-4">
+      {grupos.map((g) => {
+        const aberto = !fechados[g.id];
+        return (
+          <div key={g.id} className="flex flex-col space-y-1">
+            <button
+              type="button"
+              aria-expanded={aberto}
+              onClick={() => alternar(g.id)}
+              className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1 toque:min-h-[44px] text-left text-[11px] font-bold uppercase tracking-wide text-[#94a3b8] ${FOCO}`}
+            >
+              <span className="min-w-0 truncate">{g.titulo}</span>
+              <ChevronDown
+                className={`h-4 w-4 shrink-0 transition-transform ${aberto ? '' : '-rotate-90'}`}
+                strokeWidth={2.25}
+              />
+            </button>
+            {aberto
+              ? g.itens.map((item) => {
+                  const NavIcon = item.icon;
+                  const aria = nomeItem(item, pendenciasEquipe);
+                  return (
+                    <button
+                      key={item.view}
+                      type="button"
+                      title={item.label}
+                      aria-label={aria}
+                      onClick={() => irParaTela(item.view)}
+                      className={`flex min-h-[44px] w-full items-center gap-3 rounded-xl pl-2 pr-4 py-3 text-left text-[14px] font-semibold transition-all border-l-2 ${FOCO} ${
+                        activeView === item.view
+                          ? 'border-l-app-accent bg-emerald-50 text-app-accent-deep'
+                          : 'border-l-transparent bg-white text-[#64748b] hover:bg-app-nav-hover active:bg-app-nav-active hover:text-app-accent-deep'
+                      }`}
+                    >
+                      <NavIcon className="h-5 w-5 shrink-0" strokeWidth={2} />
+                      <span className="min-w-0 flex-1">{item.label}</span>
+                      {aria ? <Ponto /> : null}
+                    </button>
+                  );
+                })
+              : null}
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
 
 const DESKTOP_COLLAPSED_KEY = 'procedi.sidebar.desktopCollapsed';
 
@@ -41,6 +131,7 @@ function readDesktopCollapsed() {
  *   onOpenClinicaSettings?: () => void,
  *   onOpenPerfilSettings?: () => void,
  *   identidadeNoHeader?: boolean,
+ *   pendenciasEquipe?: number,
  * }} props
  */
 export function Sidebar({
@@ -57,6 +148,7 @@ export function Sidebar({
   onOpenClinicaSettings,
   onOpenPerfilSettings,
   identidadeNoHeader = false,
+  pendenciasEquipe = 0,
 }) {
   const { tituloClinica, clinicaLogoResolved, displayName, shortName, perfilFotoResolved, roleLabel } =
     resolveIdentity({
@@ -71,13 +163,12 @@ export function Sidebar({
   const isDesktop = useMediaQuery('(min-width: 1024px)');
   const [tabletExpanded, setTabletExpanded] = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useState(readDesktopCollapsed);
-  const { canSeeConfigEquipe, canSeeConfig, canSeeConfigAuditoria } = usePapel();
-  const visibleNavItems = NAV_ITEMS.filter((item) => {
-    if (item.view === 'configuracoes') return canSeeConfig;
-    if (item.view === 'gestao-equipe') return canSeeConfigEquipe;
-    if (item.view === 'auditoria') return canSeeConfigAuditoria;
-    return true;
-  });
+  const papel = usePapelExibicao();
+  const { canSeeConfig } = papel;
+  const grupos = gruposVisiveis(papel);
+  const visibleNavItems = grupos.flatMap((g) => g.itens);
+  const [fechados, setFechados] = useState({});
+  const alternarGrupo = (id) => setFechados((f) => ({ ...f, [id]: !f[id] }));
 
   useEffect(() => {
     if (!isTabletSidebar) {
@@ -103,11 +194,24 @@ export function Sidebar({
     onRailWidthPxChange?.(railWidthPx);
   }, [railWidthPx, onRailWidthPxChange]);
 
+  // --sidebar-w: largura real do menu (0 abaixo de 768px, onde ele fica escondido)
+  const menuVisivel = isDesktop || isTabletSidebar;
+  useEffect(() => {
+    document.documentElement.style.setProperty('--sidebar-w', menuVisivel ? `${railWidthPx}px` : '0px');
+  }, [railWidthPx, menuVisivel]);
+
   const asideZ = isTabletSidebar && tabletExpanded ? 'relative z-[100]' : 'relative z-auto';
 
   const openRailWide = () => {
     if (isTabletSidebar) setTabletExpanded(true);
     if (isDesktop) setDesktopCollapsed(false);
+  };
+
+  const mostrarBotaoFio = identidadeNoHeader && (isDesktop || isTabletSidebar);
+  const alternarMenu = () => {
+    if (narrowRail) openRailWide();
+    else if (isDesktop) setDesktopCollapsed(true);
+    else setTabletExpanded(false);
   };
 
   return (
@@ -121,20 +225,39 @@ export function Sidebar({
         />
       ) : null}
 
+      <div className={`relative hidden h-full shrink-0 md:flex transition-[width] duration-200 ease-out ${railW} ${asideZ}`}>
+      {mostrarBotaoFio ? (
+        <button
+          type="button"
+          onClick={alternarMenu}
+          className={`procedi-menu-botao absolute -right-[15px] top-[70.5px] z-[45] ${FOCO}`}
+          aria-label={narrowRail ? 'Abrir menu' : 'Recolher menu'}
+          title={narrowRail ? 'Abrir menu' : 'Recolher menu'}
+          aria-expanded={!narrowRail}
+        >
+          {narrowRail ? <ChevronRight className="h-4 w-4" strokeWidth={2} aria-hidden /> : <ChevronLeft className="h-4 w-4" strokeWidth={2} aria-hidden />}
+        </button>
+      ) : null}
       <aside
-        className={`hidden h-full shrink-0 flex-col overflow-hidden border-r border-app-border bg-white shadow-app-sidebar transition-[width] duration-200 ease-out md:flex ${railW} ${asideZ}`}
+        className={`relative flex h-full w-full flex-col overflow-hidden border-r border-app-border ${identidadeNoHeader ? 'procedi-menu-fundo' : 'bg-white'} shadow-app-sidebar`}
       >
         {narrowRail ? (
           <>
-            <div className="flex w-full flex-col items-center border-b border-app-border pb-2 pt-1 transition-opacity duration-200">
+            <div className={identidadeNoHeader ? 'procedi-marca procedi-marca--recolhida w-full' : 'flex w-full flex-col items-center border-b border-app-border pb-2 pt-1 transition-opacity duration-200'}>
               <button
                 type="button"
                 onClick={openRailWide}
-                className="mx-auto mt-3 flex h-10 w-10 items-center justify-center rounded-xl text-[#64748b] transition-all hover:bg-app-nav-hover active:bg-app-nav-active hover:text-app-accent-deep"
+                className={identidadeNoHeader
+                  ? `flex h-full w-full items-center justify-center ${FOCO}`
+                  : `mx-auto mt-3 flex h-10 w-10 toque:h-11 toque:w-11 items-center justify-center rounded-xl text-[#64748b] transition-all hover:bg-app-nav-hover active:bg-app-nav-active hover:text-app-accent-deep ${FOCO}`}
                 aria-label="Expandir menu"
                 title="Menu"
               >
-                <Menu className="h-5 w-5 shrink-0" strokeWidth={2.25} />
+                {identidadeNoHeader ? (
+                  <span className="procedi-marca-simbolo"><ProcediSymbol viewBox="8.5 1.5 15 29" className="h-[30px] w-[15.5px] shrink-0" /></span>
+                ) : (
+                  <Menu className="h-5 w-5 shrink-0" strokeWidth={2.25} />
+                )}
               </button>
             </div>
 
@@ -161,6 +284,14 @@ export function Sidebar({
               </div>
             ) : null}
 
+            {identidadeNoHeader ? (
+              <NavTrilhoAgrupado
+                grupos={grupos}
+                activeView={activeView}
+                irParaTela={irParaTela}
+                pendenciasEquipe={pendenciasEquipe}
+              />
+            ) : (
             <nav className="flex flex-1 flex-col gap-2 px-1 pt-1">
               {visibleNavItems.map((item) => {
                 const NavIcon = item.icon;
@@ -181,13 +312,14 @@ export function Sidebar({
                 );
               })}
             </nav>
+            )}
 
             <div className="mt-auto border-t border-app-border p-3">
               <button
                 type="button"
                 title="Sair do Sistema"
                 onClick={handleLogout}
-                className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl text-[#ef4444] transition-all hover:bg-red-50 active:bg-red-100"
+                className={`mx-auto flex h-10 w-10 toque:h-11 toque:w-11 items-center justify-center rounded-xl text-[#ef4444] transition-all hover:bg-red-50 active:bg-red-100 ${FOCO}`}
               >
                 <LogOut className="h-5 w-5 shrink-0" strokeWidth={2.5} />
               </button>
@@ -197,11 +329,11 @@ export function Sidebar({
 
         {!narrowRail && isDesktop ? (
           <>
-            <div className="flex items-center gap-2 border-b border-app-border p-4 pl-4 pr-3 transition-opacity duration-200">
+            <div className={identidadeNoHeader ? 'procedi-marca' : 'flex items-center gap-2 border-b border-app-border p-4 pl-4 pr-3 transition-opacity duration-200'}>
               {identidadeNoHeader ? (
                 <div className="flex min-w-0 flex-1 items-center gap-2" data-testid="sidebar-brand">
-                  <ProcediSymbol className="h-8 w-8 shrink-0" />
-                  <span className="truncate font-semibold text-teal-700">Procedi</span>
+                  <span className="procedi-marca-simbolo"><ProcediSymbol viewBox="8.5 1.5 15 29" className="h-[42px] w-[21.7px] shrink-0" /></span>
+                  <span className="procedi-marca-nome font-brand">Procedi</span>
                 </div>
               ) : (
                 <ClinicaIdentityBlock
@@ -212,15 +344,17 @@ export function Sidebar({
                   onOpenClinicaSettings={onOpenClinicaSettings}
                 />
               )}
-              <button
-                type="button"
-                onClick={() => setDesktopCollapsed(true)}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-app-border text-[#64748b] transition-all hover:bg-app-nav-hover active:bg-app-nav-active hover:text-app-accent-deep"
-                aria-label="Recolher menu"
-                title="Recolher"
-              >
-                <ChevronLeft className="h-5 w-5 shrink-0" strokeWidth={2.25} />
-              </button>
+              {!identidadeNoHeader ? (
+                <button
+                  type="button"
+                  onClick={() => setDesktopCollapsed(true)}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-app-border text-[#64748b] transition-all hover:bg-app-nav-hover active:bg-app-nav-active hover:text-app-accent-deep"
+                  aria-label="Recolher menu"
+                  title="Recolher"
+                >
+                  <ChevronLeft className="h-5 w-5 shrink-0" strokeWidth={2.25} />
+                </button>
+              ) : null}
             </div>
 
             {!identidadeNoHeader ? (
@@ -235,6 +369,16 @@ export function Sidebar({
               />
             ) : null}
 
+            {identidadeNoHeader ? (
+              <NavGruposAbertos
+                grupos={grupos}
+                fechados={fechados}
+                alternar={alternarGrupo}
+                activeView={activeView}
+                irParaTela={irParaTela}
+                pendenciasEquipe={pendenciasEquipe}
+              />
+            ) : (
             <nav className="flex flex-1 flex-col space-y-2 px-2 lg:px-4">
               {visibleNavItems.map((item) => {
                 const NavIcon = item.icon;
@@ -256,12 +400,13 @@ export function Sidebar({
                 );
               })}
             </nav>
+            )}
 
             <div className="border-t border-app-border p-4">
               <button
                 type="button"
                 onClick={handleLogout}
-                className="flex min-h-[44px] w-full items-center gap-3 rounded-xl px-4 py-3 text-[14px] font-bold text-[#ef4444] transition-all hover:bg-red-50 active:bg-red-100"
+                className={`flex min-h-[44px] w-full items-center gap-3 rounded-xl px-4 py-3 text-[14px] font-bold text-[#ef4444] transition-all hover:bg-red-50 active:bg-red-100 ${FOCO}`}
               >
                 <LogOut className="h-5 w-5 shrink-0" strokeWidth={2.5} />
                 <span>Sair do Sistema</span>
@@ -272,20 +417,22 @@ export function Sidebar({
 
         {!narrowRail && isTabletSidebar && tabletExpanded ? (
           <>
-            <div className="flex w-full items-center gap-2 border-b border-app-border px-4 pt-3">
-              <button
-                type="button"
-                onClick={() => setTabletExpanded(false)}
-                className="flex h-10 w-10 items-center justify-center rounded-xl text-[#64748b] transition-all hover:bg-app-nav-hover active:bg-app-nav-active hover:text-app-accent-deep"
-                aria-label="Recolher menu"
-                title="Recolher"
-              >
-                <ChevronLeft className="h-5 w-5 shrink-0" strokeWidth={2.25} />
-              </button>
+            <div className={identidadeNoHeader ? 'procedi-marca w-full' : 'flex w-full items-center gap-2 border-b border-app-border px-4 pt-3'}>
+              {!identidadeNoHeader ? (
+                <button
+                  type="button"
+                  onClick={() => setTabletExpanded(false)}
+                  className={`flex h-10 w-10 toque:h-11 toque:w-11 shrink-0 items-center justify-center rounded-xl text-[#64748b] transition-all hover:bg-app-nav-hover active:bg-app-nav-active hover:text-app-accent-deep ${FOCO}`}
+                  aria-label="Recolher menu"
+                  title="Recolher"
+                >
+                  <ChevronLeft className="h-5 w-5 shrink-0" strokeWidth={2.25} />
+                </button>
+              ) : null}
               {identidadeNoHeader ? (
                 <div className="flex min-w-0 flex-1 items-center gap-2" data-testid="sidebar-tablet-brand">
-                  <ProcediSymbol className="h-8 w-8 shrink-0" />
-                  <span className="truncate font-semibold text-teal-700">Procedi</span>
+                  <span className="procedi-marca-simbolo"><ProcediSymbol viewBox="8.5 1.5 15 29" className="h-[42px] w-[21.7px] shrink-0" /></span>
+                  <span className="procedi-marca-nome font-brand">Procedi</span>
                 </div>
               ) : null}
             </div>
@@ -312,6 +459,16 @@ export function Sidebar({
               </>
             ) : null}
 
+            {identidadeNoHeader ? (
+              <NavGruposAbertos
+                grupos={grupos}
+                fechados={fechados}
+                alternar={alternarGrupo}
+                activeView={activeView}
+                irParaTela={irParaTela}
+                pendenciasEquipe={pendenciasEquipe}
+              />
+            ) : (
             <nav className="flex flex-1 flex-col space-y-2 px-2 lg:px-4">
               {visibleNavItems.map((item) => {
                 const NavIcon = item.icon;
@@ -333,12 +490,13 @@ export function Sidebar({
                 );
               })}
             </nav>
+            )}
 
             <div className="border-t border-app-border p-4">
               <button
                 type="button"
                 onClick={handleLogout}
-                className="flex min-h-[44px] w-full items-center gap-3 rounded-xl px-4 py-3 text-[14px] font-bold text-[#ef4444] transition-all hover:bg-red-50 active:bg-red-100"
+                className={`flex min-h-[44px] w-full items-center gap-3 rounded-xl px-4 py-3 text-[14px] font-bold text-[#ef4444] transition-all hover:bg-red-50 active:bg-red-100 ${FOCO}`}
               >
                 <LogOut className="h-5 w-5 shrink-0" strokeWidth={2.5} />
                 <span>Sair do Sistema</span>
@@ -347,6 +505,7 @@ export function Sidebar({
           </>
         ) : null}
       </aside>
+      </div>
     </>
   );
 }

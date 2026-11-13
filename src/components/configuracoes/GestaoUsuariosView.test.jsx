@@ -4,7 +4,9 @@ import {
   screen,
   fireEvent,
   waitFor,
+  within,
   cleanup,
+  act,
 } from "@testing-library/react";
 import { GestaoUsuariosView } from "./GestaoUsuariosView";
 import {
@@ -24,7 +26,10 @@ const mocks = vi.hoisted(() => ({
   agenda: vi.fn(),
   toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() },
 }));
-vi.mock("../../hooks/usePapel", () => ({ usePapel: () => mocks.access }));
+vi.mock("../../hooks/usePapel", async (importOriginal) => ({
+  ...(await importOriginal()), // papelDe real: o menu da janela Atribuir perfil o usa
+  usePapel: () => mocks.access,
+}));
 vi.mock("../../contexts/useToast.js", () => ({ useToast: () => mocks.toast }));
 vi.mock("../../contexts/OrgContext", () => ({
   useOrg: () => ({
@@ -185,14 +190,20 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  localStorage.removeItem("procedi_pinned_profiles_undefined"); // fixados gravados por um teste não vazam
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
 
-it("busca por e-mail, filtra quem atende por campo real e distingue convites indisponíveis", async () => {
+it("busca por e-mail, filtra quem atende por campo real e o card 'Precisam de você' filtra sem toast", async () => {
   montar();
   await screen.findByRole("button", { name: "Ver Bruno Silva" });
-  fireEvent.click(screen.getAllByRole("button", { name: /Atendem na agenda/ })[0]);
+  const cardAgenda = screen.getByRole("button", { name: /ATENDEM NA AGENDA/ });
+  fireEvent.click(cardAgenda);
+  expect(cardAgenda).toHaveAttribute("aria-pressed", "true");
+  expect(
+    screen.getByRole("button", { name: "Ver Bruno Silva" }),
+  ).toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Ver Ana Dono" }),
   ).not.toBeInTheDocument();
@@ -206,8 +217,14 @@ it("busca por e-mail, filtra quem atende por campo real e distingue convites ind
     target: { value: "não existe" },
   });
   expect(screen.getByText("Nenhuma pessoa encontrada")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: /convites pendentes/i }));
-  expect(mocks.toast.info).toHaveBeenCalled();
+  // "Convites pendentes" saiu; o card "Precisam de você" (ativos sem perfil) filtra, sem aviso
+  const cardPrecisam = screen.getByRole("button", { name: /PRECISAM DE VOCÊ/ });
+  expect(cardPrecisam).toHaveAttribute("aria-pressed", "false");
+  fireEvent.click(cardPrecisam);
+  expect(cardPrecisam).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByText(/Status: Sem perfil/)).toBeInTheDocument();
+  expect(screen.getByText("Nenhuma pessoa encontrada")).toBeInTheDocument();
+  expect(mocks.toast.info).not.toHaveBeenCalled();
 });
 it("abre histórico individual e protege dono de desativação", async () => {
   montar();
@@ -602,29 +619,33 @@ it("sem permissão de equipe não abre target de outro membro", async () => {
   expect(fetch).not.toHaveBeenCalled();
 });
 
-it("abre popover de filtros, filtra por status e agenda, e limpa filtros com badge reativo", async () => {
-  montar();
+it("abre a folha 'Filtrar pessoas', filtra por status e agenda, e limpa filtros com badge reativo", async () => {
+  const { container } = montar();
   await screen.findByRole("button", { name: "Ver Bruno Silva" });
 
   const filterBtn = screen.getByRole("button", { name: "Filtros" });
   expect(filterBtn).toBeInTheDocument();
-  expect(screen.queryByRole("dialog", { name: "Opções de filtros" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("dialog", { name: "Filtrar pessoas" })).not.toBeInTheDocument();
 
-  // Abre popover
+  // Abre a folha (portal no body, fora do container da tela)
   fireEvent.click(filterBtn);
-  expect(screen.getByRole("dialog", { name: "Opções de filtros" })).toBeInTheDocument();
+  const folha = screen.getByRole("dialog", { name: "Filtrar pessoas" });
+  expect(folha).toBeInTheDocument();
+  expect(container.contains(folha)).toBe(false);
+  expect(screen.getByRole("button", { name: "Ver 2 pessoas" })).toBeInTheDocument();
 
-  // Seleciona Apenas Ativos
-  fireEvent.click(screen.getByLabelText("Apenas Ativos"));
+  // Marca Ativos
+  fireEvent.click(within(folha).getByLabelText("Ativos"));
   expect(filterBtn.querySelector(".filter-btn-count")).toHaveTextContent("1");
 
-  // Filtra por Não atendem na agenda
-  fireEvent.click(screen.getByLabelText("Não atendem"));
+  // Filtra por Não atendem na agenda: só Ana Dono
+  fireEvent.click(within(folha).getByLabelText("Não atendem"));
   expect(filterBtn.querySelector(".filter-btn-count")).toHaveTextContent("2");
+  expect(screen.getByRole("button", { name: "Ver 1 pessoa" })).toBeInTheDocument();
 
-  // Fecha popover com botão Fechar
-  fireEvent.click(screen.getByRole("button", { name: "Fechar" }));
-  expect(screen.queryByRole("dialog", { name: "Opções de filtros" })).not.toBeInTheDocument();
+  // Fecha a folha com o botão Fechar filtros
+  fireEvent.click(screen.getByRole("button", { name: "Fechar filtros" }));
+  expect(screen.queryByRole("dialog", { name: "Filtrar pessoas" })).not.toBeInTheDocument();
 
   // Verifica barra de filtros ativos
   expect(screen.getByLabelText("Filtros ativos")).toBeInTheDocument();
@@ -645,10 +666,19 @@ it("abre menu de ordenação e seleciona opções de ordenação", async () => {
   await screen.findByRole("button", { name: "Ver Bruno Silva" });
 
   const sortBtn = screen.getByRole("button", { name: "Opções de ordenação" });
-  expect(sortBtn).toHaveTextContent("Nome (A–Z)");
+  expect(sortBtn).toHaveTextContent("Hierarquia");
 
   fireEvent.click(sortBtn);
-  expect(screen.getByRole("menu", { name: "Menu de ordenação" })).toBeInTheDocument();
+  const menu = screen.getByRole("menu", { name: "Menu de ordenação" });
+  expect(
+    within(menu).getAllByRole("menuitem").map((i) => i.textContent.trim()),
+  ).toEqual([
+    expect.stringContaining("Hierarquia"),
+    expect.stringContaining("Nome (A–Z)"),
+    expect.stringContaining("Nome (Z–A)"),
+    expect.stringContaining("Perfil de acesso"),
+    expect.stringContaining("Mais atendimentos"),
+  ]);
 
   // Seleciona Nome (Z–A)
   fireEvent.click(screen.getByRole("menuitem", { name: /Nome \(Z–A\)/ }));
@@ -659,56 +689,56 @@ it("abre menu de ordenação e seleciona opções de ordenação", async () => {
   fireEvent.click(sortBtn);
   fireEvent.click(screen.getByRole("menuitem", { name: /Perfil de acesso/ }));
   expect(sortBtn).toHaveTextContent("Perfil de acesso");
+
+  // Nome (A–Z) e Mais atendimentos também ficam selecionáveis
+  fireEvent.click(sortBtn);
+  fireEvent.click(screen.getByRole("menuitem", { name: /Nome \(A–Z\)/ }));
+  expect(sortBtn).toHaveTextContent("Nome (A–Z)");
+  fireEvent.click(sortBtn);
+  fireEvent.click(screen.getByRole("menuitem", { name: /Mais atendimentos/ }));
+  expect(sortBtn).toHaveTextContent("Mais atendimentos");
 });
 
-it("permite filtrar equipe usando os chips rápidos integrados abaixo da busca", async () => {
-  montar();
+it("permite filtrar equipe usando os indicadores (cards) do topo", async () => {
+  const { container } = montar();
   await screen.findByRole("button", { name: "Ver Bruno Silva" });
 
-  const quickChips = screen.getByLabelText("Filtros rápidos de status");
-  expect(quickChips).toBeInTheDocument();
+  const grupo = screen.getByLabelText("Filtros rápidos de status");
+  expect(grupo).toBeInTheDocument();
+  // os botões rápidos (.quick-chip) saíram: o filtro vive nos indicadores
+  expect(container.querySelector(".quick-chip")).toBeNull();
 
-  // Clica no chip "Ativos"
-  const chipAtivos = Array.from(quickChips.querySelectorAll(".quick-chip")).find((c) =>
-    c.textContent.includes("Ativos"),
-  );
-  expect(chipAtivos).toBeTruthy();
-  fireEvent.click(chipAtivos);
+  // Clica no card "Ativos"
+  const cardAtivos = within(grupo).getByRole("button", { name: /^ATIVOS/ });
+  expect(cardAtivos).toHaveAttribute("aria-pressed", "false");
+  fireEvent.click(cardAtivos);
 
-  expect(chipAtivos).toHaveClass("active");
+  expect(cardAtivos).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByText(/Status: Ativos/)).toBeInTheDocument();
 
-  // Clica no chip "Todos" para resetar
-  const chipTodos = Array.from(quickChips.querySelectorAll(".quick-chip")).find((c) =>
-    c.textContent.includes("Todos"),
-  );
-  fireEvent.click(chipTodos);
-  expect(chipTodos).toHaveClass("active");
+  // Clica de novo no mesmo card para desligar
+  fireEvent.click(cardAtivos);
+  expect(cardAtivos).toHaveAttribute("aria-pressed", "false");
   expect(screen.queryByText(/Status: Ativos/)).not.toBeInTheDocument();
 });
 
-it("aplica filtros de forma acumulativa entre múltiplos chips e pílulas ativas", async () => {
+it("aplica filtros de forma acumulativa entre múltiplos indicadores e pílulas ativas", async () => {
   montar();
   await screen.findByRole("button", { name: "Ver Bruno Silva" });
 
-  const quickChips = screen.getByLabelText("Filtros rápidos de status");
-
-  const chipAtivos = Array.from(quickChips.querySelectorAll(".quick-chip")).find((c) =>
-    c.textContent.includes("Ativos"),
-  );
-  const chipAgenda = Array.from(quickChips.querySelectorAll(".quick-chip")).find((c) =>
-    c.textContent.includes("Atendem na agenda"),
-  );
+  const grupo = screen.getByLabelText("Filtros rápidos de status");
+  const cardAtivos = within(grupo).getByRole("button", { name: /^ATIVOS/ });
+  const cardAgenda = within(grupo).getByRole("button", { name: /ATENDEM NA AGENDA/ });
 
   // 1. Clica em "Ativos"
-  fireEvent.click(chipAtivos);
-  expect(chipAtivos).toHaveClass("active");
+  fireEvent.click(cardAtivos);
+  expect(cardAtivos).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByText(/Status: Ativos/)).toBeInTheDocument();
 
   // 2. Clica em "Atendem na agenda" sem desativar "Ativos" (acumulativo)
-  fireEvent.click(chipAgenda);
-  expect(chipAtivos).toHaveClass("active");
-  expect(chipAgenda).toHaveClass("active");
+  fireEvent.click(cardAgenda);
+  expect(cardAtivos).toHaveAttribute("aria-pressed", "true");
+  expect(cardAgenda).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByText(/Status: Ativos/)).toBeInTheDocument();
   expect(screen.getByText(/Agenda: Atendem/)).toBeInTheDocument();
 
@@ -716,14 +746,16 @@ it("aplica filtros de forma acumulativa entre múltiplos chips e pílulas ativas
   const removeStatusBtn = screen.getByRole("button", { name: "Remover filtro de status" });
   fireEvent.click(removeStatusBtn);
   expect(screen.queryByText(/Status: Ativos/)).not.toBeInTheDocument();
+  expect(cardAtivos).toHaveAttribute("aria-pressed", "false");
   // "Agenda: Atendem" continua ativo!
-  expect(chipAgenda).toHaveClass("active");
+  expect(cardAgenda).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByText(/Agenda: Atendem/)).toBeInTheDocument();
 
   // 4. Limpar todos limpa o que restava
   const clearBtn = screen.getByRole("button", { name: "Limpar todos" });
   fireEvent.click(clearBtn);
   expect(screen.queryByText(/Agenda: Atendem/)).not.toBeInTheDocument();
+  expect(cardAgenda).toHaveAttribute("aria-pressed", "false");
 });
 
 it("abre a ficha do usuário ao clicar em qualquer lugar do bloco retangular da linha", async () => {
@@ -849,7 +881,7 @@ it("abre a ficha do perfil ao clicar no rail, e fechar a ficha (✕) remove o ba
   expect(screen.queryByText(/Perfil: Clínico/)).not.toBeInTheDocument();
 });
 
-it("abre o modal 'Todos os Perfis', permite busca, fixar/desafixar perfil no rail e abrir ficha", async () => {
+it("abre a janela 'Todos os perfis de acesso', permite busca, fixar/desafixar perfil no rail e abrir ficha", async () => {
   const { container } = montar();
   await screen.findByRole("button", { name: "Ver Bruno Silva" });
 
@@ -862,7 +894,7 @@ it("abre o modal 'Todos os Perfis', permite busca, fixar/desafixar perfil no rai
 
   // Modal aberto
   const modal = screen.getByRole("dialog", {
-    name: "Todos os Perfis de Acesso",
+    name: "Todos os perfis de acesso",
   });
   expect(modal).toBeInTheDocument();
 
@@ -874,13 +906,447 @@ it("abre o modal 'Todos os Perfis', permite busca, fixar/desafixar perfil no rai
   // Testa fixar/desafixar
   const pinBtn = screen.getByRole("button", { name: /Fixar Clínico|Desafixar Clínico/i });
   expect(pinBtn).toBeInTheDocument();
+  const estavaFixado = /^Desafixar/.test(pinBtn.getAttribute("aria-label"));
   fireEvent.click(pinBtn);
+  expect(
+    screen.getByRole("button", { name: estavaFixado ? "Fixar Clínico" : "Desafixar Clínico" }),
+  ).toBeInTheDocument();
 
-  // Clica no botão Ficha para abrir a ficha do perfil
-  const fichaBtn = screen.getByRole("button", { name: "Abrir ficha de Clínico" });
+  // Clica em "Ver ficha de Clínico" para abrir a ficha do perfil
+  const fichaBtn = screen.getByRole("button", { name: "Ver ficha de Clínico" });
   fireEvent.click(fichaBtn);
 
   // Modal fecha e ficha abre na tela principal
-  expect(screen.queryByRole("dialog", { name: "Todos os Perfis de Acesso" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("dialog", { name: "Todos os perfis de acesso" })).not.toBeInTheDocument();
   expect(container.querySelector(".pban")).toHaveTextContent("Clínico");
+});
+
+// ---- Onda 3: barra de perfis, fixados, janela "Todos os perfis de acesso" ----
+const catalogo7 = [1, 2, 3, 4, 5, 6].map((n) => ({
+  permissaoId: `p${n}`,
+  codigo: `PERM_${n}`,
+  modulo: "PACIENTES",
+  nome: `Função ${n}`,
+}));
+const perfis7 = [
+  { id: "sec3", nome: "Secretaria-3" },
+  { id: "dono", codigo: "DONO", nome: "Dono" },
+  { id: "clin", nome: "Profissional Clínico" },
+  { id: "sec1", nome: "Secretaria-1" },
+  { id: "adm", nome: "Administrador" },
+  { id: "socio", nome: "Sócio / Investidor" },
+  { id: "sec2", nome: "Secretaria-2" },
+];
+const funcoes7 = {
+  dono: ["p1", "p2", "p3", "p4", "p5", "p6"],
+  adm: ["p1", "p2", "p3", "p4", "p5"],
+  socio: ["p1", "p2", "p3", "p4"],
+  clin: ["p1", "p2", "p3"],
+  sec1: ["p1", "p2"],
+  sec2: ["p1", "p2"],
+  sec3: ["p1"],
+};
+const ordem7 = [
+  "Dono",
+  "Administrador",
+  "Sócio / Investidor",
+  "Profissional Clínico",
+  "Secretaria-1",
+  "Secretaria-2",
+  "Secretaria-3",
+];
+function mockSetePerfis() {
+  const original = fetch.getMockImplementation();
+  fetch.mockImplementation(async (url, options) => {
+    const u = String(url);
+    const id = u.match(/perfis-acesso\/([^/]+)\/permissoes/);
+    if (id) return { ok: true, json: async () => funcoes7[id[1]] || [] };
+    if (u.endsWith("/perfis-acesso"))
+      return { ok: true, json: async () => perfis7 };
+    if (u.endsWith("/permissoes"))
+      return { ok: true, json: async () => catalogo7 };
+    return original(url, options);
+  });
+}
+const nomesBarra = (container) =>
+  [...container.querySelectorAll(".pcw button .nm")].map((n) => n.textContent);
+
+it("barra de perfis: Dono, depois quem tem mais funções, empate pelo nome", async () => {
+  mockSetePerfis();
+  const { container } = montar();
+  await waitFor(() =>
+    expect(nomesBarra(container)).toEqual(["Toda a equipe", ...ordem7]),
+  );
+});
+
+it("barra de perfis abaixo de 1280 px: etiqueta que não coube fica hidden, 'Todos os perfis' à vista e sem overflow-x", async () => {
+  mockSetePerfis();
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  // três linhas simuladas: filhos 0-2 na linha 1, 3-5 na linha 2, 6-7 na linha 3 (não cabe)
+  Object.defineProperty(HTMLElement.prototype, "offsetTop", {
+    configurable: true,
+    get() {
+      const i = [...(this.parentElement?.children || [])].indexOf(this);
+      return this.parentElement?.classList.contains("pcw")
+        ? Math.floor(i / 3) * 40
+        : 0;
+    },
+  });
+  try {
+    const { container } = montar();
+    await waitFor(() =>
+      expect(nomesBarra(container)).toContain("Secretaria-3"),
+    );
+    const chip = (nome) =>
+      [...container.querySelectorAll(".pcw button")].find(
+        (b) => b.querySelector(".nm")?.textContent === nome,
+      );
+    await waitFor(() => expect(chip("Secretaria-3")).toHaveAttribute("hidden"));
+    expect(chip("Secretaria-2")).toHaveAttribute("hidden");
+    expect(chip("Secretaria-1")).not.toHaveAttribute("hidden");
+    const todos = screen.getByRole("button", { name: "Todos os perfis (7)" });
+    expect(todos).toBeVisible();
+    expect(todos.closest("[hidden]")).toBeNull();
+    expect(container.querySelector(".pchips").style.overflowX).toBe("");
+    expect(container.querySelector(".pcw").style.overflowX).toBe("");
+  } finally {
+    delete HTMLElement.prototype.offsetTop;
+  }
+});
+
+it("fixados guardados: ids que não existem mais saem do navegador ao carregar", async () => {
+  
+  const chave = "procedi_pinned_profiles_undefined";
+  localStorage.setItem(chave, JSON.stringify(["clin", "apagado"]));
+  mockSetePerfis();
+  const { container } = montar();
+  await waitFor(() =>
+    expect(nomesBarra(container)).toEqual(["Toda a equipe", "Profissional Clínico"]),
+  );
+  expect(JSON.parse(localStorage.getItem(chave))).toEqual(["clin"]);
+  localStorage.removeItem(chave);
+});
+
+it("janela 'Todos os perfis de acesso': busca, Fixar todos / Desafixar todos, Ver ficha e Criar perfil", async () => {
+  
+  const chave = "procedi_pinned_profiles_undefined";
+  localStorage.removeItem(chave);
+  mockSetePerfis();
+  const { container } = montar();
+  await waitFor(() => expect(nomesBarra(container)).toContain("Secretaria-3"));
+  fireEvent.click(screen.getByRole("button", { name: "Todos os perfis (7)" }));
+  const janela = screen.getByRole("dialog", { name: "Todos os perfis de acesso" });
+  const nomes = () =>
+    [...janela.querySelectorAll(".modal-perfil-name")].map((n) => n.textContent);
+  expect(nomes()).toEqual(ordem7);
+  expect(janela.textContent).toContain("5 de 6 funções");
+  fireEvent.change(screen.getByLabelText("Buscar perfil na lista completa"), {
+    target: { value: "secretaria" },
+  });
+  expect(nomes()).toEqual(["Secretaria-1", "Secretaria-2", "Secretaria-3"]);
+  fireEvent.change(screen.getByLabelText("Buscar perfil na lista completa"), {
+    target: { value: "" },
+  });
+  fireEvent.click(within(janela).getByRole("button", { name: "Desafixar todos" }));
+  expect(JSON.parse(localStorage.getItem(chave))).toEqual(["dono"]);
+  expect(nomesBarra(container)).toEqual(["Toda a equipe", "Dono"]);
+  fireEvent.click(within(janela).getByRole("button", { name: "Fixar todos" }));
+  expect(JSON.parse(localStorage.getItem(chave))).toHaveLength(7);
+  fireEvent.click(within(janela).getByRole("button", { name: "Ver ficha de Administrador" }));
+  expect(screen.queryByRole("dialog", { name: "Todos os perfis de acesso" })).toBeNull();
+  expect(container.querySelector(".pban")).toHaveTextContent("Administrador");
+  fireEvent.click(screen.getByRole("button", { name: "Todos os perfis (7)" }));
+  fireEvent.click(screen.getByRole("button", { name: "Criar perfil" }));
+  expect(screen.getByText("Editor de perfis: 1")).toBeInTheDocument();
+  localStorage.removeItem(chave);
+});
+
+it("janela 'Todos os perfis de acesso' não oferece Criar perfil sem canEditConfigPerfil", async () => {
+  mocks.access.canEditConfigPerfil = false;
+  mockSetePerfis();
+  montar();
+  fireEvent.click(await screen.findByRole("button", { name: "Todos os perfis (7)" }));
+  const janela = screen.getByRole("dialog", { name: "Todos os perfis de acesso" });
+  expect(within(janela).getByRole("button", { name: "Pronto" })).toBeInTheDocument();
+  expect(within(janela).queryByRole("button", { name: "Criar perfil" })).toBeNull();
+});
+
+it("cartão do Dono escolhido na barra: ligar 'Aparecer na agenda' faz PUT com apareceNaAgenda:true", async () => {
+  mockOwnerAgendaCatalog();
+  const { container } = montar();
+  await screen.findByRole("button", { name: "Ver Bruno Silva" });
+  const chipDono = [...container.querySelectorAll(".pcw button")].find((b) =>
+    b.textContent.includes("Dono"),
+  );
+  fireEvent.click(chipDono);
+  fireEvent.click(await screen.findByRole("button", { name: /Mais configurações/ }));
+  const toggle = await screen.findByRole("switch", { name: "Aparecer na agenda" });
+  await waitFor(() => expect(toggle).toBeEnabled());
+  fireEvent.click(toggle);
+  await waitFor(() =>
+    expect(mocks.update).toHaveBeenCalledWith("owner", {
+      usuarioId: "owner-user",
+      roleId: "dentista",
+      apareceNaAgenda: true,
+    }),
+  );
+});
+
+// ---- Onda 3 (lista, folha e Atribuir perfil) ----
+// Esperado escrito à mão. Catálogo no formato real; 4 funções contam (AGENDA_APARECER não).
+const catalogoO3 = [
+  { permissaoId: "f1", codigo: "PACIENTE_VER", nome: "Ver pacientes", moduloCodigo: "PACIENTES" },
+  { permissaoId: "f2", codigo: "AGENDA_VER", nome: "Ver agenda", moduloCodigo: "AGENDA" },
+  { permissaoId: "f3", codigo: "PRONTUARIO_VER", nome: "Ver prontuário", moduloCodigo: "PRONTUARIO" },
+  { permissaoId: "f4", codigo: "USUARIO_VER", nome: "Ver usuários", moduloCodigo: "ACESSO" },
+  { permissaoId: "f5", codigo: "AGENDA_APARECER", nome: "Aparecer na agenda", moduloCodigo: "AGENDA" },
+];
+const perfisO3 = [
+  { id: "dono", codigo: "DONO", nome: "Dono" },
+  { id: "ger", nome: "Gerente" }, // 3 funções, ninguém usa
+  { id: "rec", nome: "Recepção" }, // 2 funções
+  { id: "aux", nome: "Auxiliar" }, // 1 função
+];
+const permsO3 = { dono: ["f1", "f2", "f3", "f4"], ger: ["f1", "f2", "f3"], rec: ["f1", "f2"], aux: ["f1"] };
+const equipeO3 = [
+  { id: "owner", usuarioId: "u0", nomeCompleto: "Ana Dono", perfilAcessoId: "dono", perfilAcessoCodigo: "DONO", roleId: "r", roleName: "DENTISTA", ativo: true, apareceNaAgenda: false },
+  { id: "bia", usuarioId: "u1", nomeCompleto: "Bia Recepção", perfilAcessoId: "rec", roleId: "r", roleName: "SECRETARIA", ativo: true, apareceNaAgenda: false },
+  { id: "carla", usuarioId: "u2", nomeCompleto: "Carla Souza", roleId: "r", roleName: "SECRETARIA", ativo: true, apareceNaAgenda: false },
+  { id: "davi", usuarioId: "u3", nomeCompleto: "Davi Lima", roleId: "r", roleName: "SECRETARIA", ativo: false, apareceNaAgenda: false },
+  { id: "edu", usuarioId: "u4", nomeCompleto: "Eduardo Auxiliar", perfilAcessoId: "aux", roleId: "r", roleName: "AUXILIAR", ativo: true, apareceNaAgenda: false },
+];
+const respostaO3 = (url) => {
+  const u = String(url);
+  const ids = u.match(/\/perfis-acesso\/([^/]+)\/permissoes$/);
+  if (ids) return permsO3[ids[1]] || [];
+  if (u.endsWith("/api/v1/permissoes")) return catalogoO3;
+  if (u.endsWith("/equipe")) return equipeO3;
+  if (u.endsWith("/perfis-acesso")) return perfisO3;
+  if (u.endsWith("/roles")) return [{ id: "r", nome: "DENTISTA" }];
+  return [];
+};
+const montarO3 = async () => {
+  fetch.mockImplementation(async (url) => ({ ok: true, json: async () => respostaO3(url) }));
+  const r = montar();
+  await screen.findByRole("button", { name: "Abrir ficha de Ana Dono" });
+  // sinal positivo: as funções dos perfis chegaram (a ordem de hierarquia depende delas)
+  await waitFor(() => expect(r.container.querySelector(".rail")).toHaveTextContent("3 de 4"));
+  return r;
+};
+const nomesDasLinhas = () =>
+  screen
+    .getAllByRole("button", { name: /^Abrir ficha de / })
+    .map((b) => b.getAttribute("aria-label").replace("Abrir ficha de ", ""));
+
+it("Precisam de você: conta só ativa sem perfil, clicar filtra e não há aviso de convite", async () => {
+  const { container } = await montarO3();
+  const card = within(container.querySelector(".kpis")).getByRole("button", { name: /PRECISAM DE VOCÊ/ });
+  expect(card.querySelector(".kpi-value")).toHaveTextContent("1"); // Carla; Davi é inativo
+  expect(screen.queryByRole("button", { name: /convites pendentes/i })).not.toBeInTheDocument();
+  expect(container.querySelector(".kpis")).toHaveAttribute("aria-label", "Filtros rápidos de status");
+  fireEvent.click(card);
+  expect(card).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Abrir ficha de Carla Souza" })).toBeInTheDocument();
+  expect(nomesDasLinhas()).toEqual(["Carla Souza"]);
+  expect(mocks.toast.info).not.toHaveBeenCalled();
+});
+
+it("Folha de filtros: nasce no body, a lista muda com ela aberta e a primeira opção é perfil em uso", async () => {
+  const { container } = await montarO3();
+  expect(nomesDasLinhas()).toHaveLength(5);
+  fireEvent.click(screen.getByRole("button", { name: "Filtros" }));
+  const folha = screen.getByRole("dialog", { name: "Filtrar pessoas" });
+  expect(container.contains(folha)).toBe(false);
+  expect(folha.parentElement.parentElement).toBe(document.body);
+  fireEvent.click(within(folha).getByRole("checkbox", { name: "Ativos" }));
+  expect(screen.getByRole("dialog", { name: "Filtrar pessoas" })).toBeInTheDocument(); // continua aberta
+  expect(nomesDasLinhas()).toHaveLength(4); // Davi (desativado) saiu
+  const secao = within(folha).getByRole("region", { name: "Perfil de acesso" });
+  const nomes = within(secao).getAllByRole("checkbox").map((c) => c.getAttribute("aria-label"));
+  expect(nomes[0]).toBe("Dono"); // em uso (Ana)
+  expect(nomes.indexOf("Gerente")).toBeGreaterThan(nomes.indexOf("Auxiliar")); // ninguém usa: depois dos em uso
+  expect(within(folha).getByText("3 de 4 funções")).toBeInTheDocument();
+  expect(within(folha).getByRole("button", { name: "Ver 4 pessoas" })).toBeInTheDocument();
+});
+
+it("Folha de filtros: Esc fecha e devolve o foco ao botão Filtros; Tab fica preso dentro", async () => {
+  await montarO3();
+  const botao = screen.getByRole("button", { name: "Filtros" });
+  fireEvent.click(botao);
+  const folha = screen.getByRole("dialog", { name: "Filtrar pessoas" });
+  const ultimo = within(folha).getByRole("button", { name: /^Ver \d+ pessoas$/ });
+  ultimo.focus();
+  fireEvent.keyDown(document, { key: "Tab" });
+  expect(folha.contains(document.activeElement)).toBe(true);
+  expect(document.activeElement).not.toBe(ultimo); // voltou ao primeiro
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(screen.queryByRole("dialog", { name: "Filtrar pessoas" })).not.toBeInTheDocument();
+  expect(document.activeElement).toBe(botao);
+});
+
+it("Ordem: padrão Hierarquia, cabeçalho com aria-sort e Nome (A–Z) reordena", async () => {
+  const { container } = await montarO3();
+  expect(screen.getByRole("button", { name: "Opções de ordenação" })).toHaveTextContent("Hierarquia");
+  const cab = [...container.querySelectorAll(".lhd [role=columnheader]")].filter((h) => h.querySelector(".lhd-sort"));
+  expect(cab.map((b) => b.textContent.replace(/[↑↓]/g, ""))).toEqual(["Pessoa e cargo", "Perfil de acesso", "Atendimentos"]);
+  expect(cab.map((b) => b.getAttribute("aria-sort"))).toEqual(["none", "descending", "none"]);
+  expect(container.querySelectorAll(".lhd-sort[aria-sort]")).toHaveLength(0); // aria-sort só no columnheader
+  // Dono, Recepção, Auxiliar; sem perfil por último, pelo nome
+  expect(nomesDasLinhas()).toEqual(["Ana Dono", "Bia Recepção", "Eduardo Auxiliar", "Carla Souza", "Davi Lima"]);
+  fireEvent.click(screen.getByRole("button", { name: "Opções de ordenação" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: /Nome \(A–Z\)/ }));
+  expect(nomesDasLinhas()).toEqual(["Ana Dono", "Bia Recepção", "Carla Souza", "Davi Lima", "Eduardo Auxiliar"]);
+  expect(cab[0]).toHaveAttribute("aria-sort", "ascending");
+  expect(cab[1]).toHaveAttribute("aria-sort", "none");
+  fireEvent.click(cab[0].querySelector(".lhd-sort"));
+  expect(nomesDasLinhas()).toEqual(["Eduardo Auxiliar", "Davi Lima", "Carla Souza", "Bia Recepção", "Ana Dono"]);
+});
+
+it("Atribuir perfil: só a pessoa ativa sem perfil tem o botão; a janela mostra o que muda e grava pelo salvar existente", async () => {
+  await montarO3();
+  const linha = (nome) => screen.getByRole("button", { name: `Abrir ficha de ${nome}` });
+  expect(linha("Carla Souza")).toHaveClass("row-aviso");
+  const botaoCarla = within(linha("Carla Souza").querySelector(".c-pf")).getByRole("button", { name: "Atribuir perfil" });
+  expect(within(linha("Bia Recepção")).queryByRole("button", { name: "Atribuir perfil" })).not.toBeInTheDocument();
+  expect(within(linha("Davi Lima")).queryByRole("button", { name: "Atribuir perfil" })).not.toBeInTheDocument(); // desativado
+  fireEvent.click(botaoCarla);
+  const janela = screen.getByRole("dialog", { name: /Atribuir perfil a Carla/ });
+  expect(screen.queryByRole("heading", { name: "Carla Souza" })).not.toBeInTheDocument(); // não abriu a ficha
+  fireEvent.click(within(janela).getByRole("radio", { name: /Gerente/ }));
+  expect(within(janela).getByText("Passa a poder (3)")).toBeInTheDocument(); // f1, f2, f3
+  expect(within(janela).getByText("O menu de Carla")).toBeInTheDocument();
+  fireEvent.click(within(janela).getByRole("button", { name: "Atribuir perfil" }));
+  await waitFor(() =>
+    expect(mocks.update).toHaveBeenCalledWith("carla", expect.objectContaining({ perfilAcessoId: "ger" })),
+  );
+  await waitFor(() => expect(screen.queryByRole("dialog", { name: /Atribuir perfil a Carla/ })).not.toBeInTheDocument());
+  expect(mocks.toast.success).toHaveBeenCalledWith("Acesso atualizado.");
+  // Lacuna b: o corpo não leva os interruptores do Dono (undefined some no JSON).
+  const corpo = JSON.parse(JSON.stringify(mocks.update.mock.calls[0][1]));
+  expect(corpo.perfilAcessoId).toBe("ger");
+  expect(corpo).not.toHaveProperty("apareceNaAgenda");
+  expect(corpo).not.toHaveProperty("agendaMultiVer");
+});
+
+it("Atribuir perfil: sem permissão de gerenciar, a linha marcada não tem o botão", async () => {
+  mocks.access = { ...mocks.access, canManageUsers: false };
+  await montarO3();
+  const carla = screen.getByRole("button", { name: "Abrir ficha de Carla Souza" });
+  expect(carla).toHaveClass("row-aviso");
+  expect(within(carla).queryByRole("button", { name: "Atribuir perfil" })).not.toBeInTheDocument();
+});
+
+it("Entrada animada só nos blocos de conteúdo, nunca no contêiner da área", async () => {
+  const { container } = await montarO3();
+  expect(container.querySelector(".prototype-equipe")).not.toHaveClass("animate-agenda-rise");
+  expect(container.querySelector(".kpis .kpi").className).toMatch(/animate-agenda-rise/);
+  expect(screen.getByRole("button", { name: "Abrir ficha de Ana Dono" }).className).toMatch(/animate-agenda-rise/);
+});
+
+it("Entrada animada: coluna .rail e barra .pchips entram com delay-150, o item .rit não, e ambas desligam em 1800 ms", async () => {
+  vi.useFakeTimers(); // relógio falso desde a montagem; sem waitFor (ele não avança o relógio falso)
+  try {
+    fetch.mockImplementation(async (url) => ({ ok: true, json: async () => respostaO3(url) }));
+    const { container } = montar();
+    await act(async () => { await vi.advanceTimersByTimeAsync(100); }); // só deixa as respostas chegarem, bem abaixo de 1800
+    const alvos = () => [container.querySelector(".rail"), container.querySelector(".pchips")];
+    for (const el of alvos()) {
+      expect(el).not.toBeNull(); // sinal positivo
+      expect(el).toHaveClass("animate-agenda-rise", "agenda-delay-150");
+    }
+    const rit = container.querySelector(".rail .rit");
+    expect(rit).not.toBeNull();
+    expect(rit.className).not.toMatch(/animate-agenda-rise/);
+    act(() => { vi.advanceTimersByTime(1800); });
+    for (const el of alvos()) expect(el).not.toHaveClass("animate-agenda-rise");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("perfil escolhido que não está fixado aparece na barra", async () => {
+  const chave = "procedi_pinned_profiles_undefined";
+  localStorage.setItem(chave, JSON.stringify(["clin"]));
+  mockSetePerfis();
+  const { container } = montar();
+  await waitFor(() =>
+    expect(nomesBarra(container)).toEqual(["Toda a equipe", "Profissional Clínico"]),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Todos os perfis (7)" }));
+  fireEvent.click(screen.getByRole("button", { name: "Ver ficha de Administrador" }));
+  expect(nomesBarra(container)).toEqual([
+    "Toda a equipe",
+    "Profissional Clínico",
+    "Administrador",
+  ]);
+  localStorage.removeItem(chave);
+});
+
+it("Esc fecha a janela 'Todos os perfis de acesso' e o foco volta ao botão que abriu", async () => {
+  mockSetePerfis();
+  montar();
+  const abrir = await screen.findByRole("button", { name: "Todos os perfis (7)" });
+  abrir.focus();
+  fireEvent.click(abrir);
+  expect(screen.getByLabelText("Buscar perfil na lista completa")).toHaveFocus();
+  fireEvent.keyDown(document, { key: "Escape" });
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog", { name: "Todos os perfis de acesso" })).toBeNull(),
+  );
+  expect(abrir).toHaveFocus();
+});
+
+it("janela 'Todos os perfis de acesso': Tab e Shift+Tab não saem da janela", async () => {
+  mockSetePerfis();
+  montar();
+  fireEvent.click(await screen.findByRole("button", { name: "Todos os perfis (7)" }));
+  const janela = screen.getByRole("dialog", { name: "Todos os perfis de acesso" });
+  const itens = [...janela.querySelectorAll('button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')];
+  expect(itens.length).toBeGreaterThan(2);
+  itens[itens.length - 1].focus();
+  fireEvent.keyDown(document, { key: "Tab" });
+  expect(document.activeElement).toBe(itens[0]);
+  fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+  expect(document.activeElement).toBe(itens[itens.length - 1]);
+  expect(janela.contains(document.activeElement)).toBe(true);
+});
+
+it("css: a regra de 44 px da barra vem depois da regra base de 40 px", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync("src/components/configuracoes/gestaoEquipe.css", "utf8").replace(/\r/g, "");
+  const base = css.indexOf(".prototype-equipe .pchips button {\n  display");
+  const toque = css.indexOf(
+    "(pointer: coarse) {\n  .prototype-equipe .pchips button {\n    min-height: 44px;",
+  );
+  expect(base).toBeGreaterThan(0);
+  expect(toque).toBeGreaterThan(base);
+});
+
+it("Ordem: 'Perfil de acesso (A–Z)' do menu marca a coluna Perfil de acesso como ascending e Hierarquia como descending", async () => {
+  const { container } = await montarO3();
+  const colunas = () => [...container.querySelectorAll(".lhd [role=columnheader]")].filter((h) => h.querySelector(".lhd-sort"));
+  expect(colunas()[1]).toHaveAttribute("aria-sort", "descending"); // Hierarquia
+  fireEvent.click(screen.getByRole("button", { name: "Opções de ordenação" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: /Perfil de acesso \(A–Z\)/ }));
+  expect(colunas().map((h) => h.getAttribute("aria-sort"))).toEqual(["none", "ascending", "none"]);
+  expect(colunas()[1].querySelector(".lhd-seta")).toHaveTextContent("↑");
+  // A–Z pelo nome do perfil: sem perfil (vazio) primeiro, pelo nome; depois Auxiliar
+  expect(nomesDasLinhas().slice(0, 3)).toEqual(["Carla Souza", "Davi Lima", "Eduardo Auxiliar"]);
+});
+
+it("Item 3 (onda 1): os rotulos .kpi-label dos cartoes existem (5) e nenhum tem classe truncate", async () => {
+  const { container } = montar();
+  await screen.findByRole("button", { name: "Ver Bruno Silva" });
+  const rotulos = container.querySelectorAll(".kpis .kpi .kpi-label");
+  expect(rotulos).toHaveLength(5); // sinal positivo
+  rotulos.forEach((r) => {
+    expect(r.classList.contains("truncate")).toBe(false);
+    expect(r.className).toBe("kpi-label");
+  });
 });
