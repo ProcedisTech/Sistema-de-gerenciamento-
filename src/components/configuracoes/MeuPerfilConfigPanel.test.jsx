@@ -18,9 +18,14 @@ const mocks = vi.hoisted(() => ({
   buscar: vi.fn(),
   byRange: vi.fn(),
   catalog: vi.fn(),
+  equipeUpdate: vi.fn(),
+  equipeGet: vi.fn(),
 }));
 vi.mock("../../contexts/OrgContext", () => ({ useOrg: () => mocks.org }));
-vi.mock("../../hooks/usePapel", () => ({ usePapel: () => mocks.access }));
+vi.mock("../../hooks/usePapel", async (importOriginal) => ({
+  ...(await importOriginal()),
+  usePapel: () => mocks.access,
+}));
 vi.mock("../hooks/useAgoraDaClinica.js", () => ({
   useAgoraDaClinica: () => ({
     hojeIso: "2026-10-08",
@@ -35,6 +40,7 @@ vi.mock("../../services/api", () => ({
   permissoesApi: { list: mocks.catalog },
   disponibilidadeApi: { buscar: async () => [] },
   agendasApi: { byRange: mocks.byRange },
+  equipeApi: { update: mocks.equipeUpdate, get: mocks.equipeGet },
   getApiErrorToastMessage: (err, fallback) => err.message || fallback,
 }));
 vi.mock("./UsuarioCadastroModal", () => ({
@@ -181,16 +187,21 @@ it("consulta somente agenda do próprio vínculo no mês e permite navegar para 
       signal: expect.any(AbortSignal),
     }),
   );
-  expect(await screen.findByText("Paciente atendido")).toBeInTheDocument();
-  expect(screen.queryByText("Paciente de terceiro")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Agendar com Ana" }));
   expect(onNavigateAgenda).toHaveBeenCalledOnce();
   fireEvent.click(screen.getByRole("tab", { name: "Pacientes", exact: true }));
+  expect(await screen.findByText("Paciente atendido")).toBeInTheDocument();
+  expect(screen.queryByText("Paciente de terceiro")).not.toBeInTheDocument();
   fireEvent.click(
     screen.getByRole("button", {
       name: "Abrir histórico de Paciente atendido",
     }),
   );
+  expect(onSelectPatient).not.toHaveBeenCalled();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Ficha completa do paciente" }),
+  );
+  expect(onSelectPatient).toHaveBeenCalledTimes(1);
   expect(onSelectPatient).toHaveBeenCalledWith(
     expect.objectContaining({ id: "patient" }),
   );
@@ -333,6 +344,11 @@ it("ConfigDetailView mantém breadcrumb Configurações > Meu Perfil e propaga n
       name: "Abrir histórico de Paciente atendido",
     }),
   );
+  expect(onSelectPatient).not.toHaveBeenCalled();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Ficha completa do paciente" }),
+  );
+  expect(onSelectPatient).toHaveBeenCalledTimes(1);
   expect(onSelectPatient).toHaveBeenCalledWith(
     expect.objectContaining({ id: "patient" }),
   );
@@ -369,6 +385,11 @@ it("propaga seleção do paciente atendido para a aplicação", async () => {
       name: "Abrir histórico de Paciente atendido",
     }),
   );
+  expect(onSelectPatient).not.toHaveBeenCalled();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Ficha completa do paciente" }),
+  );
+  expect(onSelectPatient).toHaveBeenCalledTimes(1);
   expect(onSelectPatient).toHaveBeenCalledWith(
     expect.objectContaining({ id: "patient" }),
   );
@@ -405,4 +426,40 @@ it("membro sem permissões administrativas acessa Meu Perfil sem tela branca", a
   );
   expect(await screen.findByRole("heading", { name: "Ana Souza" })).toBeInTheDocument();
   expect(screen.getByText("Seus dados e assinatura profissional")).toBeInTheDocument();
+});
+
+it("Dono liga e desliga Ver múltiplas agendas em Meu Perfil e cada clique chama equipeApi.update", async () => {
+  mocks.catalog.mockResolvedValue([
+    { permissaoId: "ver", codigo: "PACIENTE_VER", modulo: "Pacientes" },
+    { permissaoId: "ap", codigo: "AGENDA_APARECER", modulo: "Agenda" },
+    { permissaoId: "mv", codigo: "AGENDA_MULTI_VER", modulo: "Agenda" },
+  ]);
+  mocks.equipeUpdate.mockResolvedValue({});
+  mocks.equipeGet.mockResolvedValue({ usuarioId: "user-id", roleId: "role-dentista" });
+  render(<MeuPerfilConfigPanel />);
+  await screen.findByRole("heading", { name: "Ana Souza" });
+  fireEvent.click(screen.getByRole("tab", { name: "Acesso", exact: true }));
+  const trigger = await screen.findByRole("button", { name: "Expandir configurações da agenda" });
+  fireEvent.click(trigger);
+  const sw = () => screen.getByRole("switch", { name: "Ver múltiplas agendas" });
+  expect(sw()).toHaveAttribute("aria-checked", "false");
+  fireEvent.click(sw());
+  await waitFor(() =>
+    expect(mocks.equipeUpdate).toHaveBeenNthCalledWith(1, "self-role", {
+      usuarioId: "user-id",
+      roleId: "role-dentista",
+      agendaMultiVer: true,
+    }),
+  );
+  await waitFor(() => expect(sw()).toHaveAttribute("aria-checked", "true"));
+  fireEvent.click(sw());
+  await waitFor(() =>
+    expect(mocks.equipeUpdate).toHaveBeenNthCalledWith(2, "self-role", {
+      usuarioId: "user-id",
+      roleId: "role-dentista",
+      agendaMultiVer: false,
+    }),
+  );
+  await waitFor(() => expect(sw()).toHaveAttribute("aria-checked", "false"));
+  expect(mocks.equipeUpdate).toHaveBeenCalledTimes(2);
 });

@@ -1,10 +1,16 @@
 import React from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { GestaoPerfisTab } from './GestaoPerfisTab';
+import { equipeApi } from '../../services/api';
 vi.mock('../../contexts/useToast.js', () => ({ useToast: () => ({ error: vi.fn(), success: vi.fn() }) }));
-vi.mock('../../services/api', () => ({ getApiErrorDetail: () => '' }));
+vi.mock('../../services/api', () => ({
+  getApiErrorDetail: e => e?.body?.detail || '',
+  equipeApi: { list: vi.fn() },
+}));
 vi.mock('../../config/apiEnv', () => ({ resolveApiUrl: path => path }));
+const auth = vi.hoisted(() => ({ getSession: vi.fn(), signInWithPassword: vi.fn() }));
+vi.mock('../../lib/supabaseClient', () => ({ supabase: { auth } }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const catalogo = [
   { permissaoId: 1, codigo: 'AGENDA_VER', modulo: 'Agenda', nome: 'Ver agenda' },
@@ -34,8 +40,8 @@ describe('Editor de perfil do protótipo', () => {
       { permissaoId: 13, codigo: 'PACIENTE_CRIAR', modulo: 'Pacientes', nome: 'Cadastrar pacientes' },
     ];
     render(<GestaoPerfisTab {...props} permissoes={permissoes} canEdit criarNovoNonce={1} />);
-    const button = (modulo, nivel) => within(screen.getByRole('group', { name: `Nível em ${modulo}` })).getByRole('button', { name: nivel });
-    const queryButton = (modulo, nivel) => within(screen.getByRole('group', { name: `Nível em ${modulo}` })).queryByRole('button', { name: nivel });
+    const button = (modulo, nivel) => within(screen.getByRole('radiogroup', { name: `Nível em ${modulo}` })).getByRole('radio', { name: nivel });
+    const queryButton = (modulo, nivel) => within(screen.getByRole('radiogroup', { name: `Nível em ${modulo}` })).queryByRole('radio', { name: nivel });
 
     // Documentos, Catálogo, Agenda e Pacientes possuem 'Ver e editar' ativo
     for (const modulo of ['Documentos', 'Catálogo', 'Agenda', 'Pacientes']) {
@@ -52,21 +58,21 @@ describe('Editor de perfil do protótipo', () => {
   it('seleciona níveis reais sem liberar função destrutiva no intermediário', () => {
     const fetchMock = setupFetch();
     render(<GestaoPerfisTab {...props} canEdit criarNovoNonce={1} />);
-    const grupo = screen.getByRole('group', { name: 'Nível em Agenda' });
-    fireEvent.click(within(grupo).getByRole('button', { name: 'Ver e editar' }));
+    const grupo = screen.getByRole('radiogroup', { name: 'Nível em Agenda' });
+    fireEvent.click(within(grupo).getByRole('radio', { name: 'Ver e editar' }));
     fireEvent.click(screen.getByRole('button', { name: /Escolher funções uma a uma/ }));
     expect(screen.getByRole('checkbox', { name: 'Criar agendamentos' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Excluir agendamentos' })).not.toBeChecked();
     fireEvent.click(screen.getByRole('radio', { name: /Sim, atende na agenda/ }));
     expect(screen.getByRole('radio', { name: /Sim, atende na agenda/ })).toHaveAttribute('aria-checked', 'true');
-    fireEvent.click(within(grupo).getByRole('button', { name: 'Sem acesso' }));
+    fireEvent.click(within(grupo).getByRole('radio', { name: 'Sem acesso' }));
     expect(screen.getByRole('radio', { name: /Não atende/ })).toHaveAttribute('aria-checked', 'true');
     expect(fetchMock).not.toHaveBeenCalled();
   });
   it('abre cópia local com permissões reais e sem listagem intermediária', async () => {
     const fetchMock = setupFetch();
     render(<GestaoPerfisTab {...props} canEdit perfilParaAbrir="copy:10" criarNovoNonce={7} />);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Só ver' })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'Só ver' })).toBeEnabled());
     expect(screen.getByLabelText('Nome do perfil')).toHaveValue('Cópia de Recepção');
     expect(screen.queryByRole('heading', { name: 'Perfis da clínica' })).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -147,6 +153,7 @@ it('reutiliza o perfil criado se atribuição de permissões falhar',async()=>{
  vi.stubGlobal('fetch',mock);
  render(<GestaoPerfisTab {...props} canEdit criarNovoNonce={1} />);
  fireEvent.change(screen.getByLabelText('Nome do perfil'),{target:{value:'Novo'}});
+ fireEvent.click(within(screen.getByRole('radiogroup',{name:'Nível em Agenda'})).getByRole('radio',{name:'Só ver'}));
  fireEvent.submit(document.querySelector('form'));
  await waitFor(()=>expect(mock).toHaveBeenCalledTimes(2));
  await waitFor(()=>expect(screen.getAllByRole('button',{name:'Salvar perfil'})[0]).toBeEnabled());
@@ -159,7 +166,7 @@ it('não apaga o rascunho nem aceita modelo global sem permissões', async () =>
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [] }));
   render(<GestaoPerfisTab {...props} perfisAcesso={[{ id: 30, nome: 'Administrador', codigo: 'ADMINISTRADOR' }]} canEdit criarNovoNonce={1} />);
   fireEvent.change(screen.getByLabelText('Nome do perfil'), { target: { value: 'Meu perfil' } });
-  fireEvent.click(within(screen.getByRole('group', { name: 'Nível em Agenda' })).getByRole('button', { name: 'Ver e editar' }));
+  fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Nível em Agenda' })).getByRole('radio', { name: 'Ver e editar' }));
   fireEvent.click(screen.getByRole('button', { name: 'Administrador', exact: true }));
   expect(await screen.findByRole('alert')).toHaveTextContent('modelo está sem permissões');
   expect(screen.getByLabelText('Nome do perfil')).toHaveValue('Meu perfil');
@@ -179,7 +186,7 @@ it.each([
   fireEvent.change(screen.getByLabelText('Descrição'), { target: { value: 'Minha descrição' } });
   fireEvent.click(screen.getByRole('button', { name: nome, exact: true }));
   await waitFor(() => expect(screen.getByRole('radio', { name: /Sim, atende na agenda/ })).toHaveAttribute('aria-checked', String(atende)));
-  await waitFor(() => expect(within(screen.getByRole('group', { name: 'Nível em Agenda' })).getByRole('button', { name: 'Só ver' })).toBeEnabled());
+  await waitFor(() => expect(within(screen.getByRole('radiogroup', { name: 'Nível em Agenda' })).getByRole('radio', { name: 'Só ver' })).toBeEnabled());
   fireEvent.click(screen.getByRole('button', { name: /Escolher funções uma a uma/ }));
   expect(screen.getByRole('checkbox', { name: 'Criar agendamentos' })).toBeChecked();
   expect(screen.getByRole('checkbox', { name: 'Excluir agendamentos' })).toHaveProperty('checked', ids.includes(3));
@@ -189,12 +196,12 @@ it.each([
   expect(screen.getByRole('checkbox', { name: 'Criar agendamentos' })).not.toBeChecked();
 });
 
-it('renderiza os botões segmentados de nível na ordem prioritária: Só ver, Ver e editar, Tudo, Sem acesso', () => {
+it('renderiza os níveis em ordem crescente: Sem acesso, Só ver, Ver e editar, Tudo', () => {
   render(<GestaoPerfisTab {...props} canEdit criarNovoNonce={1} />);
-  const grupo = screen.getByRole('group', { name: 'Nível em Agenda' });
-  const buttons = within(grupo).getAllByRole('button');
+  const grupo = screen.getByRole('radiogroup', { name: 'Nível em Agenda' });
+  const buttons = within(grupo).getAllByRole('radio');
   const labels = buttons.map(b => b.textContent.trim());
-  expect(labels).toEqual(['Só ver', 'Ver e editar', 'Tudo', 'Sem acesso']);
+  expect(labels).toEqual(['Sem acesso', 'Só ver', 'Ver e editar', 'Tudo']);
 });
 
 it('renderiza as funções individuais na ordem de hierarquia com Ver no topo e Excluir no rodapé', () => {
@@ -272,7 +279,7 @@ it('desabilita o campo de Nome ao editar um perfil padrão e exibe aviso de nome
   ];
   render(<GestaoPerfisTab {...props} perfisAcesso={perfisPadrao} canEdit perfilParaAbrir={50} />);
 
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Só ver' })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole('radio', { name: 'Só ver' })).toBeEnabled());
   const inputNome = screen.getByLabelText('Nome do perfil');
   expect(inputNome).toBeDisabled();
   expect(inputNome).toHaveValue('Recepção / Secretária');
@@ -286,7 +293,7 @@ it('mantém o campo de Nome habilitado ao editar um perfil customizado CST_', as
   ];
   render(<GestaoPerfisTab {...props} perfisAcesso={perfisCustom} canEdit perfilParaAbrir={60} />);
 
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Só ver' })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole('radio', { name: 'Só ver' })).toBeEnabled());
   const inputNome = screen.getByLabelText('Nome do perfil');
   expect(inputNome).not.toBeDisabled();
   expect(inputNome).toHaveValue('Secretária da Noite');
@@ -312,7 +319,7 @@ it('exibe banner contextual ao editar perfil existente detalhando colaboradores 
     />,
   );
 
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Só ver' })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole('radio', { name: 'Só ver' })).toBeEnabled());
   const banner = document.querySelector('.perfil-custom-banner');
   expect(banner).toBeInTheDocument();
   expect(banner).toHaveTextContent(/Você está editando o perfil Secretária da Noite/i);
@@ -352,9 +359,11 @@ it('ao editar perfil existente e clicar em Salvar perfil, abre modal de governan
     />,
   );
 
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Só ver' })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole('radio', { name: 'Só ver' })).toBeEnabled());
 
-  // Clica em 'Salvar perfil' (topo)
+  // Sem alteração o Salvar fica desligado; muda a descrição para habilitar
+  fireEvent.change(screen.getByLabelText('Descrição'), { target: { value: 'nova descrição' } });
+  // Clica em 'Salvar perfil'
   const btnSalvar = screen.getAllByRole('button', { name: 'Salvar perfil' })[0];
   fireEvent.click(btnSalvar);
 
@@ -395,3 +404,306 @@ it('ao editar perfil existente e clicar em Salvar perfil, abre modal de governan
 
 
 
+
+
+// ---- Onda 4 (I4a): níveis, grupos, busca, selo, barra Salvar e Excluir perfil ----
+const catOnda4 = [
+  { permissaoId: 1, codigo: 'AGENDA_VER', nome: 'Ver agenda', moduloCodigo: 'AGENDA' },
+  { permissaoId: 2, codigo: 'AGENDA_CRIAR', nome: 'Criar agendamentos', moduloCodigo: 'AGENDA', descricao: 'Marca horários na agenda' },
+  { permissaoId: 3, codigo: 'AGENDA_EXCLUIR', nome: 'Excluir agendamentos', moduloCodigo: 'AGENDA' },
+  { permissaoId: 4, codigo: 'PACIENTE_VER', nome: 'Ver pacientes', moduloCodigo: 'PACIENTES' },
+  { permissaoId: 5, codigo: 'PACIENTE_EDITAR', nome: 'Editar pacientes', moduloCodigo: 'PACIENTES' },
+  { permissaoId: 6, codigo: 'PACIENTE_INATIVAR', nome: 'Inativar paciente', moduloCodigo: 'PACIENTES' },
+  { permissaoId: 7, codigo: 'ACESSO_COLABORADORES_INATIVAR', nome: 'Inativar colaborador', moduloCodigo: 'ACESSO' },
+];
+const abrirTodas = () => screen.getAllByRole('button', { name: /Escolher funções uma a uma/ }).forEach(b => fireEvent.click(b));
+const perfilCst = { id: 60, codigo: 'CST_abc', nome: 'Secretária da Noite', organizacaoSaudeId: 'org-1' };
+const doisUsuarios = [
+  { id: 'u1', nomeCompleto: 'Mariana Lima', perfilAcessoId: 60, ativo: true },
+  { id: 'u2', nomeCompleto: 'Beatriz Silva', perfilAcessoId: 60, ativo: true },
+];
+const agendaSoVerPronto = () => waitFor(() => expect(within(screen.getByRole('radiogroup', { name: 'Nível em Agenda' })).getByRole('radio', { name: 'Só ver' })).toBeEnabled());
+
+describe('Onda 4: níveis, funções e busca', () => {
+  it('Tudo só existe quando o módulo tem funções além de editar', () => {
+    const cat = [
+      { permissaoId: 1, codigo: 'AGENDA_VER', nome: 'Ver agenda', moduloCodigo: 'AGENDA' },
+      { permissaoId: 2, codigo: 'AGENDA_CRIAR', nome: 'Criar agendamentos', moduloCodigo: 'AGENDA' },
+    ];
+    render(<GestaoPerfisTab {...props} permissoes={cat} canEdit criarNovoNonce={1} />);
+    const labels = within(screen.getByRole('radiogroup', { name: 'Nível em Agenda' })).getAllByRole('radio').map(r => r.textContent.trim());
+    expect(labels).toEqual(['Sem acesso', 'Só ver', 'Ver e editar']);
+  });
+
+  it('agrupa as funções em Ver, Fazer e Ações sensíveis', () => {
+    render(<GestaoPerfisTab {...props} permissoes={catOnda4} canEdit criarNovoNonce={1} />);
+    abrirTodas();
+    const ver = screen.getAllByRole('group', { name: 'Ver' })[0];
+    const fazer = screen.getAllByRole('group', { name: 'Fazer' })[0];
+    const sens = screen.getAllByRole('group', { name: 'Ações sensíveis' })[0];
+    expect(within(ver).getByRole('checkbox', { name: 'Ver agenda' })).toBeInTheDocument();
+    expect(within(fazer).getByRole('checkbox', { name: 'Criar agendamentos' })).toBeInTheDocument();
+    expect(within(sens).getByRole('checkbox', { name: 'Excluir agendamentos' })).toBeInTheDocument();
+    expect(within(ver).queryByRole('checkbox', { name: 'Excluir agendamentos' })).not.toBeInTheDocument();
+  });
+
+  it('a busca "excluir" mostra só Excluir agendamentos', () => {
+    render(<GestaoPerfisTab {...props} permissoes={catOnda4} canEdit criarNovoNonce={1} />);
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar função' }), { target: { value: 'excluir' } });
+    expect(screen.getByRole('checkbox', { name: 'Excluir agendamentos' })).toBeInTheDocument();
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    expect(screen.queryByRole('checkbox', { name: 'Criar agendamentos' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Ver pacientes' })).not.toBeInTheDocument();
+  });
+
+  it('mostra a descrição só quando a função traz o campo', () => {
+    render(<GestaoPerfisTab {...props} permissoes={catOnda4} canEdit criarNovoNonce={1} />);
+    abrirTodas();
+    expect(screen.getByText('Marca horários na agenda')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Criar agendamentos' })).toHaveAccessibleDescription('Marca horários na agenda');
+    expect(screen.getByRole('checkbox', { name: 'Ver agenda' }).closest('label')).toHaveTextContent(/^Ver agenda$/);
+    expect(screen.getByRole('checkbox', { name: 'Excluir agendamentos' }).closest('label')).toHaveTextContent(/^Excluir agendamentos$/);
+  });
+
+  it('mostra o selo "pede senha" só nas duas funções que pedem senha', () => {
+    render(<GestaoPerfisTab {...props} permissoes={catOnda4} canEdit criarNovoNonce={1} />);
+    abrirTodas();
+    expect(screen.getAllByText('pede senha')).toHaveLength(2);
+    expect(screen.getByRole('checkbox', { name: 'Inativar paciente' }).closest('label')).toHaveTextContent('pede senha');
+    expect(screen.getByRole('checkbox', { name: 'Inativar colaborador' }).closest('label')).toHaveTextContent('pede senha');
+    expect(screen.getByRole('checkbox', { name: 'Editar pacientes' }).closest('label')).not.toHaveTextContent('pede senha');
+  });
+});
+
+describe('Onda 4: barra Salvar e aviso ao pai', () => {
+  it('conta alterações, mostra para quantas pessoas vale e avisa o pai', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [1, 2] }));
+    const onDirtyChange = vi.fn();
+    render(<GestaoPerfisTab {...props} permissoes={catOnda4} perfisAcesso={[perfilCst]} usuarios={doisUsuarios} onDirtyChange={onDirtyChange} canEdit perfilParaAbrir={60} />);
+    await agendaSoVerPronto();
+    expect(screen.getByText(/Nada para salvar/)).toBeInTheDocument();
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    abrirTodas();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Excluir agendamentos' }));
+    expect(screen.getByText(/1 alteração não salva/)).toBeInTheDocument();
+    expect(screen.getByText(/vale para 2 pessoas/)).toBeInTheDocument();
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+  });
+});
+
+describe('Onda 4: excluir perfil', () => {
+  const abrirParaExcluir = async ({ perfil = perfilCst, usuarios = [], deleteResp = { ok: true, json: async () => ({}) }, onBack = vi.fn(), onDirtyChange = vi.fn(), onReload = props.onReload } = {}) => {
+    const chamadas = [];
+    const fetchMock = vi.fn(async (url, opts = {}) => {
+      if (opts.method === 'DELETE') { chamadas.push(`DELETE ${url}`); return deleteResp; }
+      return { ok: true, json: async () => [1, 2] };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    auth.getSession.mockResolvedValue({ data: { session: { user: { email: 'a@b.com' } } } });
+    auth.signInWithPassword.mockImplementation(async () => { chamadas.push('signIn'); return { error: null }; });
+    equipeApi.list.mockImplementation(async () => { chamadas.push('equipe'); return []; });
+    render(<GestaoPerfisTab {...props} permissoes={catOnda4} perfisAcesso={[perfil]} usuarios={usuarios} onBack={onBack} onReload={onReload} onDirtyChange={onDirtyChange} canEdit perfilParaAbrir={perfil.id} />);
+    await screen.findByText(/Editar perfil:/);
+    await agendaSoVerPronto();
+    return { chamadas, onBack, onDirtyChange };
+  };
+  const confirmarCom = async senha => {
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir perfil' }));
+    const dialog = await screen.findByRole('alertdialog');
+    fireEvent.change(within(dialog).getByLabelText('Sua senha, para confirmar'), { target: { value: senha } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Excluir perfil' }));
+    return dialog;
+  };
+  beforeEach(() => { auth.getSession.mockReset(); auth.signInWithPassword.mockReset(); equipeApi.list.mockReset(); });
+
+  it('senha errada mostra a mensagem e não chama o DELETE', async () => {
+    const { chamadas } = await abrirParaExcluir();
+    auth.signInWithPassword.mockResolvedValue({ error: { message: 'Invalid' } });
+    const dialog = await confirmarCom('errada');
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Senha incorreta. Verifique e tente novamente.');
+    expect(chamadas.filter(c => c.startsWith('DELETE'))).toEqual([]);
+    expect(equipeApi.list).not.toHaveBeenCalled();
+  });
+
+  it('sem sessão recusa: mostra que não deu para conferir e não chama o DELETE', async () => {
+    const { chamadas } = await abrirParaExcluir();
+    auth.getSession.mockResolvedValue({ data: { session: null } });
+    const dialog = await confirmarCom('qualquer');
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Não foi possível conferir sua senha');
+    expect(auth.signInWithPassword).not.toHaveBeenCalled();
+    expect(chamadas.filter(c => c.startsWith('DELETE'))).toEqual([]);
+  });
+
+  it('senha certa: confere a senha, busca a equipe e só então faz o DELETE', async () => {
+    const { chamadas, onBack, onDirtyChange } = await abrirParaExcluir();
+    await confirmarCom('certa');
+    await waitFor(() => expect(onBack).toHaveBeenCalledWith({ semGuarda: true }));
+    expect(chamadas).toEqual(['signIn', 'equipe', 'DELETE /api/v1/perfis-acesso/60']);
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('Esc fecha o diálogo e limpa a senha: ao reabrir, campo vazio e confirmar desligado', async () => {
+    await abrirParaExcluir();
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir perfil' }));
+    let dialog = await screen.findByRole('alertdialog');
+    const campo = within(dialog).getByLabelText('Sua senha, para confirmar');
+    fireEvent.change(campo, { target: { value: 'segredo-de-teste' } });
+    expect(campo).toHaveValue('segredo-de-teste');
+    expect(within(dialog).getByRole('button', { name: 'Excluir perfil' })).toBeEnabled();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir perfil' }));
+    dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByLabelText('Sua senha, para confirmar')).toHaveValue('');
+    expect(within(dialog).getByRole('button', { name: 'Excluir perfil' })).toBeDisabled();
+  });
+
+  it('depois de excluir com sucesso, na MESMA tela montada, reabrir Excluir vem com senha vazia e confirmar desligado', async () => {
+    const { chamadas } = await abrirParaExcluir();
+    await confirmarCom('senha-de-teste-A');
+    await waitFor(() => expect(chamadas).toContain('DELETE /api/v1/perfis-acesso/60'));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir perfil' }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByLabelText('Sua senha, para confirmar')).toHaveValue('');
+    expect(within(dialog).getByRole('button', { name: 'Excluir perfil' })).toBeDisabled();
+  });
+
+  it('onReload que rejeita depois de excluir: já saiu da tela (onBack com semGuarda) e avisou que não está sujo', async () => {
+    const onReload = vi.fn().mockRejectedValue(new Error('rede'));
+    const { chamadas, onBack, onDirtyChange } = await abrirParaExcluir({ onReload });
+    await confirmarCom('certa');
+    await waitFor(() => expect(onReload).toHaveBeenCalledTimes(1));
+    expect(chamadas).toContain('DELETE /api/v1/perfis-acesso/60');
+    expect(onBack).toHaveBeenCalledWith({ semGuarda: true });
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('lista velha dizia "ninguém usa" mas a equipe nova traz 1 pessoa: avisa e não exclui', async () => {
+    const { chamadas } = await abrirParaExcluir();
+    equipeApi.list.mockImplementation(async () => ({ content: [{ id: 'u9', perfilAcessoId: 60, ativo: false }] }));
+    const dialog = await confirmarCom('certa');
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('1 pessoa usa este perfil');
+    expect(chamadas.filter(c => c.startsWith('DELETE'))).toEqual([]);
+  });
+
+  it('400 do servidor com detail vira mensagem em role=alert', async () => {
+    await abrirParaExcluir({ deleteResp: { ok: false, json: async () => ({ detail: 'Perfil em uso por regra do servidor.' }) } });
+    const dialog = await confirmarCom('certa');
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Perfil em uso por regra do servidor.');
+  });
+
+  it('perfil padrão não tem botão Excluir (depois de achar o título do editor)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [1, 2] }));
+    render(<GestaoPerfisTab {...props} permissoes={catOnda4} perfisAcesso={[{ ...perfilCst, padrao: true }]} canEdit perfilParaAbrir={60} />);
+    await screen.findByText(/Editar perfil:/);
+    expect(screen.getAllByRole('button', { name: 'Salvar perfil' }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'Excluir perfil' })).not.toBeInTheDocument();
+  });
+
+  it('com alguém usando o perfil (ativo ou não) não tem botão Excluir', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [1, 2] }));
+    render(<GestaoPerfisTab {...props} permissoes={catOnda4} perfisAcesso={[perfilCst]} usuarios={[{ id: 'u1', perfilAcessoId: 60, ativo: false }]} canEdit perfilParaAbrir={60} />);
+    await screen.findByText(/Editar perfil:/);
+    expect(screen.getAllByRole('button', { name: 'Salvar perfil' }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'Excluir perfil' })).not.toBeInTheDocument();
+  });
+
+  it('mostra o botão Excluir quando ninguém usa e o perfil não é padrão (sinal positivo)', async () => {
+    await abrirParaExcluir();
+    expect(screen.getByRole('button', { name: 'Excluir perfil' })).toBeInTheDocument();
+  });
+});
+
+describe('Onda 4: ajustes da auditoria (protótipo v6)', () => {
+  it('Salvar fica desligado sem alteração e liga depois de marcar uma função', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [1, 2] }));
+    render(<GestaoPerfisTab {...props} permissoes={catOnda4} perfisAcesso={[perfilCst]} canEdit perfilParaAbrir={60} />);
+    await agendaSoVerPronto();
+    expect(screen.getByText(/Nada para salvar/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Salvar perfil' })).toBeDisabled();
+    abrirTodas();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Excluir agendamentos' }));
+    expect(screen.getByRole('button', { name: 'Salvar perfil' })).toBeEnabled();
+  });
+
+  it('perfil novo já pode salvar (como no protótipo)', () => {
+    render(<GestaoPerfisTab {...props} permissoes={catOnda4} canEdit criarNovoNonce={1} />);
+    expect(screen.getByText(/Perfil novo/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Salvar perfil' })).toBeEnabled();
+  });
+
+  it('salvar com 0 funções pede confirmação; "Voltar e escolher" não grava', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: 99, nome: 'Vazio' }) });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<GestaoPerfisTab {...props} permissoes={catOnda4} canEdit criarNovoNonce={1} />);
+    fireEvent.change(screen.getByLabelText('Nome do perfil'), { target: { value: 'Vazio' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar perfil' }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText('Salvar sem nenhuma função?')).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Voltar e escolher' }));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar perfil' }));
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Salvar assim mesmo' }));
+    await waitFor(() => expect(fetchMock.mock.calls[0][1].method).toBe('POST'));
+  });
+
+  it('o menu desta pessoa fica na marcação e só o resumo empilha em telas estreitas; Cancelar está na barra', () => {
+    render(<GestaoPerfisTab {...props} permissoes={catOnda4} canEdit criarNovoNonce={1} />);
+    expect(screen.getByText('O menu desta pessoa')).toBeInTheDocument();
+    expect(document.querySelector('.sum-col .menu-prev')).not.toBeNull();
+    const barra = document.querySelector('.sticky-sum');
+    expect(within(barra).getByRole('button', { name: 'Cancelar' })).toBeInTheDocument();
+    expect(within(barra).getByRole('button', { name: 'Salvar perfil' })).toBeInTheDocument();
+    expect(document.querySelector('.ed-bar button')).toBeNull();
+  });
+});
+
+describe('Item 6 (onda 1): barra Salvar, estrutura dos trechos', () => {
+  const barra = () => document.querySelector('.sticky-sum');
+  it('perfil novo: <b> primeiro dentro de .sum-txt, depois .sum-resto com "N de M funcoes"; sem .sum-membros', () => {
+    render(<GestaoPerfisTab {...props} permissoes={catOnda4} canEdit criarNovoNonce={1} />);
+    const txt = barra().querySelector('.sum-txt');
+    expect(txt).toBeTruthy(); // sinal positivo
+    expect(txt.firstElementChild.tagName).toBe('B');
+    expect(txt.firstElementChild).toHaveTextContent('Perfil novo');
+    const resto = txt.querySelector('.sum-resto');
+    expect(resto).toBeTruthy();
+    expect(resto).toHaveTextContent(/^\s*\u00b7 \d+ de 7 fun\u00e7\u00f5es \u00b7 (atende na agenda|n\u00e3o atende)\s*$/);
+    expect(txt.querySelector('.sum-membros')).toBeNull();
+  });
+
+  it('D4: .sum-txt sem style inline; .sum-sep dentro de .sum-resto com "· "; icones de Salvar e Excluir tem sum-btn-ico e Cancelar nao', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [1, 2] }));
+    render(<GestaoPerfisTab {...props} permissoes={catOnda4} perfisAcesso={[perfilCst]} usuarios={[]} canEdit perfilParaAbrir={perfilCst.id} />); // sem membros: Excluir perfil aparece
+    await screen.findByText(/Editar perfil:/);
+    await agendaSoVerPronto();
+    const txt = barra().querySelector('.sum-txt');
+    expect(txt).toBeTruthy(); // sinal positivo
+    expect(txt.hasAttribute('style')).toBe(false); // o inline venceria o flex 0 0 100% do celular
+    const resto = txt.querySelector('.sum-resto');
+    const sep = resto.querySelector('.sum-sep');
+    expect(sep).toBeTruthy();
+    expect(sep.textContent).toBe('· ');
+    expect(resto).toHaveTextContent(/^\s*· \d+ de 7 funções · (atende na agenda|não atende)\s*$/);
+    const ico = (nome) => within(barra()).getByRole('button', { name: nome }).querySelector('svg');
+    expect(ico('Salvar perfil')).toHaveClass('sum-btn-ico');
+    expect(ico('Excluir perfil')).toHaveClass('sum-btn-ico');
+    expect(within(barra()).getByRole('button', { name: 'Cancelar' }).querySelector('svg')).toBeNull();
+  });
+
+  it('perfil com 2 pessoas: .sum-membros traz "vale para 2 pessoas" e fica depois de .sum-resto, fora dele', async () => {
+    render(<GestaoPerfisTab {...props} permissoes={catOnda4} perfisAcesso={[perfilCst]} usuarios={doisUsuarios} canEdit perfilParaAbrir={perfilCst.id} />);
+    await screen.findByText(/Editar perfil:/);
+    const txt = barra().querySelector('.sum-txt');
+    const resto = txt.querySelector('.sum-resto');
+    const membros = txt.querySelector('.sum-membros');
+    expect(membros).toBeTruthy();
+    expect(membros).toHaveTextContent('vale para 2 pessoas assim que salvar');
+    expect(resto.contains(membros)).toBe(false);
+    expect(resto.compareDocumentPosition(membros) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(txt.firstElementChild.tagName).toBe('B');
+    expect(resto).not.toHaveTextContent('vale para');
+  });
+});

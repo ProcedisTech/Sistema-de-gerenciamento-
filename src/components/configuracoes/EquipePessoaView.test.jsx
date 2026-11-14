@@ -112,6 +112,7 @@ const props = {
   ],
   hojeIso: "2026-10-05",
   canManageUsers: true,
+  canEditPerfis: true,
   canDeleteUsers: true,
   canSeeAgenda: true,
   canSeeConfigPerfil: true,
@@ -149,7 +150,7 @@ describe("EquipePessoaView", () => {
   it("replica as seis abas e usa somente a agenda real da pessoa e realizado do backend", () => {
     render(<EquipePessoaView {...props} />);
     expect(screen.getAllByRole("tab")).toHaveLength(6);
-    expect(screen.getByText("Maria")).toBeInTheDocument();
+    expect(screen.getByText("1 de 1 atendidos")).toBeInTheDocument();
     expect(screen.queryByText("Outro profissional")).not.toBeInTheDocument();
     expect(screen.getByText("Atendimentos neste mês")).toBeInTheDocument();
     expect(screen.getByText("Pacientes atendidos")).toBeInTheDocument();
@@ -310,7 +311,7 @@ it("salvamento atualiza hero e contato sem trocar a identidade do membro", () =>
   ).toBeInTheDocument();
   expect(screen.getByText("11999999999")).toBeInTheDocument();
   expect(screen.getByText("🎂 Aniversário 03/02")).toBeInTheDocument();
-  expect(screen.getByText("Maria")).toBeInTheDocument();
+  expect(screen.getByText("1 de 1 atendidos")).toBeInTheDocument();
   expect(onPerfilAtualizado).toHaveBeenCalledWith(
     expect.objectContaining({
       nomeCompleto: "Bruno Atualizado",
@@ -350,10 +351,9 @@ it("Dono sintetiza todas as funções operacionais e módulos mesmo sem IDs de p
       permissoesPerfil={[]}
     />,
   );
-  const total = fixtures.catalog.filter(
-    (p) => !["AGENDA_APARECER", "AGENDA_MULTI_VER"].includes(p.codigo),
-  ).length;
-  expect(screen.getByText(`${total} de ${total} funções`)).toBeInTheDocument();
+  const total = fixtures.catalog.filter((p) => p.codigo !== "AGENDA_APARECER").length;
+  expect(total).toBe(52);
+  expect(screen.getByText("52 de 52 funções")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("tab", { name: "Acesso", exact: true }));
   const trigger = screen.queryByRole("button", {
     name: "Expandir configurações da agenda",
@@ -376,12 +376,16 @@ it("horários reais incluem domingo, múltiplos turnos e ignoram intervalos inat
   const firstTurn = await screen.findByText("08:00 - 12:00");
   expect(firstTurn).toHaveClass("week-pill");
   expect(firstTurn.parentElement).toHaveClass("week-turns-row");
-  expect(firstTurn.parentElement).toHaveTextContent("08:00 - 12:00 · 14:00 - 18:00");
+  expect(firstTurn.parentElement).toHaveTextContent("08:00 - 12:00pausa14:00 - 18:00");
   expect(firstTurn.parentElement.querySelectorAll(".week-pill")).toHaveLength(2);
   expect(screen.getByText("14:00 - 18:00")).toHaveClass("week-pill");
   expect(screen.getByText("09:00 - 11:00")).toBeInTheDocument();
-  expect(screen.getByText("Terça a Sábado:")).toBeInTheDocument();
-  expect(screen.getByText("2 turnos")).toBeInTheDocument();
+  expect(document.querySelectorAll(".week-group-row")).toHaveLength(7);
+  expect(
+    Array.from(document.querySelectorAll(".week-group-label b")).map((b) => b.textContent),
+  ).toEqual(["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]);
+  expect(screen.getAllByText("Folga")).toHaveLength(5);
+  expect(screen.getByText("pausa")).toBeInTheDocument();
 });
 it("salvar modal revalida horários sem reload e notifica disponibilidade", async () => {
   api.buscar
@@ -416,9 +420,10 @@ it("falha de horários exibe erro e retry em vez de sugerir folgas", async () =>
     "Horários indisponíveis",
   );
   fireEvent.click(screen.getByRole("button", { name: "Tentar novamente" }));
-  await waitFor(() =>
-    expect(document.querySelector(".week-groups")).toBeInTheDocument(),
-  );
+  expect(
+    await screen.findByText("Horário de atendimento ainda não definido"),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 it("pacientes atendidos usam botão nativo acessível e repassam ID e CPF", async () => {
   const onSelectPatient = vi.fn();
@@ -435,9 +440,11 @@ it("pacientes atendidos usam botão nativo acessível e repassam ID e CPF", asyn
   });
   expect(button.tagName).toBe("BUTTON");
   fireEvent.click(button);
-  fireEvent.keyDown(button, { key: "Enter" });
-  fireEvent.keyDown(button, { key: " " });
-  expect(onSelectPatient).toHaveBeenCalledTimes(3);
+  expect(onSelectPatient).not.toHaveBeenCalled();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Ficha completa do paciente" }),
+  );
+  expect(onSelectPatient).toHaveBeenCalledTimes(1);
   expect(onSelectPatient).toHaveBeenCalledWith(
     expect.objectContaining({ id: "pac1", cpf: "12345678901" }),
   );
@@ -503,6 +510,10 @@ it("aba pacientes oculta pacientes inativos por padrão e permite alternar com o
   // Ao clicar no inativo, onSelectPatient é chamado com dados do paciente inativo
   const btnInativo = screen.getByRole("button", { name: "Abrir histórico de André Inativo" });
   fireEvent.click(btnInativo);
+  expect(onSelectPatient).not.toHaveBeenCalled();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Ficha completa do paciente" }),
+  );
   expect(onSelectPatient).toHaveBeenCalledWith(
     expect.objectContaining({ id: "pac-inativo", name: "André Inativo", ativo: false })
   );
@@ -515,7 +526,7 @@ it("quando todos os pacientes atendidos forem inativos, exibe estado vazio infor
       pacienteId: "pac-andre",
       pacienteNome: "André Almeida Ribeiro",
       pacienteAtivo: false,
-      dataAgendamento: "2026-10-29",
+      dataAgendamento: "2026-10-04",
       horaInicio: "10:00:00",
       statusCodigo: "realizado",
     },
@@ -555,7 +566,7 @@ it("identifica paciente inativo via pacientesApi.inativos mesmo quando agenda n�
       pacienteId: "pac-inativo-api",
       pacienteNome: "Paciente Inativo da API",
       pacienteAtivo: undefined, // Simula backend sem restart que não devolveu pacienteAtivo
-      dataAgendamento: "2026-10-29",
+      dataAgendamento: "2026-10-04",
       horaInicio: "11:00:00",
       statusCodigo: "realizado",
     },
@@ -773,7 +784,7 @@ it("perfis comuns não exibem chevron nem RNFs", async () => {
 });
 
 
-it("consolida a rotina de Terça a Sexta e mantém a exceção de Segunda", async () => {
+it("mostra uma linha por dia: Segunda com dois turnos e Terça a Sexta repetidas", async () => {
   api.buscar.mockResolvedValue([
     { diaSemana: 1, horaInicio: "13:00", horaFim: "19:00" },
     { diaSemana: 1, horaInicio: "08:00:00", horaFim: "12:00:00" },
@@ -782,30 +793,34 @@ it("consolida a rotina de Terça a Sexta e mantém a exceção de Segunda", asyn
     })),
   ]);
   render(<EquipePessoaView {...props} />);
-  const routine = (await screen.findByText("Terça a Sexta")).closest(".week-group-row");
-  expect(within(routine).getByText("08:00 - 18:00")).toBeInTheDocument();
-  expect(screen.getAllByText("08:00 - 18:00")).toHaveLength(1);
-  expect(document.querySelectorAll(".week-group-row")).toHaveLength(2);
-  const monday = screen.getByText("Segunda").closest(".week-group-row");
+  const monday = (await screen.findByText("Segunda")).closest(".week-group-row");
   expect(monday).toHaveClass("highlighted");
-  expect(monday).toHaveTextContent("2 turnos");
-  expect(monday).toHaveTextContent("08:00 - 12:00 · 13:00 - 19:00");
-  expect(screen.getByText("Sábado e Domingo:")).toBeInTheDocument();
+  expect(monday).toHaveTextContent("08:00 - 12:00pausa13:00 - 19:00");
+  expect(screen.getAllByText("08:00 - 18:00")).toHaveLength(4);
+  expect(document.querySelectorAll(".week-group-row")).toHaveLength(7);
+  expect(screen.queryByText("Terça a Sexta")).not.toBeInTheDocument();
+  expect(screen.getAllByText("Folga")).toHaveLength(2);
+  expect(screen.getByText("Sábado").closest(".week-group-row")).toHaveTextContent("Folga");
+  expect(screen.getByText("Domingo").closest(".week-group-row")).toHaveTextContent("Folga");
 });
 
-it("não une dias separados por folga ou por uma rotina diferente", async () => {
+it("cada dia mostra o seu próprio horário, com folga nos dias sem turno", async () => {
   api.buscar.mockResolvedValue([
     ...[1, 3, 5].map((diaSemana) => ({ diaSemana, horaInicio: "08:00", horaFim: "18:00" })),
     { diaSemana: 4, horaInicio: "08:00", horaFim: "17:00" },
   ]);
   render(<EquipePessoaView {...props} />);
   await screen.findByText("Quinta");
-  expect(document.querySelectorAll(".week-group-row")).toHaveLength(4);
+  expect(document.querySelectorAll(".week-group-row")).toHaveLength(7);
   expect(screen.getAllByText("08:00 - 18:00")).toHaveLength(3);
-  expect(screen.getByText("Terça, Sábado e Domingo:")).toBeInTheDocument();
+  expect(screen.getByText("Quinta").closest(".week-group-row")).toHaveTextContent("08:00 - 17:00");
+  expect(screen.getAllByText("Folga")).toHaveLength(3);
+  ["Terça", "Sábado", "Domingo"].forEach((dia) =>
+    expect(screen.getByText(dia).closest(".week-group-row")).toHaveTextContent("Folga"),
+  );
 });
 
-it("compara todos os turnos ordenados ao consolidar dias consecutivos", async () => {
+it("ordena os turnos de cada dia, com pausa entre eles", async () => {
   api.buscar.mockResolvedValue([
     { diaSemana: 1, horaInicio: "14:00", horaFim: "18:00" },
     { diaSemana: 1, horaInicio: "08:00:00", horaFim: "12:00:00" },
@@ -815,31 +830,56 @@ it("compara todos os turnos ordenados ao consolidar dias consecutivos", async ()
     { diaSemana: 3, horaInicio: "14:00", horaFim: "19:00" },
   ]);
   render(<EquipePessoaView {...props} />);
-  const group = (await screen.findByText("Segunda e Terça")).closest(".week-group-row");
-  expect(group).toHaveTextContent("2 turnos");
-  expect(group).toHaveTextContent("08:00 - 12:00 · 14:00 - 18:00");
-  expect(document.querySelectorAll(".week-group-row")).toHaveLength(2);
+  const monday = (await screen.findByText("Segunda")).closest(".week-group-row");
+  expect(monday).toHaveTextContent("08:00 - 12:00pausa14:00 - 18:00");
+  expect(screen.getByText("Terça").closest(".week-group-row")).toHaveTextContent(
+    "08:00 - 12:00pausa14:00 - 18:00",
+  );
+  expect(screen.getByText("Quarta").closest(".week-group-row")).toHaveTextContent(
+    "08:00 - 12:00pausa14:00 - 19:00",
+  );
+  expect(screen.getAllByText("pausa")).toHaveLength(3);
   expect(screen.getByText("14:00 - 19:00")).toBeInTheDocument();
+  expect(document.querySelectorAll(".week-group-row")).toHaveLength(7);
 });
 
-it("omite folgas quando há atendimento em todos os dias, inclusive Domingo", async () => {
+it("sem folga quando há atendimento em todos os dias, inclusive Domingo", async () => {
   api.buscar.mockResolvedValue(Array.from({ length: 7 }, (_, diaSemana) => ({
     diaSemana, horaInicio: "08:00", horaFim: "18:00",
   })));
   render(<EquipePessoaView {...props} />);
-  await screen.findByText("Segunda a Domingo");
-  expect(document.querySelectorAll(".week-group-row")).toHaveLength(1);
-  expect(document.querySelector(".week-off-row")).toBeNull();
+  await screen.findByText("Domingo");
+  expect(document.querySelectorAll(".week-group-row")).toHaveLength(7);
+  expect(screen.getAllByText("08:00 - 18:00")).toHaveLength(7);
+  expect(screen.queryByText("Folga")).not.toBeInTheDocument();
 });
 
-it("exibe todos os dias de folga quando não há horários ativos", async () => {
+it("sem horários ativos mostra o vazio com Definir horário, sem linhas de dia", async () => {
   api.buscar.mockResolvedValue([
     { diaSemana: 1, horaInicio: "08:00", horaFim: "18:00", ativo: false },
   ]);
-  render(<EquipePessoaView {...props} />);
-  await screen.findByText("Todos os dias:");
-  expect(screen.getByText("Folga")).toBeInTheDocument();
+  render(<EquipePessoaView {...props} canManageDisponibilidade />);
+  expect(
+    await screen.findByText("Horário de atendimento ainda não definido"),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Definir horário" })).toBeInTheDocument();
   expect(document.querySelectorAll(".week-group-row")).toHaveLength(0);
+  expect(screen.queryByText("Folga")).not.toBeInTheDocument();
+});
+
+it("Alterar Acesso do cadastro com alteração não salva na aba Acesso mantém a aba e o rascunho, sem confirmação", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ["agenda:VER"] })));
+  render(<EquipePessoaView {...props} />);
+  fireEvent.click(screen.getByRole("tab", { name: "Acesso", exact: true }));
+  fireEvent.change(screen.getByRole("combobox", { name: "Perfil Base" }), { target: { value: "recepcao" } });
+  await screen.findByRole("region", { name: "Salvar acesso" });
+  fireEvent.click(screen.getByRole("button", { name: "Abrir cadastro do usuário" }));
+  fireEvent.click(screen.getByRole("button", { name: "Alterar Acesso & Permissões" }));
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Acesso", exact: true })).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByRole("region", { name: "Salvar acesso" })).toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "Perfil Base" })).toHaveValue("recepcao");
+  vi.unstubAllGlobals();
 });
 
 it("exibe botão editar quando canManageDisponibilidade=true sem depender de tipoOrg e abre modal", async () => {
@@ -1057,7 +1097,12 @@ it("nome amigável completo preserva honorífico para médicos", () => {
     />
   );
   fireEvent.click(screen.getByRole("tab", { name: "Pacientes", exact: true }));
-  expect(screen.getByText(/Pacientes que Dra\. Amanda atendeu/i)).toBeInTheDocument();
+  expect(screen.getByText("Pacientes atendidos · Este mês")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Abrir histórico de Maria" }));
+  expect(screen.getByText("Dra. Amanda com")).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: /Pacientes de Dra\. Amanda/ }),
+  ).toBeInTheDocument();
 });
 
 it("ao customizar permissões na matriz e clicar em Salvar Acesso, abre modal de decisão via portal", async () => {
@@ -1386,3 +1431,24 @@ it("sugere nome único e avisa em tempo real sobre nome repetido ao criar novo p
 
 
 
+
+it("contagem única de funções: ignora AGENDA_APARECER e o Dono vê o total", () => {
+  const permissoes = [
+    { permissaoId: "p1", codigo: "AGENDA_APARECER", nome: "Aparecer na agenda", moduloCodigo: "AGENDA" },
+    { permissaoId: "p2", codigo: "AGENDA_MULTI_VER", nome: "Ver agenda de todos", moduloCodigo: "AGENDA" },
+    { permissaoId: "p3", codigo: "PACIENTE_VER", nome: "Ver pacientes", moduloCodigo: "PACIENTE" },
+  ];
+  const view = render(
+    <EquipePessoaView {...props} permissoes={permissoes} permissoesPerfil={["p1", "p3"]} />,
+  );
+  expect(screen.getByText(/\d+ de \d+ funções/)).toHaveTextContent("1 de 2 funções");
+  view.rerender(
+    <EquipePessoaView
+      {...props}
+      perfil={{ id: "dono", nome: "Dono", codigo: "DONO" }}
+      permissoes={permissoes}
+      permissoesPerfil={[]}
+    />,
+  );
+  expect(screen.getByText(/\d+ de \d+ funções/)).toHaveTextContent("2 de 2 funções");
+});

@@ -18,7 +18,8 @@ vi.mock("../../contexts/OrgContext", () => ({
 vi.mock("../../contexts/useToast.js", () => ({
   useToast: () => ({ error: vi.fn(), success: vi.fn(), info: vi.fn() }),
 }));
-vi.mock("../../hooks/usePapel", () => ({
+vi.mock("../../hooks/usePapel", async (importOriginal) => ({
+  ...(await importOriginal()),
   usePapel: () => ({
     canSeeConfigEquipe: true,
     canCreateUsers: true,
@@ -137,37 +138,41 @@ it("reproduz o painel com dados do HTML e conserva rascunho durante o editor", a
   montarComRoteador(<GestaoUsuariosView />, { caminho: "/equipe" });
   await screen.findByRole("button", { name: "Ver Eduarda Prado" });
   await waitFor(() =>
-    expect(document.querySelector(".rail").textContent).toMatch(/2 de 5[23]/),
+    expect(document.querySelector(".rail").textContent).toMatch(/2 de 52/),
   );
   const rail = document.querySelector(".rail");
   expect([...rail.querySelectorAll(".rgl")]).toHaveLength(0);
+  // Ordem de hierarquia (Dono; depois mais funções, sem AGENDA_APARECER; empate pelo nome pt-BR):
+  // Dono, Administrador 52, Sócio / Investidor 52, Profissional Clínico 40,
+  // Secretaria-3 13, Secretaria-2 7, Secretaria-1 2
   expect([...rail.querySelectorAll(".dot")].map((n) => n.className)).toEqual([
     "dot all",
     "dot dono",
-    "dot cli",
-    "dot cli",
-    "dot cli",
     "dot tpl",
     "dot tpl",
     "dot tpl",
+    "dot cli",
+    "dot cli",
+    "dot cli",
   ]);
   expect(
     [...rail.querySelectorAll(".rit .nm b")].map((n) => n.textContent),
   ).toEqual([
     "Toda a equipe",
     "Dono",
-    "Secretaria-1",
-    "Secretaria-2",
-    "Secretaria-3",
     "Administrador",
     "Sócio / Investidor",
     "Profissional Clínico",
+    "Secretaria-3",
+    "Secretaria-2",
+    "Secretaria-1",
   ]);
   exportView("equipe");
-  fireEvent.click(within(rail).getByRole("button", { name: /Dono.*5[23] de 5[23]/ }));
+  fireEvent.click(within(rail).getByRole("button", { name: /Dono.*52 de 52/ }));
   exportView("dono");
+  expect(document.querySelector(".gauge b").textContent.replace(/\s+/g, " ")).toBe("52 de 52 funções");
   fireEvent.click(
-    within(rail).getByRole("button", { name: /Administrador.*5[23] de 5[23]/ }),
+    within(rail).getByRole("button", { name: /Administrador.*52 de 52/ }),
   );
   exportView("modelo");
   fireEvent.click(within(rail).getByRole("button", { name: /Toda a equipe/ }));
@@ -192,7 +197,7 @@ it("reproduz o painel com dados do HTML e conserva rascunho durante o editor", a
   );
 
   fireEvent.click(
-    within(rail).getByRole("button", { name: /Secretaria-1.*2 de 5[23]/ }),
+    within(rail).getByRole("button", { name: /Secretaria-1.*2 de 52/ }),
   );
   exportView("perfil-personalizado");
   fireEvent.click(screen.getByRole("button", { name: "Ver Eduarda Prado" }));

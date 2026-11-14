@@ -2833,3 +2833,39 @@
   margin-top: 16px;
   animation: modalFadeIn 0.2s ease-out;
 }
+
+/* I5b: aside do menu e barra Salvar do acesso (portal no body, fora do .equipe-pessoa) */
+.equipe-pessoa .acesso-menu-aside {
+  position: sticky;
+  top: 20px;
+  background: #fff;
+  border: 1px solid var(--app-border, #e2e8f0);
+  border-radius: 14px;
+  padding: 16px;
+}
+.acesso-barra-salvar {
+  position: fixed;
+  left: var(--sidebar-w, 220px);
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #fff;
+  border-top: 1px solid var(--app-border, #e2e8f0);
+  padding: 12px 32px;
+}
+@media (max-width: 1023px) {
+  .acesso-barra-salvar {
+    left: var(--sidebar-w, 0px);
+    bottom: var(--bottom-nav-h, 64px);
+    padding: 12px 24px;
+  }
+}
+@media (max-width: 767px) {
+  .acesso-barra-salvar {
+    left: 0;
+    padding: 10px 16px;
+  }
+}

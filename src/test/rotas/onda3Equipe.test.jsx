@@ -1,5 +1,6 @@
 /** Onda 3 (Equipe) com o App MONTADO: guarda de permissão, /equipe/me, Voltar/Avançar, F5 e chaves na saída. */
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { irPeloMenu } from './irPeloMenu.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { ROLE_USER_ID } from '../encerrar/servidorEncerrarFalso.js';
@@ -90,7 +91,7 @@ describe('Onda 3 Equipe com o App montado', () => {
     sessionStorage.setItem('procedi_config_section', 'clinica');
     sessionStorage.setItem('procedi_config_tab', 'equipe');
     sessionStorage.setItem('activeView', 'gestao-equipe');
-    fireEvent.click(screen.getAllByRole('button', { name: /Sair do sistema/i })[0]);
+    await irPeloMenu(/^Sair do sistema$/i);
     await assentarMuito(8);
     await waitFor(() => expect(local()).toBe(caminhos.entrar()));
     for (const k of ['procedi_config_section', 'procedi_config_tab', 'activeView']) await waitFor(() => expect(sessionStorage.getItem(k)).toBeNull());

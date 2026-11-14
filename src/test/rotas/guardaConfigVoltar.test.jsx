@@ -1,5 +1,6 @@
 /** Guarda de alterações não salvas nos horários: Voltar (POP) abre o modal; atalho da agenda (sem guarda) não. */
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { irPeloMenu } from './irPeloMenu.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { assentarMuito, montarApp, TIMEOUT } from '../consulta/appConsulta.jsx';
@@ -17,7 +18,7 @@ const caminho = () => ultimoRoteador().state.location.pathname;
 
 async function abrirHorariosSujos() {
   await montarApp({ view: 'pacientes', rotas });
-  fireEvent.click(screen.getAllByRole('button', { name: /^Configurações$/ })[0]);
+  await irPeloMenu(/^Configurações$/);
   await assentarMuito();
   fireEvent.click(screen.getAllByText(/Horários, feriados e mensagens/)[0]);
   await assentarMuito();

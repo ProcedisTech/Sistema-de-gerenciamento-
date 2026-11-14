@@ -6,6 +6,7 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { ultimoRoteador } from '../rotas/montarComRoteador.jsx';
 import { caminhos } from '../../rotas/caminhos.js';
+import { irPeloMenu } from '../rotas/irPeloMenu.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import {
@@ -147,7 +148,7 @@ describe('fila da consulta em segundo plano (tela inteira)', () => {
     await assentarMuito(4);
     expect(emConsulta()).toBe(false);
     expect(sessionStorage.getItem(chaveDaFila(USUARIO))).not.toBeNull();
-    clicarBotao(/^Sair do sistema$/i);
+    await irPeloMenu(/^Sair do sistema$/i);
     await assentarMuito(4);
     expect(screen.getByPlaceholderText('E-mail ou nome cadastrado')).toBeTruthy();
     expect(sessionStorage.getItem(chaveDaFila(USUARIO))).not.toBeNull();

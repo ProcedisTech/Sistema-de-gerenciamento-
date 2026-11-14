@@ -755,3 +755,117 @@
     padding: 6px 12px;
   }
 }
+
+/* Altura da barra inferior mobile (safe area do iPhone); sem barra a partir de 768px: tablet usa a coluna lateral. */
+:root {
+  --bottom-nav-h: calc(4rem + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 768px) {
+  :root {
+    --bottom-nav-h: 0px;
+  }
+}
+
+/* Marca do menu lateral (protótipo validado) */
+.procedi-menu-fundo {
+  background:
+    radial-gradient(150% 170px at 0 0, #d9f2ea 0, rgba(217, 242, 234, 0) 100%),
+    #fff;
+}
+.procedi-marca {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 86px;
+  padding: 4px 16px 0 25px;
+  flex: none;
+}
+.procedi-marca::after {
+  content: "";
+  position: absolute;
+  left: 24px;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    #c6a15b 0,
+    #c6a15b 34px,
+    rgba(198, 161, 91, 0.45) 60%,
+    #c6a15b 100%
+  );
+}
+.procedi-marca-simbolo {
+  line-height: 0;
+  flex: none;
+  filter: drop-shadow(0 4px 7px rgba(10, 46, 35, 0.18));
+}
+.procedi-marca-nome {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-weight: 600;
+  font-size: 35px;
+  line-height: 1;
+  letter-spacing: 0.004em;
+  color: #0a2e23;
+  white-space: nowrap;
+  padding-bottom: 4px;
+}
+.procedi-marca--recolhida {
+  justify-content: center;
+  padding: 4px 0 0;
+  cursor: pointer;
+}
+.procedi-marca--recolhida::after {
+  left: 14px;
+  right: 0;
+  background: linear-gradient(90deg, rgba(198, 161, 91, 0.25), #c6a15b);
+}
+.procedi-menu-botao {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 9999px;
+  border: 1.5px solid #c6a15b;
+  background: #fff;
+  color: #0d7a5f;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(198, 161, 91, 0.28);
+  transition:
+    background-color 160ms,
+    border-color 160ms,
+    color 160ms,
+    transform 160ms,
+    box-shadow 160ms;
+}
+.procedi-menu-botao::before {
+  content: "";
+  position: absolute;
+  top: -8.5px;
+  bottom: -8.5px;
+  left: -1.5px;
+  right: -15.5px;
+} /* 44x44; o miolo mede 27x27 */
+.procedi-menu-botao:hover,
+.procedi-menu-botao:focus-visible {
+  background: #0d7a5f;
+  border-color: #0d7a5f;
+  color: #fff;
+  transform: scale(1.1);
+}
+.procedi-menu-botao:hover {
+  box-shadow: 0 4px 12px rgba(13, 122, 95, 0.3);
+}
+@media (prefers-reduced-motion: reduce) {
+  .procedi-menu-botao {
+    transition: none;
+  }
+  .procedi-menu-botao:hover,
+  .procedi-menu-botao:focus-visible {
+    transform: none;
+  }
+}

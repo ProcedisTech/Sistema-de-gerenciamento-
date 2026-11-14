@@ -1,5 +1,6 @@
 /** Onda 2: atalhos do topo com guarda de Configurações, Voltar das Notificações, Voltar/Avançar do detalhe da agenda e limpeza do legado. */
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { irPeloMenu } from './irPeloMenu.js';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { IDS, agendaDto, pacienteDto } from '../encerrar/cenariosEncerrar.js';
@@ -16,7 +17,7 @@ const rotasHorarios = [['GET', /^\/api\/v1\/organizacoes\/[^/]+\/horarios$/, () 
 const MODAL = 'Você tem alterações não salvas no horário de atendimento. Deseja sair sem salvar?';
 const modal = () => screen.queryByRole('heading', { name: 'Alterações não salvas' });
 const caminho = () => ultimoRoteador().state.location.pathname;
-const menuConfig = () => fireEvent.click(screen.getAllByRole('button', { name: /^Configurações$/ }).at(-1));
+const menuConfig = () => irPeloMenu(/^Configurações$/);
 const ir = async (destino) => {
   act(() => {
     ultimoRoteador().navigate(destino);
@@ -26,7 +27,7 @@ const ir = async (destino) => {
 
 async function emHorarios({ sujar }) {
   await montarApp({ view: 'pacientes', rotas: rotasHorarios });
-  menuConfig();
+  await menuConfig();
   await assentarMuito();
   fireEvent.click(screen.getAllByText(/Horários, feriados e mensagens/)[0]);
   await assentarMuito();

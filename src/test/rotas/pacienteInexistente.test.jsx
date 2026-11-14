@@ -1,5 +1,6 @@
 /** /pacientes/<id> que a API não acha: "Não encontrado" no lugar do perfil, mesmo endereço, menu de pé; erro 500 não vira "não encontrado". */
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { abrirMenu } from './irPeloMenu.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { limparAmbienteSnapshot } from '../snapshotConsulta.jsx';
 import { TIMEOUT, assentarMuito, montarApp } from '../consulta/appConsulta.jsx';
@@ -28,7 +29,8 @@ describe('paciente do endereço que a API não devolve', () => {
     await montar(404);
     expect(await screen.findByText('Não encontrado', {}, { timeout: 8000 })).toBeTruthy();
     expect(ultimoRoteador().state.location.pathname).toBe(caminhos.paciente(ID));
-    expect(screen.getAllByRole('button', { name: /Sair do sistema/i }).length).toBeGreaterThan(0);
+    expect((await abrirMenu()).getByRole('button', { name: /^Sair do sistema$/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar menu' }));
   }, TIMEOUT);
 
   it('500 → NÃO mostra "Não encontrado" (falha de servidor não é paciente inexistente)', async () => {
