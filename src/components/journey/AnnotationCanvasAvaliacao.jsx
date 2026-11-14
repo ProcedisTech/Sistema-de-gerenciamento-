@@ -16,6 +16,7 @@ import { FotoVistaCanvasCore } from './mapeamento/FotoVistaCanvas.jsx';
 import { MapeamentoFullscreenToolbar } from './mapeamento/MapeamentoFullscreenToolbar.jsx';
 import { AssistiveTouchToolbar } from './mapeamento/AssistiveTouchToolbar.jsx';
 import { PontoMarcadorPopover } from './mapeamento/PontoMarcadorPopover.jsx';
+import { ConfirmarExclusaoProcedimentoModal } from './mapeamento/ConfirmarExclusaoProcedimentoModal.jsx';
 import { useMapeamentoFullscreenKeyboardShortcuts } from './mapeamento/useMapeamentoFullscreenKeyboardShortcuts.js';
 import { marcacoesApiToOverlayPontos } from './mapeamento/mapaMarcacoesOverlayUtils.js';
 import { resolveAnguloCanonico } from './mapeamento/MapeamentoFullscreenOverlay.jsx';
@@ -143,6 +144,7 @@ export function AnnotationCanvasAvaliacao({
 
   const [corLivre, setCorLivre] = useState(COR_PADRAO_AVALIACAO);
   const [procedimentosDoPlano, setProcedimentosDoPlano] = useState([]);
+  const [confirmRemoverProc, setConfirmRemoverProc] = useState(null);
   const [carregandoPlano, setCarregandoPlano] = useState(false);
 
   // Marcações / Pontos
@@ -416,17 +418,6 @@ export function AnnotationCanvasAvaliacao({
     setActiveProcedimentoId(proc.id || catId);
   };
 
-  const handleRemoverProcedimento = (procId) => {
-    setProcedimentos((prev) => prev.filter((p) => String(p.id) !== String(procId)));
-    setPontos((prev) =>
-      prev.filter((p) => String(p.catalogoProcedimentoSaudeId || p.catalogoId) !== String(procId))
-    );
-    if (String(activeProcedimentoId) === String(procId)) {
-      setActiveProcedimentoId(null);
-    }
-    setIsDirty(true);
-  };
-
   const matchProcId = (p, targetId) => {
     if (!targetId || !p) return false;
     const t = String(targetId).trim();
@@ -434,6 +425,60 @@ export function AnnotationCanvasAvaliacao({
       .filter(Boolean)
       .some((id) => String(id).trim() === t);
   };
+
+  const getProcedimentoStats = useCallback(
+    (procId) => {
+      let count = 0;
+      let doseTotal = 0;
+      const targetId = String(procId || '').trim();
+      const apenasUmProc = (procedimentos || []).length <= 1;
+      (pontos || []).forEach((pt) => {
+        const ptId = String(pt.catalogoProcedimentoSaudeId || pt.catalogoId || pt.procedimentoId || '').trim();
+        if (ptId === targetId || (!ptId && apenasUmProc)) {
+          count++;
+          doseTotal += Number(pt.quantidade || pt.dose || 1);
+        }
+      });
+      return { pontosCount: count, doseTotal: Number(doseTotal.toFixed(2)) };
+    },
+    [pontos, procedimentos]
+  );
+
+  const executarRemocaoProcedimento = useCallback(
+    (procId) => {
+      const apenasUmAntes = (procedimentos || []).length <= 1;
+      setProcedimentos((prev) => {
+        const filtered = prev.filter((p) => !matchProcId(p, procId));
+        if (matchProcId({ id: activeProcedimentoId }, procId)) {
+          setActiveProcedimentoId(filtered[0]?.id || null);
+        }
+        return filtered;
+      });
+      setPontos((prev) =>
+        prev.filter((p) => {
+          if (matchProcId(p, procId)) return false;
+          const semCat = !p.catalogoProcedimentoSaudeId && !p.catalogoId && !p.procedimentoId;
+          if (semCat && apenasUmAntes) return false;
+          return true;
+        })
+      );
+      setIsDirty(true);
+    },
+    [activeProcedimentoId, procedimentos]
+  );
+
+  const handleRemoverProcedimento = useCallback(
+    (procId) => {
+      const stats = getProcedimentoStats(procId);
+      if ((stats?.pontosCount || 0) > 0) {
+        const procAlvo = (procedimentos || []).find((p) => matchProcId(p, procId)) || null;
+        setConfirmRemoverProc({ procId, proc: procAlvo, stats });
+        return;
+      }
+      executarRemocaoProcedimento(procId);
+    },
+    [getProcedimentoStats, procedimentos, executarRemocaoProcedimento]
+  );
 
   const handleMudarCorProcedimento = (procId, novaCor) => {
     const alvo = procedimentos.find((p) => matchProcId(p, procId));
@@ -461,23 +506,6 @@ export function AnnotationCanvasAvaliacao({
     setIsDirty(true);
   };
 
-  const getProcedimentoStats = useCallback(
-    (procId) => {
-      let count = 0;
-      let doseTotal = 0;
-      const targetId = String(procId || '');
-      (pontos || []).forEach((pt) => {
-        const ptId = String(pt.catalogoProcedimentoSaudeId || pt.catalogoId || '');
-        if (ptId === targetId) {
-          count++;
-          doseTotal += Number(pt.quantidade || pt.dose || 1);
-        }
-      });
-      return { pontosCount: count, doseTotal: Number(doseTotal.toFixed(2)) };
-    },
-    [pontos]
-  );
-
   // Execução de persistência no servidor (Autosave e Manual)
   const executarSalvar = useCallback(
     async (destino = 'plano', { fecharApos = true } = {}) => {
@@ -499,15 +527,20 @@ export function AnnotationCanvasAvaliacao({
           null;
 
         const procedimentosUsados = new Set(
-          pontos.map((p) => String(p.catalogoProcedimentoSaudeId || p.catalogoId)).filter(Boolean)
+          pontos.map((p) => String(p.catalogoProcedimentoSaudeId || p.catalogoId || '')).filter(Boolean)
+        );
+        const procedimentosComPontos = procedimentos.filter(
+          (p) =>
+            procedimentosUsados.has(String(p.id || '')) ||
+            procedimentosUsados.has(String(p.catalogoProcedimentoSaudeId || ''))
         );
 
-        if (destino === 'plano' && pacienteId && planoContexto?.id) {
+        if (pontos.length > 0 && destino === 'plano' && pacienteId && planoContexto?.id) {
           try {
             await garantirProcedimentosNoPlano({
               pacienteId,
               planejamentoId: planoContexto.id,
-              procedimentos: procedimentos.filter((p) => procedimentosUsados.has(String(p.id))),
+              procedimentos: procedimentosComPontos,
               roleUserId,
             });
           } catch (errGarantir) {
@@ -528,7 +561,7 @@ export function AnnotationCanvasAvaliacao({
           };
         });
 
-        const procedimentosPayload = procedimentos.map((proc, idx) => ({
+        const procedimentosPayload = procedimentosComPontos.map((proc, idx) => ({
           catalogoProcedimentoSaudeId: (proc.catalogoProcedimentoSaudeId && isRealUuid(proc.catalogoProcedimentoSaudeId))
             ? String(proc.catalogoProcedimentoSaudeId)
             : null,
@@ -556,7 +589,7 @@ export function AnnotationCanvasAvaliacao({
 
         const effectivePlanItemId =
           procedimentosPayload.find((p) => isRealUuid(p.planejamentoItemId))?.planejamentoItemId ||
-          procedimentos.find((p) => isRealUuid(p.planejamentoItemId))?.planejamentoItemId ||
+          procedimentosComPontos.find((p) => isRealUuid(p.planejamentoItemId))?.planejamentoItemId ||
           null;
 
         const effectivePlanId = planoContexto?.id || null;
@@ -572,7 +605,16 @@ export function AnnotationCanvasAvaliacao({
           marcacoes: marcacoesPayload,
         };
 
-        const savedMapa = await mapasApi.salvar(mapaPayload);
+        let savedMapa = null;
+        if (marcacoesPayload.length > 0) {
+          savedMapa = await mapasApi.salvar(mapaPayload);
+        } else if (isRealUuid(resolvedFotoId) && typeof mapasApi.limparPorFotoGaleria === 'function') {
+          try {
+            await mapasApi.limparPorFotoGaleria(resolvedFotoId, { tipoMapaCodigo: 'avaliacao' });
+          } catch (errLimpar) {
+            console.warn('[AnnotationCanvasAvaliacao] Falha ao limpar mapa vazio da foto:', errLimpar);
+          }
+        }
 
         const cleanBlob = activePhoto?.cleanBlob || activePhoto?.blob || null;
         const cleanUrl = activePhoto?.cleanUrl || activePhoto?.url || resolvedDisplayUrl;
@@ -584,24 +626,24 @@ export function AnnotationCanvasAvaliacao({
             blob: cleanBlob,
             cleanBlob,
             cleanUrl,
-            procedimentosMapeados: procedimentos,
+            procedimentosMapeados: marcacoesPayload.length > 0 ? procedimentosComPontos : [],
             pontos: pontosEnriquecidos,
-            isAnnotated: true,
+            isAnnotated: marcacoesPayload.length > 0,
             destinoAvaliacao: destino,
             isAvulso: destino === 'avulso',
-            mapaId: savedMapa?.id || null,
+            mapaId: marcacoesPayload.length > 0 ? (savedMapa?.id || null) : null,
             planejamentoId: effectivePlanId,
             planejamentoItemId: effectivePlanItemId,
-            mapaOverlay: {
+            mapaOverlay: marcacoesPayload.length > 0 ? {
               mapaId: savedMapa?.id || null,
               tipoMapaCodigo: 'avaliacao',
               tipoMapaNome: 'Avaliação',
               pontos: pontosEnriquecidos,
               marcacoes: pontosEnriquecidos,
-              procedimentos,
+              procedimentos: procedimentosComPontos,
               planejamentoId: effectivePlanId,
               planejamentoItemId: effectivePlanItemId,
-            },
+            } : null,
           });
         }
 
@@ -702,7 +744,7 @@ export function AnnotationCanvasAvaliacao({
   // Atalhos de teclado ergonômicos
   useMapeamentoFullscreenKeyboardShortcuts({
     enabled: true,
-    blocked: Boolean(modalDestinoOpen),
+    blocked: Boolean(modalDestinoOpen || confirmRemoverProc),
     onSetModo: setModo,
     onDesfazer: handleUndo,
     onResetZoom: () => transformWrapperRef.current?.resetTransform?.(),
@@ -1015,6 +1057,26 @@ export function AnnotationCanvasAvaliacao({
           </div>
         </div>
       )}
+
+      <ConfirmarExclusaoProcedimentoModal
+        open={Boolean(confirmRemoverProc)}
+        procedimentoNome={
+          confirmRemoverProc?.proc?.nome ||
+          confirmRemoverProc?.proc?.nomeProcedimento ||
+          'Procedimento'
+        }
+        pontosCount={confirmRemoverProc?.stats?.pontosCount || 0}
+        doseTotal={confirmRemoverProc?.stats?.doseTotal || 0}
+        unidadeMedida={confirmRemoverProc?.proc?.unidadeMedida || activeUnidade}
+        onCancel={() => setConfirmRemoverProc(null)}
+        onConfirm={() => {
+          const alvoId = confirmRemoverProc?.procId;
+          setConfirmRemoverProc(null);
+          if (alvoId) {
+            executarRemocaoProcedimento(alvoId);
+          }
+        }}
+      />
     </div>,
     document.body
   );

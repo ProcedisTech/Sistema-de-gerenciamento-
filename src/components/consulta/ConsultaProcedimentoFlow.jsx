@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ShieldCheck, CheckCircle2, Info, AlertCircle, Trash2, X } from 'lucide-react';
 import { Step4Procedimento } from '../journey/Step4LGPD.jsx';
 import { Step5Finalization } from '../journey/Step5Finalization.jsx';
+import { ConfirmarExclusaoProcedimentoModal } from '../journey/mapeamento/ConfirmarExclusaoProcedimentoModal.jsx';
 import { statusTermoPorProcedimento } from '../../utils/termoResolucao.js';
 import { ehLinhaConsultaSemCatalogo } from './consultaServidor.js';
 
@@ -45,6 +46,7 @@ export function ConsultaProcedimentoFlow({
   onEnsureProcedimento = () => Promise.resolve(null),
   onValidarTermosCatalogo,
   execucaoBloqueadaPorTermos = false,
+  termosValidando = false,
   titulosTermosFaltantes = [],
   resolucao = null,
   onIrParaTermosGate,
@@ -85,6 +87,7 @@ export function ConsultaProcedimentoFlow({
 }) {
   const [phase, setPhase] = useState('registro');
   const [confirmacaoLoteOpen, setConfirmacaoLoteOpen] = useState(false);
+  const [confirmRemoverLote, setConfirmRemoverLote] = useState(null);
 
   const indicesSemMarcada = Array.isArray(itensSemOrientacaoMarcada) ? itensSemOrientacaoMarcada : [];
   const orientacoesOk = indicesSemMarcada.length === 0;
@@ -121,23 +124,39 @@ export function ConsultaProcedimentoFlow({
     setPhase('orientacoes');
   };
 
-  const handleRemoverDoLote = async (procId) => {
+  const matchProcLote = (p, pid) => {
+    const cat = String(p?.catalogoProcedimentoSaudeId || p?.nomeProcedimentoCatalogoId || p?.catalogoId || '').trim();
+    const matchCat = cat !== '' && cat === pid;
+    const matchItem = p?.itemId != null && String(p.itemId).trim() === pid;
+    const matchUid = p?._uid != null && String(p._uid).trim() === pid;
+    const matchId = p?.id != null && String(p.id).trim() === pid;
+    return matchCat || matchItem || matchUid || matchId;
+  };
+
+  const executarRemocaoDoLote = async (procId) => {
     const pid = String(procId || '').trim();
     if (!pid) return;
     const atual = Array.isArray(procedimentosLote) ? procedimentosLote : [];
+    const procsReaisAntes = atual.filter((p) => p && !ehLinhaConsultaSemCatalogo(p) && !p.nomeSoDeTela);
+    const idxAlvo = procsReaisAntes.findIndex((p) => matchProcLote(p, pid));
+    const procAlvo = idxAlvo >= 0 ? procsReaisAntes[idxAlvo] : null;
+
+    if (mapaState && typeof mapaState.removerPontosPorProcedimento === 'function') {
+      mapaState.removerPontosPorProcedimento(procAlvo || pid, {
+        ehUnicoProcedimento: procsReaisAntes.length <= 1,
+        procedimentoIndex: idxAlvo >= 0 ? idxAlvo : null,
+      });
+    }
+
     const novaLista = atual.filter((p) => {
       if (ehLinhaConsultaSemCatalogo(p)) return true;
-      const cat = String(p.catalogoProcedimentoSaudeId || p.nomeProcedimentoCatalogoId || p.catalogoId || '').trim();
-      const matchCat = cat !== '' && cat === pid;
-      const matchItem = p.itemId != null && String(p.itemId).trim() === pid;
-      const matchUid = p._uid != null && String(p._uid).trim() === pid;
-      const matchId = p.id != null && String(p.id).trim() === pid;
-      return !(matchCat || matchItem || matchUid || matchId);
+      return !matchProcLote(p, pid);
     });
     const slotBase = atual.find((p) => p?.itemId && !ehLinhaConsultaSemCatalogo(p)) || atual[0];
+    const ehSlotAgenda = Boolean(slotBase?.agendaId || slotBase?.isAgendaRetorno);
     const listaFinal = novaLista.length === 0 && slotBase?.itemId && !ehLinhaConsultaSemCatalogo(slotBase)
       ? [{
-        itemId: slotBase.itemId,
+        itemId: ehSlotAgenda ? slotBase.itemId : null,
         agendaId: slotBase.agendaId ?? null,
         isAgendaRetorno: Boolean(slotBase.isAgendaRetorno),
         legado: false,
@@ -174,6 +193,26 @@ export function ConsultaProcedimentoFlow({
       setConfirmacaoLoteOpen(false);
       setPhase('registro');
     }
+  };
+
+  const handleRemoverDoLote = async (procId) => {
+    const pid = String(procId || '').trim();
+    if (!pid) return;
+    const atual = Array.isArray(procedimentosLote) ? procedimentosLote : [];
+    const procsReaisAntes = atual.filter((p) => p && !ehLinhaConsultaSemCatalogo(p) && !p.nomeSoDeTela);
+    const idxAlvo = procsReaisAntes.findIndex((p) => matchProcLote(p, pid));
+    const procAlvo = idxAlvo >= 0 ? procsReaisAntes[idxAlvo] : null;
+    if (mapaState && typeof mapaState.contarPontosPorProcedimento === 'function') {
+      const stats = mapaState.contarPontosPorProcedimento(procAlvo || pid, {
+        ehUnicoProcedimento: procsReaisAntes.length <= 1,
+        procedimentoIndex: idxAlvo >= 0 ? idxAlvo : null,
+      });
+      if ((stats?.pontosCount || 0) > 0) {
+        setConfirmRemoverLote({ procId: pid, proc: procAlvo, stats });
+        return;
+      }
+    }
+    await executarRemocaoDoLote(pid);
   };
 
   const handleConfirmarEFinalizar = async () => {
@@ -238,6 +277,7 @@ export function ConsultaProcedimentoFlow({
           journeyPlanejamentoCtx={journeyPlanejamentoCtx}
           onValidarTermosCatalogo={onValidarTermosCatalogo}
           execucaoBloqueadaPorTermos={execucaoBloqueadaPorTermos}
+          termosValidando={termosValidando}
           titulosTermosFaltantes={titulosTermosFaltantes}
           resolucao={resolucao}
           onIrParaTermosGate={onIrParaTermosGate}
@@ -453,6 +493,28 @@ export function ConsultaProcedimentoFlow({
           </div>
         </div>
       )}
+
+      <ConfirmarExclusaoProcedimentoModal
+        open={Boolean(confirmRemoverLote)}
+        procedimentoNome={
+          confirmRemoverLote?.proc?.nomeProcedimento ||
+          confirmRemoverLote?.proc?.procedimentoNome ||
+          confirmRemoverLote?.proc?.nome ||
+          'Procedimento'
+        }
+        pontosCount={confirmRemoverLote?.stats?.pontosCount || 0}
+        doseTotal={confirmRemoverLote?.stats?.doseTotal || 0}
+        unidadeMedida={confirmRemoverLote?.proc?.unidadeMedida || ''}
+        vistasAfetadas={confirmRemoverLote?.stats?.vistasAfetadas || []}
+        onCancel={() => setConfirmRemoverLote(null)}
+        onConfirm={async () => {
+          const alvoId = confirmRemoverLote?.procId;
+          setConfirmRemoverLote(null);
+          if (alvoId) {
+            await executarRemocaoDoLote(alvoId);
+          }
+        }}
+      />
     </>
   );
 }

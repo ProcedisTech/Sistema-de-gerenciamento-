@@ -9,6 +9,7 @@ import { buildGrupoPontosVista, hydrateMapaFromGet } from '../../utils/procedime
 import { VISTA_MAPA_APLICACAO_PADRAO } from '../../constants/vistasMapaAplicacao.js';
 import { FotoVistaCanvas, FotoVistaCanvasCore } from '../journey/mapeamento/FotoVistaCanvas.jsx';
 import { MapeamentoFullscreenOverlay } from '../journey/mapeamento/MapeamentoFullscreenOverlay.jsx';
+import { ConfirmarExclusaoProcedimentoModal } from '../journey/mapeamento/ConfirmarExclusaoProcedimentoModal.jsx';
 import { VistaAtivaHeader, VistaChipsBar } from '../journey/mapeamento/VistaChipsBar.jsx';
 import { ZoomableGalleryLightbox } from '../patients/ZoomableGalleryLightbox.jsx';
 import { formatarInstante } from '../../utils/datasClinica.js';
@@ -187,6 +188,7 @@ export function ConsultaRetornoFlow({
       null
     );
   });
+  const [confirmRemoverProcRetorno, setConfirmRemoverProcRetorno] = useState(null);
 
   useEffect(() => {
     if (listaProcedimentosSessao.length > 0) {
@@ -266,6 +268,65 @@ export function ConsultaRetornoFlow({
       setProcedimentoArmadoId(catIdStr);
     },
     [setProcedimentosSessao, catalogoIdPai],
+  );
+
+  const executarRemocaoProcedimentoRetorno = useCallback(
+    (procId) => {
+      const pid = String(procId || '').trim();
+      if (!pid) return;
+      const idxAlvo = listaProcedimentosSessao.findIndex(
+        (p) =>
+          String(p?.catalogoProcedimentoSaudeId || '').trim() === pid ||
+          String(p?.catalogoId || '').trim() === pid ||
+          String(p?.id || '').trim() === pid
+      );
+      const procAlvo = idxAlvo >= 0 ? listaProcedimentosSessao[idxAlvo] : null;
+      mapaRetornoState?.removerPontosPorProcedimento?.(procAlvo || pid, {
+        ehUnicoProcedimento: listaProcedimentosSessao.length <= 1,
+        procedimentoIndex: idxAlvo >= 0 ? idxAlvo : null,
+      });
+      if (typeof setProcedimentosSessao === 'function') {
+        setProcedimentosSessao((prev) => {
+          if (!Array.isArray(prev)) return prev;
+          return prev.filter((p) => {
+            const cid = String(p?.catalogoProcedimentoSaudeId || p?.nomeProcedimentoCatalogoId || p?.catalogoId || '').trim();
+            const idStr = String(p?.id || '').trim();
+            return cid !== pid && idStr !== pid;
+          });
+        });
+      }
+      if (String(procedimentoArmadoId || '') === pid) {
+        const restante = listaProcedimentosSessao.find((p) => String(p.id) !== pid);
+        setProcedimentoArmadoId(restante?.id || null);
+      }
+    },
+    [listaProcedimentosSessao, mapaRetornoState, setProcedimentosSessao, procedimentoArmadoId],
+  );
+
+  const handleRemoverProcedimentoRetorno = useCallback(
+    (procId) => {
+      const pid = String(procId || '').trim();
+      if (!pid) return;
+      const idxAlvo = listaProcedimentosSessao.findIndex(
+        (p) =>
+          String(p?.catalogoProcedimentoSaudeId || '').trim() === pid ||
+          String(p?.catalogoId || '').trim() === pid ||
+          String(p?.id || '').trim() === pid
+      );
+      const procAlvo = idxAlvo >= 0 ? listaProcedimentosSessao[idxAlvo] : null;
+      if (mapaRetornoState && typeof mapaRetornoState.contarPontosPorProcedimento === 'function') {
+        const stats = mapaRetornoState.contarPontosPorProcedimento(procAlvo || pid, {
+          ehUnicoProcedimento: listaProcedimentosSessao.length <= 1,
+          procedimentoIndex: idxAlvo >= 0 ? idxAlvo : null,
+        });
+        if ((stats?.pontosCount || 0) > 0) {
+          setConfirmRemoverProcRetorno({ procId: pid, proc: procAlvo, stats });
+          return;
+        }
+      }
+      executarRemocaoProcedimentoRetorno(pid);
+    },
+    [listaProcedimentosSessao, mapaRetornoState, executarRemocaoProcedimentoRetorno],
   );
 
   const handleMudarCorProcedimento = useCallback(
@@ -1172,6 +1233,12 @@ export function ConsultaRetornoFlow({
           pacienteId={pacienteId}
           onArmar={(proc) => setProcedimentoArmadoId(proc?.id)}
           onAdicionarProcedimento={handleAdicionarProcedimentoRetorno}
+          onRemoverProcedimento={handleRemoverProcedimentoRetorno}
+          contarPontosProcedimento={(procId) =>
+            mapaRetornoState?.contarPontosPorProcedimento?.(procId, {
+              ehUnicoProcedimento: listaProcedimentosSessao.length <= 1,
+            }) ?? { pontosCount: 0, doseTotal: 0, vistasAfetadas: [] }
+          }
           procedimentosUsados={listaProcedimentosSessao}
           pontosVista={retornoGruposPontos}
           gruposSessao={gruposSessao}
@@ -1190,6 +1257,27 @@ export function ConsultaRetornoFlow({
           onClose={() => setRetornoFullscreenOpen(false)}
         />
       ) : null}
+
+      <ConfirmarExclusaoProcedimentoModal
+        open={Boolean(confirmRemoverProcRetorno)}
+        procedimentoNome={
+          confirmRemoverProcRetorno?.proc?.nome ||
+          confirmRemoverProcRetorno?.proc?.nomeProcedimento ||
+          'Procedimento'
+        }
+        pontosCount={confirmRemoverProcRetorno?.stats?.pontosCount || 0}
+        doseTotal={confirmRemoverProcRetorno?.stats?.doseTotal || 0}
+        unidadeMedida={confirmRemoverProcRetorno?.proc?.unidadeMedida || ''}
+        vistasAfetadas={confirmRemoverProcRetorno?.stats?.vistasAfetadas || []}
+        onCancel={() => setConfirmRemoverProcRetorno(null)}
+        onConfirm={() => {
+          const alvoId = confirmRemoverProcRetorno?.procId;
+          setConfirmRemoverProcRetorno(null);
+          if (alvoId) {
+            executarRemocaoProcedimentoRetorno(alvoId);
+          }
+        }}
+      />
     </div>
   );
 }

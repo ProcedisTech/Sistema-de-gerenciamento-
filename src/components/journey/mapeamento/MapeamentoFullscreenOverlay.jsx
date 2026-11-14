@@ -37,6 +37,7 @@ import {
   getCorLivreParaProcedimento,
 } from '../../../constants/mapeamentoPaletaCores.js';
 import { AssistiveTouchToolbar } from './AssistiveTouchToolbar.jsx';
+import { ConfirmarExclusaoProcedimentoModal } from './ConfirmarExclusaoProcedimentoModal.jsx';
 import { mapasApi, planejamentosApi, catalogosApi, pacientesGaleriaApi } from '../../../services/api.js';
 import { convertToWebP } from '../../../utils/imageUtils.js';
 import { isRealUuid } from '../../../utils/planejamentoDraftUtils.js';
@@ -128,6 +129,14 @@ export function resolveAnguloCanonico(foto, vistaAtual) {
   return norm;
 }
 
+function matchProcId(p, targetId) {
+  if (!targetId || !p) return false;
+  const t = String(targetId).trim();
+  return [p.id, p.catalogoProcedimentoSaudeId, p.catalogoId, p.nomeProcedimentoCatalogoId, p._uid]
+    .filter(Boolean)
+    .some((id) => String(id).trim() === t);
+}
+
 export function MapeamentoFullscreenOverlay({
   open,
   toolbarWidthPx = 240,
@@ -171,12 +180,19 @@ export function MapeamentoFullscreenOverlay({
   scope = 'evaluation', // 'evaluation' | 'procedure'
   tituloAcaoPrimaria: propTituloAcaoPrimaria,
   imageSrc,
+  execucaoBloqueadaPorTermos = false,
+  termosValidando = false,
+  titulosTermosFaltantes = [],
+  resolucao = null,
+  onIrParaTermosGate,
+  contarPontosProcedimento,
 }) {
   const toast = useToast();
   const [modo, setModo] = useState('ponto');
   const [tamanhoGlobalPonto, setTamanhoGlobalPonto] = useState(1.0);
   const [mostrarValores, setMostrarValores] = useState(true);
   const [resumoModalOpen, setResumoModalOpen] = useState(false);
+  const [confirmRemoverProc, setConfirmRemoverProc] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [configPopoverOpen, setConfigPopoverOpen] = useState(false);
   const mainContainerRef = useRef(null);
@@ -587,44 +603,10 @@ export function MapeamentoFullscreenOverlay({
         if (prev.some((p) => matchProcId(p, catId))) return prev;
         return deduplicarProcedimentosPorCatalogo([...prev, procNormalizado]);
       });
-      setActiveProcedimentoId(catId);
-      onArmar?.(procNormalizado);
     }
+    setActiveProcedimentoId(catId);
+    onArmar?.(procNormalizado);
     onAdicionarProcedimento?.(procNormalizado);
-  };
-
-  const handleRemoverProcedimento = useCallback(
-    (procId) => {
-      removedProcIdsRef.current.add(String(procId).trim());
-      setProcedimentosLocais((prev) => {
-        const filtered = prev.filter((p) => !matchProcId(p, procId));
-        if (matchProcId({ id: activeProcedimentoId }, procId)) {
-          const nextActive = filtered[0]?.id || null;
-          setActiveProcedimentoId(nextActive);
-          if (filtered[0]) {
-            onArmar?.(filtered[0]);
-          } else {
-            onArmar?.(null);
-          }
-        }
-        return filtered;
-      });
-      // Remove marcações órfãs do canvas que pertenciam ao procedimento excluído
-      setInternalPontos((prev) =>
-        prev.filter((pt) => !matchProcId(pt, procId))
-      );
-      setIsDirty(true);
-      onRemoverProcedimento?.(procId);
-    },
-    [activeProcedimentoId, onArmar, onRemoverProcedimento]
-  );
-
-  const matchProcId = (p, targetId) => {
-    if (!targetId || !p) return false;
-    const t = String(targetId).trim();
-    return [p.id, p.catalogoProcedimentoSaudeId, p.catalogoId, p.nomeProcedimentoCatalogoId, p._uid]
-      .filter(Boolean)
-      .some((id) => String(id).trim() === t);
   };
 
   const handleMudarCorProcedimento = (procId, novaCor) => {
@@ -777,35 +759,114 @@ export function MapeamentoFullscreenOverlay({
     ? (propCountPontosVista || 0)
     : internalPontos.length;
 
-  const getProcedimentoStats = useCallback(
+  const getProcedimentoStatsGlobal = useCallback(
     (procId) => {
+      if (typeof contarPontosProcedimento === 'function') {
+        return contarPontosProcedimento(procId);
+      }
+      const targetId = String(procId || '').trim();
+      if (isControlledMode && Array.isArray(gruposSessao) && gruposSessao.length > 0) {
+        let pontosCount = 0;
+        let doseTotal = 0;
+        const vistasSet = new Set();
+        gruposSessao.forEach((grp) => {
+          const grpId = String(grp?.catalogoProcedimentoSaudeId || grp?.catalogoId || grp?.id || '').trim();
+          if (grpId !== targetId) return;
+          Object.entries(grp?.pontosPorVista || {}).forEach(([vista, pts]) => {
+            if (!Array.isArray(pts) || pts.length === 0) return;
+            vistasSet.add(vista);
+            pts.forEach((pt) => {
+              pontosCount++;
+              doseTotal += Number(pt?.quantidade || pt?.dose || 0);
+            });
+          });
+        });
+        return {
+          pontosCount,
+          doseTotal: Number(doseTotal.toFixed(2)),
+          vistasAfetadas: Array.from(vistasSet),
+        };
+      }
       let pontosCount = 0;
       let doseTotal = 0;
-      const targetId = String(procId || '');
       const colecao = Array.isArray(effectivePontosVista) ? effectivePontosVista : [];
-
+      const apenasUmProc = listaProcedimentos.length <= 1;
       colecao.forEach((item) => {
         if (Array.isArray(item.pontos)) {
           const grupoCatId = String(item.catalogoProcedimentoSaudeId || item.catalogoId || '');
           item.pontos.forEach((pt) => {
-            const ptId = String(pt.catalogoProcedimentoSaudeId || pt.catalogoId || pt.procedimentoId || grupoCatId);
-            if (ptId === targetId) {
+            const ptId = String(pt.catalogoProcedimentoSaudeId || pt.catalogoId || pt.procedimentoId || grupoCatId || '').trim();
+            if (ptId === targetId || (!ptId && apenasUmProc)) {
               pontosCount++;
               doseTotal += Number(pt.quantidade || pt.dose || 0);
             }
           });
         } else {
-          const ptId = String(item.catalogoProcedimentoSaudeId || item.catalogoId || item.procedimentoId || '');
-          if (ptId === targetId) {
+          const ptId = String(item.catalogoProcedimentoSaudeId || item.catalogoId || item.procedimentoId || '').trim();
+          if (ptId === targetId || (!ptId && apenasUmProc)) {
             pontosCount++;
             doseTotal += Number(item.quantidade || item.dose || 0);
           }
         }
       });
-      return { pontosCount, doseTotal: Number(doseTotal.toFixed(2)) };
+      return { pontosCount, doseTotal: Number(doseTotal.toFixed(2)), vistasAfetadas: [] };
     },
-    [effectivePontosVista]
+    [contarPontosProcedimento, isControlledMode, gruposSessao, effectivePontosVista, listaProcedimentos.length]
   );
+
+  const executarRemocaoLocal = useCallback(
+    (procId) => {
+      const targetKey = String(procId || '').trim();
+      if (targetKey) {
+        removedProcIdsRef.current.add(targetKey);
+      }
+      const apenasUmAntes = listaProcedimentos.length <= 1;
+      setProcedimentosLocais((prev) => {
+        const filtered = prev.filter((p) => !matchProcId(p, procId));
+        if (matchProcId({ id: activeProcedimentoId }, procId)) {
+          const nextActive = filtered[0]?.id || null;
+          setActiveProcedimentoId(nextActive);
+          if (filtered[0]) {
+            onArmar?.(filtered[0]);
+          } else {
+            onArmar?.(null);
+          }
+        }
+        return filtered;
+      });
+      // Remove marcações órfãs do canvas que pertenciam ao procedimento excluído
+      setInternalPontos((prev) =>
+        prev.filter((pt) => {
+          if (matchProcId(pt, procId)) return false;
+          const semCat = !pt.catalogoProcedimentoSaudeId && !pt.catalogoId && !pt.procedimentoId;
+          if (semCat && apenasUmAntes) return false;
+          return true;
+        })
+      );
+      setIsDirty(true);
+      onRemoverProcedimento?.(procId);
+    },
+    [activeProcedimentoId, listaProcedimentos.length, onArmar, onRemoverProcedimento]
+  );
+
+  const handleRemoverProcedimento = useCallback(
+    (procId) => {
+      if (isControlledMode && scope !== 'evaluation' && typeof onRemoverProcedimento === 'function') {
+        onRemoverProcedimento(procId);
+        return;
+      }
+      const stats = getProcedimentoStatsGlobal(procId);
+      if ((stats?.pontosCount || 0) > 0) {
+        const procAlvo = listaProcedimentos.find((p) => matchProcId(p, procId)) || null;
+        setConfirmRemoverProc({ procId, proc: procAlvo, stats });
+        return;
+      }
+      executarRemocaoLocal(procId);
+    },
+    [isControlledMode, scope, onRemoverProcedimento, getProcedimentoStatsGlobal, listaProcedimentos, executarRemocaoLocal]
+  );
+
+  const getProcedimentoStats = getProcedimentoStatsGlobal;
 
   // ── ESTADO DO MODAL DE DESTINO CLÍNICO (Plano vs Avulso) ───────────────────
   const [modalDestinoOpen, setModalDestinoOpen] = useState(false);
@@ -866,10 +927,15 @@ export function MapeamentoFullscreenOverlay({
           }
         }
 
-        // DEFESA 5: Sincronização com o Plano Ativo apenas quando autorizado
+        // DEFESA 5: Sincronização com o Plano Ativo apenas quando autorizado (somente procedimentos com >= 1 ponto)
+        const procedimentosComPontosNoMapa =
+          internalPontos.length > 0
+            ? listaProcedimentos.filter((p) => (getProcedimentoStatsGlobal(p.id)?.pontosCount || 0) > 0)
+            : [];
+
         let itensCriadosPorCatalogo = {};
         if (sincronizarPlano && destino === 'plano' && pacienteId && isRealUuid(pacienteId)) {
-          const catIdsParaGarantir = listaProcedimentos
+          const catIdsParaGarantir = procedimentosComPontosNoMapa
             .map((p) => p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
             .filter(isRealUuid);
           if (catIdsParaGarantir.length > 0) {
@@ -904,7 +970,11 @@ export function MapeamentoFullscreenOverlay({
         setProcedimentosLocais(listaProcedimentosEnriquecida);
 
         const procedimentosPayload = listaProcedimentosEnriquecida
-          .filter((proc) => isRealUuid(proc.catalogoProcedimentoSaudeId || proc.id) || isRealUuid(proc.planejamentoItemId))
+          .filter(
+            (proc) =>
+              (getProcedimentoStatsGlobal(proc.id)?.pontosCount || 0) > 0 &&
+              (isRealUuid(proc.catalogoProcedimentoSaudeId || proc.id) || isRealUuid(proc.planejamentoItemId))
+          )
           .map((proc, idx) => ({
             catalogoProcedimentoSaudeId: isRealUuid(proc.catalogoProcedimentoSaudeId || proc.id)
               ? proc.catalogoProcedimentoSaudeId || proc.id
@@ -1049,6 +1119,7 @@ export function MapeamentoFullscreenOverlay({
       activeIndex,
       pacienteId,
       listaProcedimentos,
+      getProcedimentoStatsGlobal,
       roleUserId,
       vistaAtual,
       internalPontos,
@@ -1074,6 +1145,10 @@ export function MapeamentoFullscreenOverlay({
         executarSalvar({ fecharApos: true });
         return;
       }
+      if (internalPontos.length === 0) {
+        executarSalvar({ fecharApos: true, destino: 'avulso', sincronizarPlano: false });
+        return;
+      }
 
       // Verifica se há procedimentos mapeados que ainda não estão vinculados ao plano ativo
       const planoIdsSet = new Set(
@@ -1097,7 +1172,7 @@ export function MapeamentoFullscreenOverlay({
         executarSalvar({ fecharApos: true, destino: 'plano', sincronizarPlano: true });
       }
     },
-    [isControlledMode, scope, procedimentosDoPlano, listaProcedimentos, planoContexto?.id, executarSalvar]
+    [isControlledMode, scope, internalPontos.length, procedimentosDoPlano, listaProcedimentos, planoContexto?.id, executarSalvar]
   );
 
   // Autosave 700ms debounced — NUNCA toca no plano de tratamento em segundo plano
@@ -1116,6 +1191,10 @@ export function MapeamentoFullscreenOverlay({
   }, []);
 
   const handleEscape = useCallback(() => {
+    if (confirmRemoverProc) {
+      setConfirmRemoverProc(null);
+      return;
+    }
     if (modalDestinoOpen) {
       setModalDestinoOpen(false);
       return;
@@ -1133,11 +1212,11 @@ export function MapeamentoFullscreenOverlay({
     } else {
       onClose?.();
     }
-  }, [modalDestinoOpen, configPopoverOpen, resumoModalOpen, isDirty, handleIniciarSalvar, onClose]);
+  }, [confirmRemoverProc, modalDestinoOpen, configPopoverOpen, resumoModalOpen, isDirty, handleIniciarSalvar, onClose]);
 
   useMapeamentoFullscreenKeyboardShortcuts({
     enabled: open,
-    blocked: false,
+    blocked: Boolean(confirmRemoverProc || modalDestinoOpen),
     onSetModo: setModo,
     onDesfazer: handleDesfazerUltimo,
     onResetZoom: handleResetView,
@@ -1200,6 +1279,12 @@ export function MapeamentoFullscreenOverlay({
               : 'Salvar Avaliação')
         }
         isSaving={isSaving}
+        scope={scope}
+        execucaoBloqueadaPorTermos={execucaoBloqueadaPorTermos}
+        termosValidando={termosValidando}
+        titulosTermosFaltantes={titulosTermosFaltantes}
+        resolucao={resolucao}
+        onIrParaTermosGate={onIrParaTermosGate}
       />
 
       {/* ── ÁREA DA FOTO E ILHA FLUTUANTE DE FERRAMENTAS (Mesa de Luz Clínica) ── */}
@@ -1328,6 +1413,14 @@ export function MapeamentoFullscreenOverlay({
           onModoChange={setModo}
           configMarcacao={configMarcacao}
           mostrarValores={mostrarValores}
+          desenhoBloqueado={Boolean(scope === 'procedure' && (execucaoBloqueadaPorTermos || termosValidando))}
+          onDesenhoBloqueadoClick={() =>
+            toast.warning(
+              termosValidando
+                ? 'Aguarde a validação dos termos de consentimento.'
+                : 'Assine os termos pendentes antes de desenhar no mapa.'
+            )
+          }
         />
 
         {/* DEFESA 2: Carrossel de Miniaturas com troca protegida por flush */}
@@ -1443,6 +1536,23 @@ export function MapeamentoFullscreenOverlay({
             </div>
           </div>
         )}
+
+        <ConfirmarExclusaoProcedimentoModal
+          open={Boolean(confirmRemoverProc)}
+          procedimentoNome={confirmRemoverProc?.proc?.nome || confirmRemoverProc?.proc?.nomeProcedimento || 'Procedimento'}
+          pontosCount={confirmRemoverProc?.stats?.pontosCount || 0}
+          doseTotal={confirmRemoverProc?.stats?.doseTotal || 0}
+          unidadeMedida={confirmRemoverProc?.proc?.unidadeMedida || activeUnidade}
+          vistasAfetadas={confirmRemoverProc?.stats?.vistasAfetadas || []}
+          onCancel={() => setConfirmRemoverProc(null)}
+          onConfirm={() => {
+            const alvoId = confirmRemoverProc?.procId;
+            setConfirmRemoverProc(null);
+            if (alvoId) {
+              executarRemocaoLocal(alvoId);
+            }
+          }}
+        />
       </main>
     </div>,
     document.body

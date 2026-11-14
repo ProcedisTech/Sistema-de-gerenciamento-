@@ -16,6 +16,78 @@ function nextLocalId() {
   return `ep_${Date.now()}_${localIdSeq}`;
 }
 
+function extrairAlvosProcedimento(procOuChaves, opcoes = {}) {
+  const alvosSet = new Set();
+  let procIndex = Number.isFinite(Number(opcoes?.procedimentoIndex))
+    ? Number(opcoes.procedimentoIndex)
+    : null;
+
+  const registrar = (item) => {
+    if (item == null) return;
+    if (typeof item === 'string' || typeof item === 'number') {
+      const s = String(item).trim();
+      if (!s) return;
+      alvosSet.add(s);
+      const m = /^(?:idx|proc)_(\d+)$/.exec(s);
+      if (m && procIndex == null) procIndex = Number(m[1]);
+      return;
+    }
+    if (typeof item === 'object') {
+      const candidatos = [
+        item.catalogoProcedimentoSaudeId,
+        item.nomeProcedimentoCatalogoId,
+        item.catalogoId,
+        item.procedimentoId,
+        item.id,
+      ];
+      for (const c of candidatos) {
+        const s = String(c ?? '').trim();
+        if (!s) continue;
+        alvosSet.add(s);
+        const m = /^(?:idx|proc)_(\d+)$/.exec(s);
+        if (m && procIndex == null) procIndex = Number(m[1]);
+      }
+      if (procIndex == null && item.procedimentoIndex != null && Number.isFinite(Number(item.procedimentoIndex))) {
+        procIndex = Number(item.procedimentoIndex);
+      }
+    }
+  };
+
+  if (Array.isArray(procOuChaves)) {
+    procOuChaves.forEach(registrar);
+  } else {
+    registrar(procOuChaves);
+  }
+
+  return {
+    alvosSet,
+    procIndex,
+    ehUnico: Boolean(opcoes?.ehUnicoProcedimento),
+  };
+}
+
+function pontoPertenceAoProcedimento(pt, { alvosSet, procIndex, ehUnico }) {
+  if (!pt) return false;
+  const ptCatIds = [pt.catalogoProcedimentoSaudeId, pt.catalogoId, pt.procedimentoId]
+    .filter((v) => v != null && String(v).trim() !== '')
+    .map((v) => String(v).trim());
+
+  if (ptCatIds.some((cid) => alvosSet.has(cid))) return true;
+  if (
+    procIndex != null
+    && Number.isFinite(procIndex)
+    && pt.procedimentoIndex != null
+    && Number(pt.procedimentoIndex) === procIndex
+  ) {
+    return true;
+  }
+  const semCatalogoExplicito = ptCatIds.length === 0 || (ptCatIds.length === 1 && ptCatIds[0] === 'default');
+  if (ehUnico && semCatalogoExplicito && pt.procedimentoIndex == null) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Estado local do mapa de aplicação (execução — um procedimento por sessão).
  */
@@ -370,11 +442,14 @@ export function useMapaAplicacaoState() {
    * `preservarVistas` (rascunho da consulta, C4): vistas com mudança local ainda não salva ficam como estão, com a
    * marca de suja; as outras recebem o que veio do servidor.
    */
-  const hydrateFromApi = useCallback((response, { preservarVistas } = {}) => {
-    if (!hasMapaHydrateContent(response)) {
+  const hydrateFromApi = useCallback((response, { preservarVistas, allowEmpty = false } = {}) => {
+    const hasContent = hasMapaHydrateContent(response);
+    if (!hasContent && !allowEmpty) {
       return { applied: false, data: null };
     }
-    const data = hydrateMapaFromGet(response);
+    const data = hasContent
+      ? hydrateMapaFromGet(response)
+      : { pontosPorVista: {}, fotoGaleriaIdPorVista: {} };
     const preservar = new Set(preservarVistas || []);
     if (preservar.size === 0) {
       setPontosPorVista(data.pontosPorVista || {});
@@ -472,6 +547,70 @@ export function useMapaAplicacaoState() {
     [pontosPorVista, vistaAtual],
   );
 
+  const contarPontosPorProcedimento = useCallback(
+    (procOuChaves, opcoes = {}) => {
+      const criterios = extrairAlvosProcedimento(procOuChaves, opcoes);
+      let pontosCount = 0;
+      let doseTotal = 0;
+      const vistasAfetadas = [];
+
+      Object.entries(pontosPorVista || {}).forEach(([vista, lista]) => {
+        if (!Array.isArray(lista) || lista.length === 0) return;
+        let achouNaVista = false;
+        lista.forEach((pt) => {
+          if (pontoPertenceAoProcedimento(pt, criterios)) {
+            pontosCount += 1;
+            doseTotal += Number(pt.quantidade || pt.dose || 0);
+            achouNaVista = true;
+          }
+        });
+        if (achouNaVista) vistasAfetadas.push(vista);
+      });
+
+      return {
+        pontosCount,
+        doseTotal: Number(doseTotal.toFixed(2)),
+        vistasAfetadas,
+      };
+    },
+    [pontosPorVista],
+  );
+
+  const removerPontosPorProcedimento = useCallback(
+    (procOuChaves, opcoes = {}) => {
+      const criterios = extrairAlvosProcedimento(procOuChaves, opcoes);
+      const vistasLimpas = [];
+
+      Object.entries(pontosPorVista || {}).forEach(([vista, lista]) => {
+        if (!Array.isArray(lista) || lista.length === 0) return;
+        if (lista.some((pt) => pontoPertenceAoProcedimento(pt, criterios))) {
+          vistasLimpas.push(vista);
+        }
+      });
+
+      if (vistasLimpas.length === 0) return [];
+
+      setPontosPorVista((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        vistasLimpas.forEach((vista) => {
+          const lista = next[vista];
+          if (!Array.isArray(lista) || lista.length === 0) return;
+          const filtrada = lista.filter((pt) => !pontoPertenceAoProcedimento(pt, criterios));
+          if (filtrada.length !== lista.length) {
+            next[vista] = filtrada;
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+
+      vistasLimpas.forEach((v) => markDirty(v));
+      return vistasLimpas;
+    },
+    [pontosPorVista, markDirty],
+  );
+
   const countPontosVista = useCallback(
     (vistaCodigo) => {
       const vista = String(vistaCodigo || '').trim();
@@ -545,6 +684,8 @@ export function useMapaAplicacaoState() {
     markHydratedFromServer,
     getPontosVista,
     countPontosVista,
+    contarPontosPorProcedimento,
+    removerPontosPorProcedimento,
     getVistasPreenchidas,
     getSnapshotForPersist,
     getDirtyVistas,

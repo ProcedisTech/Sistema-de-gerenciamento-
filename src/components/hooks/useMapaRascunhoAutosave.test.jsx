@@ -528,4 +528,43 @@ describe('useMapaRascunhoAutosave: releitura ao voltar', () => {
     expect(corpo.marcacoes[0].procedimentoIndex).toBe(0);
     expect(corpo.marcacoes[1].procedimentoIndex).toBe(1);
   });
+
+  it('envia PUT /mapa com marcacoes: [] quando vista sem foto e limpa via limparPontosVista ou removerPontosPorProcedimento', async () => {
+    const { result } = montar();
+    await assentar();
+
+    act(() => {
+      result.current.mapa.adicionarPonto('frontal', {
+        ...ponto(0.25, 2),
+        catalogoProcedimentoSaudeId: '11111111-1111-4111-8111-111111111111',
+      });
+    });
+    await assentar();
+    expect(atendimentosApi.salvarMapa).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      result.current.mapa.limparPontosVista('frontal');
+    });
+    await assentar();
+
+    expect(atendimentosApi.salvarMapa).toHaveBeenCalledTimes(2);
+    const [, , corpoLimpo] = atendimentosApi.salvarMapa.mock.calls.at(-1);
+    expect(corpoLimpo.marcacoes).toEqual([]);
+    expect(result.current.mapa.getDirtyVistas()).toEqual([]);
+  });
+
+  it('silencia HTTP 404 ao salvar rascunho se o item avulso acabou de ser removido (sem disparar avisarErro)', async () => {
+    const { result, avisarErro } = montar();
+    await assentar();
+
+    atendimentosApi.salvarMapa.mockRejectedValueOnce(erro(404));
+
+    act(() => {
+      result.current.mapa.adicionarPonto('frontal', ponto(0.3, 1));
+    });
+    await assentar();
+
+    expect(atendimentosApi.salvarMapa).toHaveBeenCalledTimes(1);
+    expect(avisarErro).not.toHaveBeenCalled();
+  });
 });

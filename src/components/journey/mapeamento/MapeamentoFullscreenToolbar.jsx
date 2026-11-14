@@ -21,8 +21,12 @@ import {
   Minus,
   Check,
   ClipboardList,
+  AlertTriangle,
+  ArrowRight,
+  Clock,
 } from 'lucide-react';
 import { getVistaLabel } from '../../../constants/vistasMapeamento.js';
+import { statusTermoPorProcedimento } from '../../../utils/termoResolucao.js';
 import { useMediaQuery } from '../../../hooks/useMediaQuery.js';
 import { useCatalogoMapeamentoOptions } from '../../../hooks/useCatalogoMapeamentoOptions.js';
 import { MapeamentoFullscreenConfigPopover } from './MapeamentoFullscreenConfigPopover.jsx';
@@ -226,6 +230,12 @@ export function MapeamentoFullscreenToolbar({
   isSaving = false,
   configPopoverOpen: _configPopoverOpen = false,
   onConfigPopoverOpenChange: _onConfigPopoverOpenChange,
+  scope = 'evaluation',
+  execucaoBloqueadaPorTermos = false,
+  termosValidando = false,
+  titulosTermosFaltantes = [],
+  resolucao = null,
+  onIrParaTermosGate,
 }) {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => readStoredSidebarCollapsed());
@@ -373,58 +383,127 @@ export function MapeamentoFullscreenToolbar({
 
         <div className={`flex flex-1 flex-col gap-2.5 py-2.5 ${collapsed ? 'items-center px-0.5' : 'px-2.5'}`}>
           {/* SELETOR DE MODO / FERRAMENTAS (PONTO, TRAÇO, BORRACHA) */}
-          {!collapsed ? (
+          {(() => {
+            const bloqueioDesenhoTermos = scope === 'procedure' && (execucaoBloqueadaPorTermos || termosValidando);
+            return !collapsed ? (
+              <div
+                data-testid="mapa-ferramentas-barra"
+                className="mx-0.5 rounded-xl border border-slate-200 bg-slate-100/90 p-1 grid grid-cols-3 gap-1 shadow-2xs"
+              >
+                {/* Ícone em cima e nome embaixo: "Borracha" não cabe ao lado do ícone em 240 px (passava 17 px da borda). */}
+                {FERRAMENTAS.map(({ id, label, shortcut, Icon: _Icon }) => {
+                  const isActive = modo === id;
+                  const ferramentaBloqueada = bloqueioDesenhoTermos && id !== 'borracha';
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      disabled={ferramentaBloqueada}
+                      onClick={() => {
+                        if (ferramentaBloqueada) return;
+                        setModo?.(id);
+                      }}
+                      className={`min-w-0 flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-lg text-[11px] font-bold leading-none transition-all ${
+                        ferramentaBloqueada
+                          ? 'opacity-45 cursor-not-allowed text-slate-400'
+                          : isActive
+                            ? id === 'borracha'
+                              ? 'bg-rose-500 text-white shadow-xs cursor-pointer'
+                              : 'bg-white text-slate-900 shadow-xs border border-slate-200/80 cursor-pointer'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-white/60 cursor-pointer'
+                      }`}
+                      title={
+                        ferramentaBloqueada
+                          ? termosValidando
+                            ? 'Validando termos de consentimento...'
+                            : 'Assine os termos pendentes para desenhar'
+                          : `${label} (${shortcut})`
+                      }
+                    >
+                      <_Icon className="h-3.5 w-3.5 shrink-0" />
+                      <span className="whitespace-nowrap">{label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-1 py-1">
+                {FERRAMENTAS.map(({ id, label, shortcut, Icon: _Icon }) => {
+                  const isActive = modo === id;
+                  const ferramentaBloqueada = bloqueioDesenhoTermos && id !== 'borracha';
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      disabled={ferramentaBloqueada}
+                      onClick={() => {
+                        if (ferramentaBloqueada) return;
+                        setModo?.(id);
+                      }}
+                      className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
+                        ferramentaBloqueada
+                          ? 'opacity-45 cursor-not-allowed text-slate-400'
+                          : isActive
+                            ? id === 'borracha'
+                              ? 'bg-rose-500 text-white shadow-xs cursor-pointer'
+                              : 'bg-teal-500 text-white shadow-xs cursor-pointer'
+                            : 'text-slate-500 hover:bg-slate-200/80 hover:text-slate-900 cursor-pointer'
+                      }`}
+                      title={
+                        ferramentaBloqueada
+                          ? termosValidando
+                            ? 'Validando termos...'
+                            : 'Termo pendente para desenhar'
+                          : `${label} (${shortcut})`
+                      }
+                    >
+                      <_Icon className="h-4 w-4" />
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {!collapsed && scope === 'procedure' && (termosValidando || execucaoBloqueadaPorTermos) ? (
             <div
-              data-testid="mapa-ferramentas-barra"
-              className="mx-0.5 rounded-xl border border-slate-200 bg-slate-100/90 p-1 grid grid-cols-3 gap-1 shadow-2xs"
+              data-testid="mapa-termos-bloqueio-banner"
+              className="mx-0.5 rounded-xl border border-amber-300 bg-amber-50 p-2.5 text-left shadow-2xs"
             >
-              {/* Ícone em cima e nome embaixo: "Borracha" não cabe ao lado do ícone em 240 px (passava 17 px da borda). */}
-              {FERRAMENTAS.map(({ id, label, shortcut, Icon: _Icon }) => {
-                const isActive = modo === id;
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setModo?.(id)}
-                    className={`min-w-0 flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-lg text-[11px] font-bold leading-none transition-all cursor-pointer ${
-                      isActive
-                        ? id === 'borracha'
-                          ? 'bg-rose-500 text-white shadow-xs'
-                          : 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-                    }`}
-                    title={`${label} (${shortcut})`}
-                  >
-                    <_Icon className="h-3.5 w-3.5 shrink-0" />
-                    <span className="whitespace-nowrap">{label}</span>
-                  </button>
-                );
-              })}
+              <div className="flex items-start gap-2">
+                {termosValidando && !execucaoBloqueadaPorTermos ? (
+                  <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-amber-600" />
+                ) : (
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-bold leading-snug text-amber-950">
+                    {termosValidando && !execucaoBloqueadaPorTermos
+                      ? 'Validando termos obrigatórios...'
+                      : 'Desenho bloqueado: termo pendente'}
+                  </p>
+                  {Array.isArray(titulosTermosFaltantes) && titulosTermosFaltantes.length > 0 ? (
+                    <p className="mt-0.5 text-[10px] leading-snug text-amber-800 line-clamp-2">
+                      {titulosTermosFaltantes.join(', ')}
+                    </p>
+                  ) : null}
+                  {typeof onIrParaTermosGate === 'function' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onIrParaTermosGate();
+                        onClose?.();
+                      }}
+                      className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-amber-600 px-2.5 py-1.5 text-[11px] font-bold text-white shadow-2xs hover:bg-amber-700 transition-colors cursor-pointer"
+                    >
+                      <span>Assinar Termo Agora</span>
+                      <ArrowRight className="h-3 w-3 shrink-0" />
+                    </button>
+                  ) : null}
+                </div>
+              </div>
             </div>
-          ) : (
-            <div className="flex flex-col items-center gap-1 py-1">
-              {FERRAMENTAS.map(({ id, label, shortcut, Icon: _Icon }) => {
-                const isActive = modo === id;
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setModo?.(id)}
-                    className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all cursor-pointer ${
-                      isActive
-                        ? id === 'borracha'
-                          ? 'bg-rose-500 text-white shadow-xs'
-                          : 'bg-teal-500 text-white shadow-xs'
-                        : 'text-slate-500 hover:bg-slate-200/80 hover:text-slate-900'
-                    }`}
-                    title={`${label} (${shortcut})`}
-                  >
-                    <_Icon className="h-4 w-4" />
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          ) : null}
 
           {/* BUSCA DE PROCEDIMENTOS (INLINE NO TOPO) */}
           {!hideProcedimentoPicker ? (
@@ -714,6 +793,25 @@ export function MapeamentoFullscreenToolbar({
                               {stats.pontosCount} {stats.pontosCount === 1 ? 'pto' : 'ptos'}
                               {stats.doseTotal > 0 ? ` · ${stats.doseTotal} ${procUnidade}` : ''}
                             </p>
+                            {scope === 'procedure' ? (() => {
+                              const catKey = proc.catalogoProcedimentoSaudeId || proc.catalogoId || proc.id;
+                              const st = statusTermoPorProcedimento(catKey, resolucao);
+                              if (st === 'pendente') {
+                                return (
+                                  <span className="mt-1 inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800">
+                                    Termo pendente
+                                  </span>
+                                );
+                              }
+                              if (termosValidando && st === 'desconhecido') {
+                                return (
+                                  <span className="mt-1 inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-600">
+                                    Validando termo...
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })() : null}
                           </div>
                         </div>
 

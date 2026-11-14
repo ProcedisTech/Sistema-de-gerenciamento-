@@ -438,6 +438,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
    * (termosDaConsulta, releitura). Nada global.
    */
   const [resolucaoTermosPorCatalogo, setResolucaoTermosPorCatalogo] = React.useState({});
+  const [falhaValidacaoTermosIds, setFalhaValidacaoTermosIds] = React.useState(() => new Set());
   /** Preenchido depois do hook da consulta (termosDaConsulta); lido só em callbacks. */
   const termosDaConsultaRef = React.useRef([]);
   /** Id da consulta no servidor (atribuído após useAtendimentoServidor); a resolução de termos o envia. */
@@ -447,9 +448,16 @@ function AppRefactoredInner({ onCanalAvisos }) {
     const cat = String(catalogoId ?? catalogoAtivoTermosRef.current ?? '').trim();
     if (!cat) return;
     setResolucaoTermosPorCatalogo((prev) => ({ ...prev, [cat]: resolucao }));
+    setFalhaValidacaoTermosIds((prev) => {
+      if (!prev.has(cat)) return prev;
+      const next = new Set(prev);
+      next.delete(cat);
+      return next;
+    });
   }, []);
   const limparResolucoesTermos = React.useCallback(() => {
     setResolucaoTermosPorCatalogo((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+    setFalhaValidacaoTermosIds((prev) => (prev.size === 0 ? prev : new Set()));
   }, []);
   const [termoFocoId, setTermoFocoId] = React.useState(null);
   const [catalogoOrigemRetornoId, setCatalogoOrigemRetornoId] = React.useState(null);
@@ -1090,6 +1098,11 @@ function AppRefactoredInner({ onCanalAvisos }) {
         }
         setTermoBloqueio((prev) => ({ ...prev, open: false }));
       } catch {
+        setFalhaValidacaoTermosIds((prev) => {
+          const next = new Set(prev);
+          validIds.forEach((id) => next.add(id));
+          return next;
+        });
         /* rede: o gate do backend ainda bloqueia iniciar */
       }
       return true;
@@ -1509,6 +1522,28 @@ function AppRefactoredInner({ onCanalAvisos }) {
     resolucao: termosExecucaoBloqueio.resolucao,
     pfIdNestaSessao: pfIdCatalogoAtivo,
   });
+  const termosValidando = React.useMemo(() => {
+    if (journeyState.isAgendaRetorno || !pacienteAtual?.id) return false;
+    const ids = Array.isArray(catalogoIdsConsulta) && catalogoIdsConsulta.length > 0
+      ? catalogoIdsConsulta
+      : (journeyState.nomeProcedimentoCatalogoId ? [String(journeyState.nomeProcedimentoCatalogoId).trim()] : []);
+    const uuids = ids.filter((id) => UUID_REGEX_PROC.test(id));
+    if (uuids.length === 0) return false;
+    return uuids.some(
+      (id) =>
+        !pfIdNestaSessaoParaCatalogo(id, journeyState.procedimentosSessao) &&
+        !(id in resolucaoTermosPorCatalogo) &&
+        !falhaValidacaoTermosIds.has(id),
+    );
+  }, [
+    journeyState.isAgendaRetorno,
+    pacienteAtual?.id,
+    catalogoIdsConsulta,
+    journeyState.nomeProcedimentoCatalogoId,
+    journeyState.procedimentosSessao,
+    resolucaoTermosPorCatalogo,
+    falhaValidacaoTermosIds,
+  ]);
   /**
    * F3: a ordem da sessão segue a `ordem` do servidor (mesclarSessao). Se a mescla reordenou as linhas sem a pessoa
    * trocar de aba, o índice ativo acompanha o item (itemId), não a posição.
@@ -1601,6 +1636,13 @@ function AppRefactoredInner({ onCanalAvisos }) {
     const fallbackAtivo = (linhaAtiva && (linhaAtiva.nomeSoDeTela || ehLinhaConsultaSemCatalogo(linhaAtiva)))
       ? null
       : mapaItens[idxAtivo];
+    const somenteVazioOuConsulta =
+      sessao.length > 0 && sessao.every((p) => !p || p.nomeSoDeTela || ehLinhaConsultaSemCatalogo(p));
+    if (somenteVazioOuConsulta) {
+      return (linhaAtiva && !ehLinhaConsultaSemCatalogo(linhaAtiva) && linhaAtiva.agendaId)
+        ? (mapaItens[idxAtivo] ?? null)
+        : null;
+    }
     return fallbackAtivo ?? itens.find((it) => it?.catalogoProcedimentoSaudeId || it?.planejamentoItemId)?.id ?? mapaItens[idxAtivo] ?? itens[0]?.id ?? null;
   }, [journeyState.procedimentosSessao, consultaAtualServidor?.itens, journeyState.activeProcedureIndex]);
   const avisarErroFoto = React.useCallback((mensagem) => toast.error(mensagem), [toast]);
@@ -1709,6 +1751,20 @@ function AppRefactoredInner({ onCanalAvisos }) {
       if (activeView === 'consulta') trocarModuloPeloUsuario('termos');
     },
     [activeView, journeyState, trocarModuloPeloUsuario]
+  );
+
+  const handleIrParaTermosGate = React.useCallback(
+    (focoId) => {
+      irParaTermosFaltantes({
+        termoId: typeof focoId === 'string' ? focoId : idsFilaExigida(termosExecucaoBloqueio.resolucao)[0],
+        termoIds: idsFilaExigida(termosExecucaoBloqueio.resolucao),
+        nomeProcedimento: journeyState.nomeProcedimento,
+      });
+      if (activeView !== 'consulta') {
+        setCurrentStep(3);
+      }
+    },
+    [activeView, irParaTermosFaltantes, journeyState.nomeProcedimento, setCurrentStep, termosExecucaoBloqueio.resolucao],
   );
 
   const handleSelectCapturedPhoto = (idx) => {
@@ -3797,8 +3853,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
     };
   }, [emConsultaNaTela, finalizarAtendimentoNavegacao, pacienteAtual?.cpf, selectedPatientCpf]);
 
-  const UUID_REGEX_PROC = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
   /**
    * Cria PF: com agendaId válido → POST /iniciar (grava agenda_id + promoção);
    * sem agendaId → registrarManual (avulso, intocado).
@@ -5291,9 +5345,11 @@ function AppRefactoredInner({ onCanalAvisos }) {
                           setProcedimentosSessao={journeyState.setProcedimentosSessao}
                           onValidarTermosCatalogo={validarTermosDoCatalogo}
                           execucaoBloqueadaPorTermos={execucaoBloqueadaPorTermos}
+                          termosValidando={termosValidando}
                           titulosTermosFaltantes={titulosFaltantes(termosExecucaoBloqueio.resolucao)}
                           resolucao={termosExecucaoBloqueio.resolucao}
                           consentimentosAguardandoExecucao={consentimentosAguardandoExecucao(termosExecucaoBloqueio.resolucao)}
+                          onIrParaTermosGate={handleIrParaTermosGate}
                           observacoesExecucao={journeyState.observacoesExecucao}
                           setObservacoesExecucao={journeyState.setObservacoesExecucao}
                           procedureCapturedPhotos={cameraState.procedureCapturedPhotos}
@@ -5825,16 +5881,11 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     onPrepareMapaCapture={handlePrepareMapaAplicacaoCapture}
                     onValidarTermosCatalogo={validarTermosDoCatalogo}
                     execucaoBloqueadaPorTermos={execucaoBloqueadaPorTermos}
+                    termosValidando={termosValidando}
                     titulosTermosFaltantes={titulosFaltantes(termosExecucaoBloqueio.resolucao)}
                     resolucao={termosExecucaoBloqueio.resolucao}
                     consentimentosAguardandoExecucao={consentimentosAguardandoExecucao(termosExecucaoBloqueio.resolucao)}
-                    onIrParaTermosGate={(focoId) =>
-                      irParaTermosFaltantes({
-                        termoId: typeof focoId === 'string' ? focoId : idsFilaExigida(termosExecucaoBloqueio.resolucao)[0],
-                        termoIds: idsFilaExigida(termosExecucaoBloqueio.resolucao),
-                        nomeProcedimento: journeyState.nomeProcedimento,
-                      })
-                    }
+                    onIrParaTermosGate={handleIrParaTermosGate}
                     onEnsureProcedimento={async () => {
                       const cat = journeyState.nomeProcedimentoCatalogoId;
                       const ok = await garantirTermosAntesDeIniciar(

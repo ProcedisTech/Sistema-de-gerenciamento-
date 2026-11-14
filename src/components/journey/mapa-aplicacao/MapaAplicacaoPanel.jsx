@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Loader2, MapPin } from 'lucide-react';
+import { Download, Loader2, MapPin, ArrowRight } from 'lucide-react';
 import { useToast } from '../../../contexts/useToast.js';
 import {
   catalogosApi,
@@ -124,6 +124,11 @@ export function MapaAplicacaoPanel({
   onRemoverProcedimento,
   disabled = false,
   disabledHint = 'Preencha o nome do procedimento (com item do catálogo) para habilitar o mapa.',
+  execucaoBloqueadaPorTermos = false,
+  termosValidando = false,
+  titulosTermosFaltantes = [],
+  resolucao = null,
+  onIrParaTermosGate,
 }) {
   const toast = useToast();
 
@@ -220,8 +225,19 @@ export function MapaAplicacaoPanel({
   const [procedimentoArmadoId, setProcedimentoArmadoId] = useState(() => {
     return listaProcedimentosSessao[0]?.id || (catalogoId ? String(catalogoId) : null);
   });
+  const pendingArmProcIdRef = useRef(null);
 
   useEffect(() => {
+    const pendente = pendingArmProcIdRef.current;
+    if (pendente) {
+      const encontrouPendente = listaProcedimentosSessao.some((p) => String(p.id) === String(pendente));
+      if (encontrouPendente) {
+        setProcedimentoArmadoId(pendente);
+        pendingArmProcIdRef.current = null;
+        return;
+      }
+      return;
+    }
     if (listaProcedimentosSessao.length > 0) {
       const existe = listaProcedimentosSessao.some((p) => p.id === procedimentoArmadoId);
       if (!existe) {
@@ -229,6 +245,18 @@ export function MapaAplicacaoPanel({
       }
     }
   }, [listaProcedimentosSessao, procedimentoArmadoId]);
+
+  const handleAdicionarProcedimentoNoMapa = useCallback(
+    (proc) => {
+      const cid = String(proc?.catalogoProcedimentoSaudeId || proc?.catalogoId || proc?.id || '').trim();
+      if (cid) {
+        pendingArmProcIdRef.current = cid;
+        setProcedimentoArmadoId(cid);
+      }
+      onAdicionarProcedimento?.(proc);
+    },
+    [onAdicionarProcedimento]
+  );
 
   const procedimentoArmado = useMemo(() => {
     const proc = listaProcedimentosSessao.find((p) => p.id === procedimentoArmadoId);
@@ -538,6 +566,16 @@ export function MapaAplicacaoPanel({
         <MapPin className="mx-auto h-8 w-8 text-[#94a3b8]" strokeWidth={1.5} />
         <h4 className="mt-3 text-[15px] font-bold text-app-ink">Mapa de aplicação</h4>
         <p className="mt-1 text-[13px] font-medium text-[#64748b]">{disabledHint}</p>
+        {execucaoBloqueadaPorTermos && typeof onIrParaTermosGate === 'function' ? (
+          <button
+            type="button"
+            onClick={() => onIrParaTermosGate()}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-3.5 py-2 text-xs font-bold text-white shadow-2xs hover:bg-amber-700 transition-colors cursor-pointer"
+          >
+            <span>Assinar Termo Agora</span>
+            <ArrowRight className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
         {!hasProcedimentoValido && (
           <button
             type="button"
@@ -696,6 +734,7 @@ export function MapaAplicacaoPanel({
             previewMode={true}
             maxHeightClass="max-h-[82dvh]"
             canUpload={hasProcedimentoValido && !isPanelDisabled}
+            desenhoBloqueado={Boolean(execucaoBloqueadaPorTermos || termosValidando)}
           />
         </div>
         <PontosResumoPanel
@@ -736,7 +775,7 @@ export function MapaAplicacaoPanel({
         procedimentoArmado={procedimentoArmado}
         hideProcedimentoPicker={false}
         onArmar={(proc) => setProcedimentoArmadoId(proc?.id)}
-        onAdicionarProcedimento={onAdicionarProcedimento}
+        onAdicionarProcedimento={handleAdicionarProcedimentoNoMapa}
         onRemoverProcedimento={onRemoverProcedimento}
         procedimentosUsados={listaProcedimentosSessao}
         pontosVista={gruposPontos}
@@ -756,6 +795,16 @@ export function MapaAplicacaoPanel({
         onRemoverFotoVista={() => mapaState.removerFotoVista(vistaAtual)}
         onMudarCorProcedimento={handleMudarCorProcedimento}
         onClose={() => setFullscreenOpen(false)}
+        execucaoBloqueadaPorTermos={execucaoBloqueadaPorTermos}
+        termosValidando={termosValidando}
+        titulosTermosFaltantes={titulosTermosFaltantes}
+        resolucao={resolucao}
+        onIrParaTermosGate={onIrParaTermosGate}
+        contarPontosProcedimento={(procId) =>
+          mapaState?.contarPontosPorProcedimento?.(procId, {
+            ehUnicoProcedimento: listaProcedimentosSessao.length <= 1,
+          }) ?? { pontosCount: 0, doseTotal: 0, vistasAfetadas: [] }
+        }
       />
     </div>
   );
