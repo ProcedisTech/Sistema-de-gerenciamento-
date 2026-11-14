@@ -7,6 +7,9 @@ import { RouterProvider } from 'react-router'
 import { flushSync } from 'react-dom'
 import { criarRotas } from './rotas/roteador.jsx'
 import { consumirChavesAntigas } from './rotas/legado.js'
+import { estaTravado } from './pwa/travaAtualizacao.js'
+import { aoMostrarPagina } from './pwa/recarregarAoVoltar.js'
+import AvisoAtualizacao from './pwa/AvisoAtualizacao.jsx'
 import './styles/index.css'
 
 const rootEl = document.getElementById('root')
@@ -87,11 +90,7 @@ window.addEventListener('unhandledrejection', (event) => {
 });
 
 // Previne inconsistências do bfcache no iOS restaurando páginas em estado quebrado
-window.addEventListener('pageshow', (event) => {
-  if (event.persisted) {
-    window.location.reload();
-  }
-});
+window.addEventListener('pageshow', (event) => aoMostrarPagina(event, { estaTravado, recarregar: () => window.location.reload() }));
 
 try {
   if (!rootEl) {
@@ -109,6 +108,7 @@ try {
     <React.StrictMode>
       <ToastProvider>
         <RouterProvider router={roteador} flushSync={flushSync} />
+        <AvisoAtualizacao router={roteador} />
       </ToastProvider>
     </React.StrictMode>,
   )
