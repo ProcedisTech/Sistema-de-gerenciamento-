@@ -35,13 +35,13 @@ export function ProcedimentosMultiSeletor({ procedimentos, onRemover, onAbrirPai
   return (
     <div className="rounded-xl border border-ink-200 bg-white">
       <ul className="max-h-[7.5rem] divide-y divide-ink-100 overflow-y-auto overscroll-contain">
-        {procedimentos.map((proc) => {
+        {procedimentos.map((proc, idx) => {
           const cor = gerarCorAvatar(proc.nome);
           const iniciais = iniciaisDoNome(proc.nome);
           const badge = badgeTipo(proc.tipoCodigo);
 
           return (
-            <li key={proc.id} className="flex items-center gap-2 px-3 py-1">
+            <li key={`${proc.id}-${idx}`} className="flex items-center gap-2 px-3 py-1">
               <div
                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${cor.bg} ${cor.fg}`}
               >
@@ -67,7 +67,7 @@ export function ProcedimentosMultiSeletor({ procedimentos, onRemover, onAbrirPai
               {!readOnly && (
                 <button
                   type="button"
-                  onClick={() => onRemover?.(proc.id)}
+                  onClick={() => onRemover?.(proc.id, idx)}
                   className={`inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md p-2 text-[#6b7280] hover:bg-red-50 hover:text-red-500 ${FOCUS_RING}`}
                   aria-label={`Remover ${proc.nome}`}
                 >

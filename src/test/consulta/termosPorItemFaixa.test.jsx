@@ -74,12 +74,10 @@ describe('F3-front: bloqueio por termo por item (releitura da consulta)', () => 
     localStorage.clear();
   });
 
-  it('termo ainda não assinado na consulta: a resolução bloqueia (modal de termos pendentes)', async () => {
+  it('termo ainda não assinado na consulta: navega para Procedimento exibindo a faixa de bloqueio', async () => {
     await montarComTermos([linhaTermo({})]);
-    expect(
-      screen.getByRole('button', { name: /Ir para a aba de termos e assinar o termo de Toxina botulínica/ }),
-    ).toBeTruthy();
-    expect(screen.queryByText('Voltar ao hub')).toBeNull();
+    expect(screen.getByText(/Procedimento bloqueado até a assinatura de:/i)).toBeTruthy();
+    expect(screen.getByText('Voltar ao hub')).toBeTruthy();
   }, TIMEOUT);
 
   it('termo ASSINADO na consulta: o faltante da resolução some e nada bloqueia', async () => {

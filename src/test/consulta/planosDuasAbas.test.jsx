@@ -138,7 +138,7 @@ function montarAba(nome) {
         paciente={{ id: PACIENTE_ID, nome: 'Ana Souza' }}
         onVoltar={() => {}}
         onSelectProcedimentoParaConsulta={() => {}}
-        onAgendarItem={() => {}}
+        onAgendarItem={(itens, onSaved) => onSaved?.({ dataAgendamento: itens?.[0]?.dataPlanejada || '2026-10-13', resultadosOk: itens })}
         onAgendarRetornoItem={() => {}}
         onConcluirComRetorno={() => {}}
         onPlanoConcluido={() => {}}
@@ -341,7 +341,7 @@ describe('planejamento ao vivo entre abas (PlanosTab consulta)', () => {
     fireEvent.click(caixas[0]);
     fireEvent.click(caixas[1]);
     fireEvent.click(abaA.q.getByRole('button', { name: /Agendar juntos/ }));
-    fireEvent.click(abaA.q.getByText('Em 1 semana (+7 dias)'));
+    fireEvent.click(abaA.q.getByText('Em 7 dias'));
 
     await waitFor(() => expect(putsDoPlano()).toHaveLength(1), { timeout: 3000 });
     const { body } = putsDoPlano()[0];
@@ -364,7 +364,7 @@ describe('planejamento ao vivo entre abas (PlanosTab consulta)', () => {
     fireEvent.click(caixas[0]);
     fireEvent.click(caixas[1]);
     fireEvent.click(abaA.q.getByRole('button', { name: /Agendar juntos/ }));
-    fireEvent.click(abaA.q.getByText('Em 1 semana (+7 dias)'));
+    fireEvent.click(abaA.q.getByText('Em 7 dias'));
 
     await waitFor(() => expect(putsDoPlano()).toHaveLength(1), { timeout: 3000 });
     const { body } = putsDoPlano()[0];
@@ -460,7 +460,7 @@ describe('planejamento ao vivo entre abas (PlanosTab consulta)', () => {
     fireEvent.click(caixas[0]);
     fireEvent.click(caixas[1]);
     fireEvent.click(abaB.q.getByRole('button', { name: /Agendar juntos/ }));
-    fireEvent.click(abaB.q.getByText('Em 1 semana (+7 dias)'));
+    fireEvent.click(abaB.q.getByText('Em 7 dias'));
     await waitFor(() => expect(putsDoPlano()).toHaveLength(2), { timeout: 3000 });
     expect(putsDoPlano()[1].body.observacao).toBe('Obs local');
   });
@@ -481,7 +481,7 @@ describe('planejamento ao vivo entre abas (PlanosTab consulta)', () => {
     fireEvent.click(caixas[0]);
     fireEvent.click(caixas[1]);
     fireEvent.click(abaB.q.getByRole('button', { name: /Agendar juntos/ }));
-    fireEvent.click(abaB.q.getByText('Em 1 semana (+7 dias)'));
+    fireEvent.click(abaB.q.getByText('Em 7 dias'));
     await waitFor(() => expect(cartoes(abaB)).toHaveLength(5), { timeout: 3000 });
     expect(portao.n).toBe(2);
 
@@ -521,7 +521,7 @@ describe('planejamento ao vivo entre abas (PlanosTab consulta)', () => {
     fireEvent.click(caixas[0]);
     fireEvent.click(caixas[1]);
     fireEvent.click(abaB.q.getByRole('button', { name: /Agendar juntos/ }));
-    fireEvent.click(abaB.q.getByText('Em 1 semana (+7 dias)'));
+    fireEvent.click(abaB.q.getByText('Em 7 dias'));
     await waitFor(() => expect(putsDoPlano()).toHaveLength(2), { timeout: 3000 });
     expect(putsDoPlano().at(-1).body.observacao).toBe('Obs nova');
   });
@@ -543,7 +543,7 @@ describe('planejamento ao vivo entre abas (PlanosTab consulta)', () => {
     fireEvent.click(caixas[0]);
     fireEvent.click(caixas[1]);
     fireEvent.click(abaB.q.getByRole('button', { name: /Agendar juntos/ }));
-    fireEvent.click(abaB.q.getByText('Em 1 semana (+7 dias)'));
+    fireEvent.click(abaB.q.getByText('Em 7 dias'));
     await waitFor(() => expect(portao.n).toBe(1), { timeout: 3000 });
     expect(idsDoServidor()).toHaveLength(4); // PUT já criou Delta de verdade (não é mais local)
 

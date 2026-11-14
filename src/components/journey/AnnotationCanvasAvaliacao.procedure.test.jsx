@@ -59,6 +59,15 @@ describe('AnnotationCanvasAvaliacao — Preservação de Foto Limpa no Procedime
         cleanUrl: cleanUrlMock,
         blob: cleanBlobMock,
         cleanBlob: cleanBlobMock,
+        pontos: [
+          {
+            id: 'pt-1',
+            posX: 0.4,
+            posY: 0.5,
+            catalogoProcedimentoSaudeId: 'proc-toxina',
+            nomeProcedimento: 'Toxina Botulínica',
+          },
+        ],
       },
     ];
 

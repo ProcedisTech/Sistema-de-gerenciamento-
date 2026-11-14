@@ -196,6 +196,18 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
   const fotosPorPlanejamentoItemId = {}; // itemId -> Array<foto>
   const fotosAvulsas = [];
 
+  const pfByIdMap = new Map();
+  (procedimentosFeitos || []).forEach((p) => {
+    const id = String(p.id || p.procedimentoFeitoId || '').trim();
+    if (id) {
+      pfByIdMap.set(id, {
+        id,
+        agendaId: p.agendaId || p.agenda?.id || null,
+        planejamentoItemId: p.planejamentoItemId || null,
+      });
+    }
+  });
+
   fotos.forEach((foto) => {
     // 0. BLINDAGEM ESTREITA: Se for explicitamente avulsa, NUNCA vincula a nenhum plano,
     // exceto se tiver vínculo DIRETO de procedimento do plano (procedimentoFeitoId ou planejamentoItemId).
@@ -216,15 +228,31 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
     let matchedItemId = null;
     let isRetornoFoto = false;
 
+    // Detectar overlays de retorno e procedimento
+    const tipoMapaOverlay = String(foto.mapaOverlay?.tipoMapaCodigo || '').toLowerCase().trim();
+    const isRetornoOverlay =
+      tipoMapaOverlay === 'retorno' ||
+      String(foto.tipoFotoCodigo || '').toUpperCase().trim() === 'MAPA_RETORNO';
+    const isMapaProcOuRet = tipoMapaOverlay === 'procedimento' || isRetornoOverlay;
+    if (isRetornoOverlay) {
+      isRetornoFoto = true;
+    }
+
+    let overlayPfId = null;
+    if (foto.mapaOverlay?.procedimentoFeitoId) {
+      overlayPfId = String(foto.mapaOverlay.procedimentoFeitoId).trim();
+    } else if (Array.isArray(foto.mapaOverlay?.procedimentos)) {
+      const pWithPf = foto.mapaOverlay.procedimentos.find((p) => p.procedimentoFeitoId);
+      if (pWithPf) overlayPfId = String(pWithPf.procedimentoFeitoId).trim();
+    }
+
     // 1. Tentar match por procedimentoFeitoId cruzado (mais específico: distingue pai vs retorno)
-    if (foto.procedimentoFeitoId) {
-      const pfId = String(foto.procedimentoFeitoId).trim();
-      if (procedimentoFeitoToPlanoItemMap.has(pfId)) {
-        const match = procedimentoFeitoToPlanoItemMap.get(pfId);
-        matchedPlanoId = match.planoId;
-        matchedItemId = match.itemId;
-        isRetornoFoto = Boolean(match.isRetorno);
-      }
+    const effectivePfId = foto.procedimentoFeitoId ? String(foto.procedimentoFeitoId).trim() : overlayPfId;
+    if (effectivePfId && procedimentoFeitoToPlanoItemMap.has(effectivePfId)) {
+      const match = procedimentoFeitoToPlanoItemMap.get(effectivePfId);
+      matchedPlanoId = match.planoId;
+      matchedItemId = match.itemId;
+      isRetornoFoto = Boolean(match.isRetorno || isRetornoFoto);
     }
 
     // 2. Tentar match direto por planejamentoItemId (fallback se foto não tem procedimentoFeitoId)
@@ -234,6 +262,7 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
       if (itemToPlanoMap.has(cleanPItemId)) {
         matchedPlanoId = itemToPlanoMap.get(cleanPItemId).planoId;
         const fotoIsRetorno = Boolean(
+          isRetornoFoto ||
           foto.isRetorno ||
           rawPItemId.endsWith('_retorno') ||
           String(foto.tipoProcedimentoCodigo || '').toLowerCase() === 'retorno'
@@ -277,6 +306,7 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
       const rawPItemId = String(foto.mapaOverlay.planejamentoItemId).replace(/_retorno$/, '').trim();
       if (itemToPlanoMap.has(rawPItemId)) {
         matchedPlanoId = itemToPlanoMap.get(rawPItemId).planoId;
+        matchedItemId = isRetornoFoto ? `${rawPItemId}_retorno` : rawPItemId;
       }
     }
 
@@ -285,18 +315,29 @@ export function resolverFotosEPlanos(planos = [], fotosBrutas = [], procedimento
         const pItemId = proc.planejamentoItemId ? String(proc.planejamentoItemId).replace(/_retorno$/, '').trim() : null;
         if (pItemId && itemToPlanoMap.has(pItemId)) {
           matchedPlanoId = itemToPlanoMap.get(pItemId).planoId;
+          matchedItemId = isRetornoFoto ? `${pItemId}_retorno` : pItemId;
           break;
         }
       }
     }
 
+    if (isRetornoFoto && matchedItemId && !matchedItemId.endsWith('_retorno')) {
+      matchedItemId = `${matchedItemId}_retorno`;
+    }
 
+    let resolvedAgendaId = null;
+    if (overlayPfId && pfByIdMap.has(overlayPfId)) {
+      resolvedAgendaId = pfByIdMap.get(overlayPfId).agendaId;
+    }
 
     const enrichedFoto = {
       ...foto,
+      procedimentoFeitoId: foto.procedimentoFeitoId || overlayPfId || null,
+      agendaId: foto.agendaId || resolvedAgendaId || null,
       matchedItemId: matchedItemId || null,
       matchedPlanoId: matchedPlanoId || null,
       isRetorno: isRetornoFoto,
+      isAvaliacao: isMapaProcOuRet ? false : foto.isAvaliacao,
     };
 
     // 3. Distribuir a foto

@@ -221,12 +221,35 @@ export function mapearItensDaSessao(sessao, itensServidor) {
     usados.add(item.id);
     return item.id;
   });
+  const porCatalogo = porAgenda.map((id, idx) => {
+    if (id || idOuNulo(linhas[idx]?.itemId)) return id;
+    const l = linhas[idx];
+    if (!l || l.nomeSoDeTela || ehLinhaConsultaSemCatalogo(l)) return null;
+    const cat = idOuNulo(l.catalogoProcedimentoSaudeId ?? l.nomeProcedimentoCatalogoId ?? l.catalogoId);
+    const planId = idOuNulo(l.planejamentoItemId);
+    if (!cat && !planId) return null;
+    const item = itens.find((i) => {
+      if (usados.has(i.id)) return false;
+      const iCat = idOuNulo(i.catalogoProcedimentoSaudeId);
+      const iPlan = idOuNulo(i.planejamentoItemId);
+      if (cat && iCat && cat === iCat) return true;
+      if (planId && iPlan && planId === iPlan) return true;
+      return false;
+    });
+    if (!item) return null;
+    usados.add(item.id);
+    return item.id;
+  });
   const livres = itens.filter((i) => !usados.has(i.id) && !idOuNulo(i.agendaId));
-  return porAgenda.map((id, idx) => {
+  return porCatalogo.map((id, idx) => {
     if (id) return id;
+    const linha = linhas[idx];
     // F3: linha local sem itemId casa por posição com um item livre do servidor mesmo com agendaId local (o item
     // do servidor pode ter nascido sem agenda): sem isso o item vira aba fantasma ao lado da linha local.
-    if (idOuNulo(linhas[idx]?.itemId)) return null;
+    if (idOuNulo(linha?.itemId)) return null;
+    const mem = camposDaLinhaSessao(linha);
+    // Slot vazio criado ao remover o último procedimento avulso não deve recapturar o item livre em remoção.
+    if (linha?.nomeSoDeTela && !idOuNulo(linha?.agendaId) && !mem.cat && !mem.nome) return null;
     const item = livres.shift();
     return item ? item.id : null;
   });
@@ -290,7 +313,7 @@ export function mesclarSessao(sessao, itensServidor, pendente) {
     out.push(nova);
   });
   const mapeados = new Set(mapa.filter(Boolean));
-  const novos = itens.filter((i) => !mapeados.has(i.id));
+  const novos = itens.filter((i) => !mapeados.has(i.id) && !pendente(`item:${i.id}:remover`));
   if (novos.length > 0) {
     mudou = true;
     out.push(...novos.map(linhaDoItemServidor));
@@ -307,7 +330,28 @@ export function mesclarSessao(sessao, itensServidor, pendente) {
   comItem.sort((a, b) => posicaoNoServidor(a) - posicaoNoServidor(b));
   const final = [...comItem, ...locais];
   if (!mudou && final.some((l, i) => l !== linhas[i])) mudou = true;
-  return { sessao: mudou ? final : linhas, mudou };
+  const resSessao = mudou ? final : linhas;
+  if (import.meta.env.DEV && Array.isArray(resSessao)) {
+    const porCat = new Map();
+    for (const l of resSessao) {
+      if (!l || l.nomeSoDeTela || ehLinhaConsultaSemCatalogo(l)) continue;
+      const cid = idOuNulo(l.catalogoProcedimentoSaudeId ?? l.nomeProcedimentoCatalogoId ?? l.catalogoId);
+      if (!cid) continue;
+      const arr = porCat.get(cid) || [];
+      arr.push({
+        itemId: l.itemId ?? null,
+        agendaId: l.agendaId ?? null,
+        planejamentoItemId: l.planejamentoItemId ?? null,
+        nomeSoDeTela: Boolean(l.nomeSoDeTela),
+      });
+      porCat.set(cid, arr);
+    }
+    const dups = [...porCat.entries()].filter(([, arr]) => arr.length > 1);
+    if (dups.length > 0) {
+      console.warn('[consultaServidor] Duplicidade de catálogo detectada em mesclarSessao:', dups);
+    }
+  }
+  return { sessao: resSessao, mudou };
 }
 
 /**
@@ -320,6 +364,7 @@ export function mesclarSessao(sessao, itensServidor, pendente) {
 export function diferencasDosItens(sessao, mapa, base) {
   const alterar = [];
   const criar = [];
+  const remover = [];
   (Array.isArray(sessao) ? sessao : []).forEach((linha, idx) => {
     const mem = camposDaLinhaSessao(linha);
     const itemId = mapa[idx];
@@ -357,7 +402,15 @@ export function diferencasDosItens(sessao, mapa, base) {
       });
     }
   });
-  return { alterar, criar };
+  if (Array.isArray(sessao) && sessao.length > 0 && base instanceof Map) {
+    const usados = new Set((Array.isArray(mapa) ? mapa : []).filter(Boolean).map(String));
+    for (const itemId of base.keys()) {
+      if (itemId != null && !usados.has(String(itemId))) {
+        remover.push(String(itemId));
+      }
+    }
+  }
+  return { alterar, criar, remover };
 }
 
 /** `true` se a linha precisa de ao menos 1 orientação marcada (decisão 7): item com catálogo ou retorno, não legado. */

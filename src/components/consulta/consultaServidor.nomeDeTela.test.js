@@ -72,7 +72,7 @@ describe('nome só de tela (B-42 F3)', () => {
 
     const itens = [itemDaAgenda(codigo)];
     const dif = diferencasDosItens(sessao, mapearItensDaSessao(sessao, itens), baseDosItens(itens));
-    expect(dif).toEqual({ alterar: [], criar: [] });
+    expect(dif).toEqual({ alterar: [], criar: [], remover: [] });
   });
 
   it('sem a marca, a mesma linha mandaria o rótulo como nome livre (o defeito de 09/10)', () => {
@@ -111,7 +111,7 @@ describe('nome só de tela (B-42 F3)', () => {
     expect(sessao[0].nomeSoDeTela).toBe(true);
     const itens = [itemDaAgenda('retorno', { agendaCatalogoProcedimentoNome: 'Toxina botulínica' })];
     const dif = diferencasDosItens(sessao, mapearItensDaSessao(sessao, itens), baseDosItens(itens));
-    expect(dif).toEqual({ alterar: [], criar: [] });
+    expect(dif).toEqual({ alterar: [], criar: [], remover: [] });
   });
 
   it('F5 de "Retorno: <nome>": o campo do servidor remonta o mesmo rótulo, marcado', () => {

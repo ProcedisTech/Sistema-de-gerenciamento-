@@ -2,7 +2,7 @@ export const CONSULTA_MODULE_LABELS = {
   hub: 'Consulta',
   anamnese: 'Anamnese',
   avaliacao: 'Avaliação',
-  planejamento: 'Planejamento',
+  planejamento: 'Plano de Tratamento',
   termos: 'Termos',
   procedimento: 'Procedimento',
   retorno: 'Retorno',

@@ -124,8 +124,26 @@ describe('marca nome só de tela: a escolha da pessoa volta a gravar (B-42 F3, T
     sessionStorage.clear();
   });
 
-  it('Consulta sem catálogo → escolhe do catálogo: a marca sai e o PATCH leva o catálogo', async () => {
+  it('Consulta sem catálogo → escolhe do catálogo: preserva marcador Consulta no slot 0 e cria item via POST no slot 1', async () => {
     const { result } = await entrarPelaAgenda('CONSULTA', 'Consulta');
+
+    act(() => {
+      result.current.journey.setProcedimentoDoCatalogo('Toxina botulínica', CATALOGO);
+    });
+    await passar(3000);
+
+    expect(result.current.journey.procedimentosSessao[0].nomeSoDeTela).toBe(true);
+    expect(result.current.journey.procedimentosSessao[1].nomeSoDeTela).toBe(false);
+    expect(atendimentosApi.novoItem).toHaveBeenCalledTimes(1);
+    expect(atendimentosApi.novoItem).toHaveBeenCalledWith('c-1', {
+      catalogoProcedimentoSaudeId: CATALOGO,
+      nomeLivre: null,
+    });
+    expect(atendimentosApi.alterarItem).not.toHaveBeenCalledWith('c-1', 'item-1', expect.anything());
+  });
+
+  it('Avaliação sem catálogo → escolhe do catálogo: a marca sai e o PATCH leva o catálogo', async () => {
+    const { result } = await entrarPelaAgenda('avaliacao', 'Avaliação');
 
     act(() => {
       result.current.journey.setProcedimentoDoCatalogo('Toxina botulínica', CATALOGO);
@@ -165,7 +183,7 @@ describe('marca nome só de tela: a escolha da pessoa volta a gravar (B-42 F3, T
     await passar(3000);
 
     expect(result.current.journey.procedimentosSessao[0].nomeSoDeTela).toBe(true);
-    expect(atendimentosApi.alterarItem).toHaveBeenCalledTimes(0);
+    expect(atendimentosApi.alterarItem).not.toHaveBeenCalledWith('c-1', 'item-1', expect.anything());
     expect(atendimentosApi.novoItem).toHaveBeenCalledTimes(0);
   });
 });
