@@ -7,6 +7,7 @@ import {
 import { useToast } from '../../contexts/useToast.js';
 import { useOrg } from '../../contexts/OrgContext.jsx';
 import { usePapel } from '../../hooks/usePapel.js';
+import { travar, liberar } from '../../pwa/travaAtualizacao';
 import { encontrarSobrepostos } from './horarioSemanaUtils.js';
 import { HorarioSemanaEditor } from './HorarioSemanaEditor.jsx';
 import { ConfigFormSectionsSkeleton } from '../shared/ConfigPanelSkeletons';
@@ -137,8 +138,12 @@ export function HorarioClinicaPanel({ onDisponibilidadeInvalidate, onDirtyChange
   useEffect(() => {
     if (!isDirty) return;
     const handler = (e) => { e.preventDefault(); e.returnValue = ''; };
+    travar('horario');
     window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
+    return () => {
+      liberar('horario');
+      window.removeEventListener('beforeunload', handler);
+    };
   }, [isDirty]);
 
   // ── Salvar ────────────────────────────────────────────────────────────────

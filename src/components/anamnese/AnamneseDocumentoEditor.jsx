@@ -14,6 +14,7 @@ import {
 } from '@dnd-kit/sortable';
 import { anamneseApi, clinicaApi, dimensoesApi, getApiErrorToastMessage } from '../../services/api';
 import { useToast } from '../../contexts/useToast';
+import { travar, liberar } from '../../pwa/travaAtualizacao';
 import {
   COMPOSE_PENDENTE_TOAST,
   ESCOLHA_INCOMPLETA_TOAST,
@@ -124,8 +125,12 @@ export function AnamneseDocumentoEditor({
       e.preventDefault();
       e.returnValue = '';
     };
+    travar('ficha');
     window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
+    return () => {
+      liberar('ficha');
+      window.removeEventListener('beforeunload', handler);
+    };
   }, [state.dirty]);
 
   useEffect(() => {
