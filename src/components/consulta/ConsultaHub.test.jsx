@@ -33,8 +33,8 @@ function cardProcedimento() {
   return screen.getByRole('button', { name: /^Procedimento/ });
 }
 
-describe('ConsultaHub — gate do card Procedimento', () => {
-  it('bloqueia Procedimento quando há faltantes e o ato ainda não nasceu', async () => {
+describe('ConsultaHub — navegação do card Procedimento', () => {
+  it('permite entrar em Procedimento mesmo com termos pendentes para o médico selecionar ou remover itens', async () => {
     const onSelect = vi.fn();
     const onBloqueio = vi.fn();
     render(
@@ -47,11 +47,11 @@ describe('ConsultaHub — gate do card Procedimento', () => {
       />
     );
     await userEvent.click(cardProcedimento());
-    expect(onBloqueio).toHaveBeenCalled();
-    expect(onSelect).not.toHaveBeenCalled();
+    expect(onBloqueio).not.toHaveBeenCalled();
+    expect(onSelect).toHaveBeenCalledWith('procedimento');
   });
 
-  it('não bloqueia Procedimento do catálogo que já tem PF nesta sessão', async () => {
+  it('navega normalmente quando o procedimento já tem PF nesta sessão', async () => {
     const onSelect = vi.fn();
     const onBloqueio = vi.fn();
     render(
@@ -70,8 +70,8 @@ describe('ConsultaHub — gate do card Procedimento', () => {
   });
 });
 
-describe('ConsultaHub — F3 faltantes filtrados pela consulta', () => {
-  it('não bloqueia Procedimento quando a consulta já tem o termo ASSINADO (resolução velha)', async () => {
+describe('ConsultaHub — F3 exibição e navegação', () => {
+  it('navega para Procedimento quando a consulta já tem o termo ASSINADO', async () => {
     const onSelect = vi.fn();
     const onBloqueio = vi.fn();
     render(
@@ -89,7 +89,7 @@ describe('ConsultaHub — F3 faltantes filtrados pela consulta', () => {
     expect(onSelect).toHaveBeenCalledWith('procedimento');
   });
 
-  it('segue bloqueando quando o termo da consulta não está ASSINADO', async () => {
+  it('navega para Procedimento quando o termo da consulta está PENDENTE (trava interna no módulo)', async () => {
     const onSelect = vi.fn();
     const onBloqueio = vi.fn();
     render(
@@ -103,8 +103,8 @@ describe('ConsultaHub — F3 faltantes filtrados pela consulta', () => {
       />
     );
     await userEvent.click(cardProcedimento());
-    expect(onBloqueio).toHaveBeenCalled();
-    expect(onSelect).not.toHaveBeenCalled();
+    expect(onBloqueio).not.toHaveBeenCalled();
+    expect(onSelect).toHaveBeenCalledWith('procedimento');
   });
 });
 

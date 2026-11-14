@@ -36,11 +36,11 @@ export function ProcedimentoSearchInput({
     if (selectedVariant === 'chips') {
       return (
         <div className="flex flex-wrap items-center gap-1.5" role="list" aria-label="Procedimentos selecionados">
-          {(procedimentosSelecionados || []).map((proc) => {
+          {(procedimentosSelecionados || []).map((proc, idx) => {
             const isPlano = Boolean(proc.planejamentoItemId || proc.isPlano);
             return (
               <span
-                key={proc.id}
+                key={`${proc.id}-${idx}`}
                 role="listitem"
                 className="inline-flex items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50/80 px-2.5 py-1 text-xs font-semibold text-teal-900 shadow-2xs"
               >
@@ -502,11 +502,11 @@ export function ProcedimentoSearchInput({
         <div className="mt-2.5">
           {selectedVariant === 'chips' ? (
             <div className="flex flex-wrap items-center gap-1.5" role="list" aria-label="Procedimentos selecionados">
-              {procedimentosSelecionados.map((proc) => {
+              {procedimentosSelecionados.map((proc, idx) => {
                 const isPlano = Boolean(proc.planejamentoItemId || proc.isPlano);
                 return (
                   <span
-                    key={proc.id}
+                    key={`${proc.id}-${idx}`}
                     role="listitem"
                     className="inline-flex items-center gap-2 rounded-xl border-[1.5px] border-[#00a88e] bg-white px-3 py-1.5 text-xs font-bold text-[#0f172a] shadow-xs transition-all hover:border-[#008f79] hover:shadow-sm"
                   >
@@ -521,7 +521,7 @@ export function ProcedimentoSearchInput({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onRemover?.(proc.id);
+                          onRemover?.(proc.id, idx);
                         }}
                         className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#00a88e] cursor-pointer"
                         aria-label={`Remover ${proc.nome}`}

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Fio do hub: AppRefactored repassa `termosDaConsulta` (releitura da consulta) ao <ConsultaHub>.
  * Com o termo ASSINADO na consulta e a resolução do catálogo ainda "velha" (faltante + exigido vigente),
  * o hub filtra o gate sozinho: o selo "Consentimento válido" aparece e o clique em Procedimento navega.
@@ -87,15 +87,13 @@ describe('fio do hub: termosDaConsulta chega ao ConsultaHub', () => {
     expect(screen.getByText('Voltar ao hub')).toBeTruthy();
   }, TIMEOUT);
 
-  it('PENDENTE na consulta: sem selo válido e o clique em Procedimento abre o modal de termos', async () => {
+  it('PENDENTE na consulta: sem selo válido e o clique em Procedimento navega para Procedimento exibindo a faixa de bloqueio', async () => {
     await montarNoHub([linhaTermo({})]);
     expect(screen.queryAllByLabelText('Consentimento válido aguardando execução')).toHaveLength(0);
     clicarBotao(/ProcedimentoRegistro, fotos/);
     await assentarMuito();
-    expect(
-      screen.getByRole('button', { name: /Ir para a aba de termos e assinar o termo de Toxina botulínica/ }),
-    ).toBeTruthy();
-    expect(screen.queryByText('Voltar ao hub')).toBeNull();
+    expect(screen.getByText(/Procedimento bloqueado até a assinatura de:/i)).toBeTruthy();
+    expect(screen.getByText('Voltar ao hub')).toBeTruthy();
   }, TIMEOUT);
 });
 

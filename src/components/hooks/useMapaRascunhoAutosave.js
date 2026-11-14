@@ -5,6 +5,7 @@ import { PREFIXO_AVISO } from '../../services/avisos/tiposAviso.js';
 import { mapLocalPontoToApi } from '../../utils/procedimentoMapaPayload.js';
 import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA, normalizePacienteGaleriaResponse } from '../../utils/pacienteGaleria.js';
 import { getVistaLabel } from '../../constants/vistasMapaAplicacao.js';
+import { isRealUuid } from '../../utils/planejamentoDraftUtils.js';
 import { comTentativas } from './useEnvioFotosConsulta.js';
 
 const DEBOUNCE_MS = 700;
@@ -27,7 +28,7 @@ function marcacoesDo(pontosPorVista, invalidCatIds = []) {
     for (const p of lista) {
       const pt = mapLocalPontoToApi(p);
       let catId = pt.catalogoProcedimentoSaudeId || pt.catalogoId || null;
-      if (catId && invalidSet.has(String(catId))) {
+      if (catId && (!isRealUuid(catId) || invalidSet.has(String(catId)))) {
         catId = null;
       }
       marcacoes.push({
@@ -131,7 +132,8 @@ export function useMapaRascunhoAutosave({
       }
       const marcacoes = marcacoesDo(tarefa.pontosPorVista, opcoesRef.current.invalidCatIds);
       const chave = `${tarefa.consultaId}:${tarefa.itemId}`;
-      if (!marcacoes.length && !Object.keys(fotos).length && !salvoNoServidorRef.current.has(chave)) return;
+      const temSujas = Array.isArray(tarefa.sujas) && tarefa.sujas.length > 0;
+      if (!marcacoes.length && !Object.keys(fotos).length && !salvoNoServidorRef.current.has(chave) && !temSujas) return;
       await comTentativas(
         () => atendimentosApi.salvarMapa(tarefa.consultaId, tarefa.itemId, { fotoGaleriaIdPorVista: fotos, marcacoes }),
         esperas,
@@ -145,6 +147,7 @@ export function useMapaRascunhoAutosave({
         if (igual) ms.clearDirty(vista);
       }
     } catch (err) {
+      if (err?.status === 404) return;
       console.warn('[consulta] Rascunho do mapa não salvo:', err?.message || err);
       avisar?.(mensagemDoErro(err));
     }
@@ -200,7 +203,11 @@ export function useMapaRascunhoAutosave({
     salvoNoServidorRef.current.add(`${cid}:${iid}`);
     const { mapaState: ms } = opcoesRef.current;
     const preservar = new Set(agora.sujas);
-    const { applied, data } = ms.hydrateFromApi(dto, { preservarVistas: [...preservar] });
+    const respostaVaziaExplicita = Boolean(dto && typeof dto === 'object' && (dto.mapaId || Array.isArray(dto.marcacoes)));
+    const { applied, data } = ms.hydrateFromApi(dto, {
+      preservarVistas: [...preservar],
+      allowEmpty: respostaVaziaExplicita,
+    });
     if (!applied) return;
     const porVista = Object.entries(data.fotoGaleriaIdPorVista || {})
       .filter(([vista, fid]) => !preservar.has(vista) && agora.fotosPorVista?.[vista]?.fotoGaleriaId !== String(fid)

@@ -111,6 +111,8 @@ export function FotoVistaCanvasCore({
   configMarcacao,
   mostrarValores: externalMostrarValores,
   canUpload = true,
+  desenhoBloqueado = false,
+  onDesenhoBloqueadoClick,
 }) {
   const containerRef = useRef(null);
   const imgRef = useRef(null);
@@ -251,13 +253,19 @@ export function FotoVistaCanvasCore({
       return;
     }
 
+    if (!foto?.displayUrl && !displayUrl) return;
+
+    if (desenhoBloqueado && (modo === 'ponto' || modo === 'traco')) {
+      onDesenhoBloqueadoClick?.();
+      return;
+    }
+
     if (!procedimentoArmado?.id) {
       if ((modo === 'ponto' || modo === 'traco') && (foto?.displayUrl || displayUrl)) {
         onTentativaSemProcedimento?.();
       }
       return;
     }
-    if (!foto?.displayUrl && !displayUrl) return;
 
     if (modo === 'ponto') {
       const coords = clickToPercent(e.clientX, e.clientY, containerRef.current, imgRef.current);
@@ -456,7 +464,7 @@ export function FotoVistaCanvasCore({
 
 
 
-  const canMark = Boolean(!readOnly && procedimentoArmado?.id && displayUrl);
+  const canMark = Boolean(!readOnly && !desenhoBloqueado && procedimentoArmado?.id && displayUrl);
 
   const effectiveShowToolbar = showToolbar && !readOnly;
 

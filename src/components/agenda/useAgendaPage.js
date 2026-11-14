@@ -155,13 +155,13 @@ function normalizeEquipeList(raw) {
       const apareceNaAgenda = p?.apareceNaAgenda ?? p?.aparece_na_agenda ?? true;
       return roleUserId
         ? {
-            roleUserId,
-            nome: String(nome).trim() || 'Profissional',
-            roleNome: p?.roleNome || p?.role_nome || p?.papel || p?.role || '',
-            fotoUrl: p?.fotoUrl || p?.foto_url || p?.urlFoto || '',
-            especialidade: p?.especialidade || p?.specialty || '',
-            apareceNaAgenda: Boolean(apareceNaAgenda),
-          }
+          roleUserId,
+          nome: String(nome).trim() || 'Profissional',
+          roleNome: p?.roleNome || p?.role_nome || p?.papel || p?.role || '',
+          fotoUrl: p?.fotoUrl || p?.foto_url || p?.urlFoto || '',
+          especialidade: p?.especialidade || p?.specialty || '',
+          apareceNaAgenda: Boolean(apareceNaAgenda),
+        }
         : null;
     })
     .filter(Boolean);
@@ -413,6 +413,8 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   }, []);
   /** planejamentoItemId explícito ao abrir modal a partir de item do plano (fallback do vínculo). */
   const planejamentoItemIdVinculoRef = useRef(null);
+  /** Itens de planejamento selecionados em lote para agendamento conjunto: [{ catalogoProcedimentoSaudeId, planejamentoItemId, agendaIdOrigem }] */
+  const planejamentoItensLoteRef = useRef([]);
   const disponibilidadesRef = useRef(disponibilidades);
   disponibilidadesRef.current = disponibilidades;
 
@@ -1247,6 +1249,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
 
         if (tipo !== TIPO_ATENDIMENTO_RETORNO) {
           planejamentoItemIdVinculoRef.current = null;
+          planejamentoItensLoteRef.current = [];
         }
 
         return next;
@@ -1303,6 +1306,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   const selecionarRetornoOrigemHistorico = useCallback((item) => {
     const procId = String(item?.id || item?.procedimentoFeitoOrigemId || '').trim();
     planejamentoItemIdVinculoRef.current = null;
+    planejamentoItensLoteRef.current = [];
     setForm((prev) => ({
       ...prev,
       procedimentoFeitoOrigemId: procId,
@@ -1323,6 +1327,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
 
   const limparVinculoRetornoPlano = useCallback(() => {
     planejamentoItemIdVinculoRef.current = null;
+    planejamentoItensLoteRef.current = [];
     setForm((prev) => ({
       ...prev,
       procedimentoFeitoOrigemId: '',
@@ -2518,6 +2523,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       setPlanoItemEscolhidoPorCatalogo({});
       planoLoadTokenRef.current += 1;
       planejamentoItemIdVinculoRef.current = null;
+      planejamentoItensLoteRef.current = [];
       setForm(defaultForm(targetDate, patientOptions, null));
       setFormErrors({});
       applyProfissionalPreselect();
@@ -2560,6 +2566,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       setPlanoItemEscolhidoPorCatalogo({});
       planoLoadTokenRef.current += 1;
       planejamentoItemIdVinculoRef.current = null;
+      planejamentoItensLoteRef.current = [];
       setSelectedDay(date);
       const base = defaultForm(date, patientOptions, null);
       setForm({
@@ -2589,6 +2596,9 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       const base = defaultForm(targetDate, patientOptions, null);
       const vinculoExplicito = String(opts.planejamentoItemId ?? '').trim();
       planejamentoItemIdVinculoRef.current = vinculoExplicito || null;
+      planejamentoItensLoteRef.current = Array.isArray(opts.planejamentoItensLote)
+        ? opts.planejamentoItensLote
+        : [];
       const paiPreselecionado = String(opts.procedimentoFeitoOrigemId ?? '').trim();
       const precisaCarregarRaizes = Boolean(opts.modoRetorno) && !paiPreselecionado;
       const isModoRetorno = Boolean(opts.modoRetorno);
@@ -2685,6 +2695,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         appointment?.planejamentoItemId ||
         grupo.find((a) => a.planejamentoItemId)?.planejamentoItemId;
       planejamentoItemIdVinculoRef.current = vinculoPlano ? String(vinculoPlano).trim() : null;
+      planejamentoItensLoteRef.current = [];
 
       setForm({
         ...base,
@@ -2762,6 +2773,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     setGrupoReagendarDuracoes({});
     setPlanejamentoItemIdPorCatalogo({});
     planejamentoItemIdVinculoRef.current = null;
+    planejamentoItensLoteRef.current = [];
     setPlanoAgendavel([]);
     setPlanoAgendavelLoading(false);
     setPlanoItemEscolhidoPorCatalogo({});
@@ -2772,6 +2784,14 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     setDispMonthDtos([]);
     setDispCalendarioDia('');
     setDispMonthError('');
+  }, []);
+
+  const removePlanejamentoItemLoteAtIndex = useCallback((index) => {
+    if (Array.isArray(planejamentoItensLoteRef.current)) {
+      if (typeof index === 'number' && index >= 0 && index < planejamentoItensLoteRef.current.length) {
+        planejamentoItensLoteRef.current.splice(index, 1);
+      }
+    }
   }, []);
 
   const validateForm = useCallback(() => {
@@ -2985,24 +3005,39 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
         const resultados = [];
         const duracaoTotal = deriveDuracaoFromRange(form.horaInicio, form.horaFimSlot);
         const divisao = divideDuracaoEntreProcedimentos(duracaoTotal, procIds.length);
+        const itensLoteRestantes = Array.isArray(planejamentoItensLoteRef.current)
+          ? [...planejamentoItensLoteRef.current]
+          : [];
 
         for (let i = 0; i < procIds.length; i += 1) {
           const catalogoProcedimentoSaudeId = procIds[i];
           const dMin = divisao[i] ?? 30;
 
+          let loteItemCorrespondente = null;
+          if (itensLoteRestantes.length > 0) {
+            const idxLote = itensLoteRestantes.findIndex(
+              (it) => String(it.catalogoProcedimentoSaudeId || '').trim() === String(catalogoProcedimentoSaudeId || '').trim()
+            );
+            if (idxLote !== -1) {
+              loteItemCorrespondente = itensLoteRestantes.splice(idxLote, 1)[0];
+            }
+          }
+
           const origemLock = Object.keys(planejamentoItemIdPorCatalogo).length > 0;
-          const planejamentoItemId = origemLock
-            ? resolvePlanejamentoItemIdForCatalogo(
+          const planejamentoItemId = loteItemCorrespondente?.planejamentoItemId
+            ? loteItemCorrespondente.planejamentoItemId
+            : (origemLock
+              ? resolvePlanejamentoItemIdForCatalogo(
                 catalogoProcedimentoSaudeId,
                 planejamentoItemIdPorCatalogo,
                 planejamentoItemIdVinculoRef.current,
               )
-            : (planoItemEscolhidoPorCatalogo[catalogoProcedimentoSaudeId] || null);
+              : (planoItemEscolhidoPorCatalogo[catalogoProcedimentoSaudeId] || null));
           const agendaOrigemResolvida =
             modalMode === 'reagendar'
               ? (grupoReagendarMap[catalogoProcedimentoSaudeId] ||
                 (procIds.length === 1 ? (editingAppointment?.agendaId || editingAppointment?.id) : undefined))
-              : undefined;
+              : (loteItemCorrespondente?.agendaIdOrigem || undefined);
 
           const createBody = buildAgendaCreateBody({
             dataAgendamento: form.data,
@@ -3066,6 +3101,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
             horaFim: firstOk.horaFim,
             profissionalRoleUserId: agendaRole,
             statusCodigo: 'AGENDADO',
+            resultadosOk: resultados.filter((r) => r.status === 'ok'),
           };
         }
       }
@@ -3262,6 +3298,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     planoItemEscolhidoPorCatalogo,
     setPlanoItemEscolhidoPorCatalogo,
     closeModal,
+    removePlanejamentoItemLoteAtIndex,
     patientSelectLocked,
     retornosVinculadosReagendar,
     isModoPlanejamento: Object.keys(planejamentoItemIdPorCatalogo).length > 0,

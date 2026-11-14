@@ -208,4 +208,44 @@ describe('regras da tela (decisões 6 e 7)', () => {
     // Sem procedimento devolvido para o item, vale a lista da linha.
     expect(orientacoesPorItemParaPadrao([sessao[0]], [])[0].orientacoes).toEqual([{ ...EVITAR_SOL, checado: true }]);
   });
+
+  it('porCatalogo: casa linha local sem itemId com item aberto do servidor pelo mesmo catalogoProcedimentoSaudeId sem duplicar nem tocar CONSULTA', () => {
+    const catBiopsia = 'ae05fd5a-3362-46ff-9c0f-2846190ccb87';
+    const itens = [
+      item('srv-consulta', {
+        ordem: 0,
+        agendaId: 'ag-consulta',
+        agendaTipoProcedimentoCodigo: 'CONSULTA',
+        catalogoProcedimentoSaudeId: null,
+      }),
+      item('srv-biopsia', {
+        ordem: 1,
+        agendaId: 'ag-outro',
+        catalogoProcedimentoSaudeId: catBiopsia,
+        nomeLivre: null,
+      }),
+    ];
+    const sessao = [
+      {
+        itemId: 'srv-consulta',
+        agendaId: 'ag-consulta',
+        tipoAgendaCodigo: 'CONSULTA',
+        nomeProcedimento: 'Consulta',
+        nomeSoDeTela: true,
+        catalogoProcedimentoSaudeId: null,
+      },
+      {
+        _uid: 'local-biopsia',
+        agendaId: 'ag-diferente',
+        catalogoProcedimentoSaudeId: catBiopsia,
+        catalogoId: catBiopsia,
+        nomeProcedimento: 'Biópsia',
+        nomeSoDeTela: false,
+      },
+    ];
+    expect(mapearItensDaSessao(sessao, itens)).toEqual(['srv-consulta', 'srv-biopsia']);
+    const r = mesclarSessao(sessao, itens, nunca);
+    expect(r.sessao).toHaveLength(2);
+    expect(r.sessao.map((l) => l.itemId)).toEqual(['srv-consulta', 'srv-biopsia']);
+  });
 });

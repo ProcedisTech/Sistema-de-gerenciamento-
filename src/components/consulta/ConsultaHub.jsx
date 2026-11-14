@@ -13,7 +13,7 @@ import { PREFIXO_AVISO } from '../../services/avisos/tiposAviso.js';
 const MODULE_CARDS = [
   { id: 'anamnese', label: 'Anamnese', description: 'Ficha e histórico clínico', icon: FileText },
   { id: 'avaliacao', label: 'Avaliação', description: 'Fotos e desenho sobre as imagens', icon: Eye },
-  { id: 'planejamento', label: 'Planejamento', description: 'Planos de tratamento e procedimentos', icon: BookOpen },
+  { id: 'planejamento', label: 'Plano de Tratamento', description: 'Planos de tratamento e procedimentos', icon: BookOpen },
   { id: 'termos', label: 'Termos', description: 'Consentimentos e assinaturas', icon: ClipboardList },
   { id: 'procedimento', label: 'Procedimento', description: 'Registro, fotos e finalização', icon: Syringe },
   {
@@ -108,9 +108,9 @@ export function ConsultaHub({
   getPatientInitials,
   catalogoIds = [],
   exigirFilaVinculo = true,
-  nomeProcedimento,
-  atoJaIniciado = false,
-  onTermosBloqueio,
+  _nomeProcedimento,
+  _atoJaIniciado = false,
+  _onTermosBloqueio,
   /** `termos[]` da consulta (releitura do servidor); sem ele a resolução vale como veio. */
   termosDaConsulta = [],
   /** Id da consulta atual: a resolução só aceita assinatura feita nesta consulta. */
@@ -120,7 +120,9 @@ export function ConsultaHub({
   const iniciais = paciente ? initialsFn(paciente.nome || '') || '—' : '—';
   const cards = buildModuleCards(isRetorno);
   const chaveTermos = useChaveDeAviso(PREFIXO_AVISO.TERMOS);
-  const chavePlanos = useChaveDeAviso(PREFIXO_AVISO.ATENDIMENTO);
+  const chavePlanosAtendimento = useChaveDeAviso(PREFIXO_AVISO.ATENDIMENTO);
+  const chavePlanosPaciente = useChaveDeAviso(PREFIXO_AVISO.PACIENTE);
+  const chavePlanos = chavePlanosAtendimento + chavePlanosPaciente;
   const chaveAnamnese = useChaveDeAviso(PREFIXO_AVISO.ANAMNESE);
   const termosPendentes = useTermosPendentes(paciente?.id, {
     catalogoIds,
@@ -188,18 +190,6 @@ export function ConsultaHub({
     if (estado === 'bloqueado') {
       return;
     }
-    if (
-      id === 'procedimento' &&
-      exigirFilaVinculo &&
-      !atoJaIniciado &&
-      temFaltantes(resolucaoEfetiva)
-    ) {
-      onTermosBloqueio?.({
-        nomeProcedimento: nomeProcedimento || 'procedimento',
-        faltantes: resolucaoEfetiva.faltantes,
-      });
-      return;
-    }
     if (estado === 'leitura') {
       onSelectModule?.(id, { modoLeitura: true });
     } else {
@@ -258,6 +248,7 @@ export function ConsultaHub({
               key={card.id}
               type="button"
               disabled={!allowed}
+              aria-label={card.id === 'planejamento' ? 'Planejamento — Plano de Tratamento' : undefined}
               onClick={() => {
                 if (!allowed) return;
                 if (card.id === 'retorno-avulso') {

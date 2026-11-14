@@ -4,6 +4,7 @@ import { hojeDaClinica } from './datasClinica.js';
 import { mapLocalPontoToApi } from './procedimentoMapaPayload.js';
 import { getVistaLabel } from '../constants/vistasMapaAplicacao.js';
 import { corParaProcedimento, MAPEAMENTO_PALETA_CORES } from '../constants/mapeamentoPaletaCores.js';
+import { ehLinhaConsultaSemCatalogo } from '../components/consulta/consultaServidor.js';
 
 function mapApiErrorMessage(e) {
   const msg = String(e?.message || '');
@@ -98,6 +99,9 @@ export async function persistirMapaAplicacao({
   const listaProcedimentoIds = Array.isArray(procedimentoFeitoIds) && procedimentoFeitoIds.length > 0
     ? procedimentoFeitoIds.map(String)
     : (procedimentoFeitoId ? [String(procedimentoFeitoId)] : []);
+  const procedimentosSessaoMapeaveis = Array.isArray(procedimentosSessao)
+    ? procedimentosSessao.filter((p) => p && p.nomeSoDeTela !== true && !ehLinhaConsultaSemCatalogo(p))
+    : [];
   const mainPfId = listaProcedimentoIds[0] || procedimentoFeitoId;
 
   if (!mainPfId) {
@@ -153,37 +157,42 @@ export async function persistirMapaAplicacao({
 
     for (const pt of pontos) {
       let pIdx = pt.procedimentoIndex;
-      if (pIdx == null) {
-        // Tenta associar por procedimentoId / procedimentoFeitoId na lista enviada
-        if (pt.procedimentoFeitoId || pt.procedimentoId) {
-          const targetId = String(pt.procedimentoFeitoId || pt.procedimentoId);
-          const matchedIdx = listaProcedimentoIds.findIndex((id) => String(id) === targetId);
-          if (matchedIdx >= 0) pIdx = matchedIdx;
-        }
-        // Se ainda não achou, tenta pelo catálogo contra a lista de procedimentos
-        if (pIdx == null && (pt.catalogoProcedimentoSaudeId || pt.catalogoId) && Array.isArray(procedimentosSessao)) {
-          const ptCat = String(pt.catalogoProcedimentoSaudeId || pt.catalogoId);
-          const foundProc = procedimentosSessao.find((p) => {
-            const cid = p.catalogoProcedimentoSaudeId || p.catalogoId || p.nomeProcedimentoCatalogoId || p.id;
-            return cid && String(cid) === ptCat;
-          });
-          if (foundProc) {
-            const procId = String(foundProc.id || foundProc.procedimentoFeitoId);
-            const matchedIdx = listaProcedimentoIds.findIndex((id) => String(id) === procId);
-            if (matchedIdx >= 0) {
-              pIdx = matchedIdx;
-            } else {
-              const directIdx = procedimentosSessao.indexOf(foundProc);
-              if (directIdx >= 0 && directIdx < listaProcedimentoIds.length) {
-                pIdx = directIdx;
-              }
+      if (
+        (pIdx == null || pIdx < 0 || pIdx >= listaProcedimentoIds.length) &&
+        (pt.procedimentoFeitoId || pt.procedimentoId)
+      ) {
+        const targetId = String(pt.procedimentoFeitoId || pt.procedimentoId);
+        const matchedIdx = listaProcedimentoIds.findIndex((id) => String(id) === targetId);
+        if (matchedIdx >= 0) pIdx = matchedIdx;
+      }
+
+      // Prioriza resolução por catálogo no espaço mapeável (sem CONSULTA) quando ausente ou fora de faixa
+      if (
+        (pIdx == null || pIdx < 0 || pIdx >= listaProcedimentoIds.length) &&
+        (pt.catalogoProcedimentoSaudeId || pt.catalogoId) &&
+        procedimentosSessaoMapeaveis.length > 0
+      ) {
+        const ptCat = String(pt.catalogoProcedimentoSaudeId || pt.catalogoId);
+        const foundProc = procedimentosSessaoMapeaveis.find((p) => {
+          const cid = p.catalogoProcedimentoSaudeId || p.catalogoId || p.nomeProcedimentoCatalogoId || p.id;
+          return cid && String(cid) === ptCat;
+        });
+        if (foundProc) {
+          const procId = String(foundProc.id || foundProc.procedimentoFeitoId || '');
+          const matchedIdx = procId ? listaProcedimentoIds.findIndex((id) => String(id) === procId) : -1;
+          if (matchedIdx >= 0) {
+            pIdx = matchedIdx;
+          } else {
+            const directIdx = procedimentosSessaoMapeaveis.indexOf(foundProc);
+            if (directIdx >= 0 && directIdx < listaProcedimentoIds.length) {
+              pIdx = directIdx;
             }
           }
         }
       }
 
       // Se a sessão só tem 1 procedimento, associa com 0 por padrão
-      if (pIdx == null && listaProcedimentoIds.length === 1) {
+      if ((pIdx == null || pIdx < 0 || pIdx >= listaProcedimentoIds.length) && listaProcedimentoIds.length === 1) {
         pIdx = 0;
       }
 
@@ -197,7 +206,7 @@ export async function persistirMapaAplicacao({
         continue;
       }
 
-      const procDoPonto = Array.isArray(procedimentosSessao) ? procedimentosSessao[pIdx] : null;
+      const procDoPonto = procedimentosSessaoMapeaveis[pIdx] || null;
       const catDoPonto = pt.catalogoProcedimentoSaudeId || pt.catalogoId || procDoPonto?.catalogoProcedimentoSaudeId || procDoPonto?.catalogoId || (pIdx === 0 ? catalogoProcedimentoSaudeId : undefined);
       const corDoPonto = pt.cor || pt.corHex || procDoPonto?.corHex || (catDoPonto ? corParaProcedimento(catDoPonto) : undefined) || MAPEAMENTO_PALETA_CORES[pIdx % MAPEAMENTO_PALETA_CORES.length];
 
@@ -220,9 +229,10 @@ export async function persistirMapaAplicacao({
         origemTipo: 'procedimento',
         origemId: mainPfId,
         procedimentos: listaProcedimentoIds.map((id, idx) => {
-          const proc = (Array.isArray(procedimentosSessao)
-            ? (procedimentosSessao.find((p) => String(p.id || p.procedimentoFeitoId) === String(id)) || procedimentosSessao[idx])
-            : null);
+          const proc =
+            procedimentosSessaoMapeaveis.find((p) => String(p.id || p.procedimentoFeitoId) === String(id)) ||
+            procedimentosSessaoMapeaveis[idx] ||
+            null;
           const catId = proc?.catalogoProcedimentoSaudeId || proc?.catalogoId || proc?.nomeProcedimentoCatalogoId || (idx === 0 ? catalogoProcedimentoSaudeId : null);
           const cor = proc?.corHex || (catId ? corParaProcedimento(catId) : null) || MAPEAMENTO_PALETA_CORES[idx % MAPEAMENTO_PALETA_CORES.length];
           return {

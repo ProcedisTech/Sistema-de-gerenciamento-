@@ -158,6 +158,7 @@ import { useEnvioFotosConsulta } from './hooks/useEnvioFotosConsulta.js';
 import { useMapaRascunhoAutosave } from './hooks/useMapaRascunhoAutosave.js';
 import {
   consultaFechada,
+  ehLinhaConsultaSemCatalogo,
   ehRotuloDeTela,
   inicioAoEntrarNaConsulta,
   itensOrientacoesDaSessao,
@@ -437,6 +438,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
    * (termosDaConsulta, releitura). Nada global.
    */
   const [resolucaoTermosPorCatalogo, setResolucaoTermosPorCatalogo] = React.useState({});
+  const [falhaValidacaoTermosIds, setFalhaValidacaoTermosIds] = React.useState(() => new Set());
   /** Preenchido depois do hook da consulta (termosDaConsulta); lido só em callbacks. */
   const termosDaConsultaRef = React.useRef([]);
   /** Id da consulta no servidor (atribuído após useAtendimentoServidor); a resolução de termos o envia. */
@@ -446,9 +448,16 @@ function AppRefactoredInner({ onCanalAvisos }) {
     const cat = String(catalogoId ?? catalogoAtivoTermosRef.current ?? '').trim();
     if (!cat) return;
     setResolucaoTermosPorCatalogo((prev) => ({ ...prev, [cat]: resolucao }));
+    setFalhaValidacaoTermosIds((prev) => {
+      if (!prev.has(cat)) return prev;
+      const next = new Set(prev);
+      next.delete(cat);
+      return next;
+    });
   }, []);
   const limparResolucoesTermos = React.useCallback(() => {
     setResolucaoTermosPorCatalogo((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+    setFalhaValidacaoTermosIds((prev) => (prev.size === 0 ? prev : new Set()));
   }, []);
   const [termoFocoId, setTermoFocoId] = React.useState(null);
   const [catalogoOrigemRetornoId, setCatalogoOrigemRetornoId] = React.useState(null);
@@ -666,24 +675,54 @@ function AppRefactoredInner({ onCanalAvisos }) {
   );
 
   const handleAgendarPlanoItem = React.useCallback(
-    (paciente, item, onSaved) => {
-      const catId = String(item?.catalogoProcedimentoSaudeId || item?.catalogoId || '').trim();
-      if (!paciente?.id || !roleUserId || !catId) return;
-      const planejamentoItemId = String(item.planejamentoItemId ?? item.id ?? '').trim();
-      if (!isRealUuid(planejamentoItemId)) {
-        toast.error('Salve o plano antes de agendar este procedimento.');
+    (paciente, itemOuItens, onSavedOuOpts) => {
+      if (!paciente?.id || !roleUserId || !itemOuItens) return;
+      const itens = Array.isArray(itemOuItens) ? itemOuItens : [itemOuItens];
+      const itensValidos = itens.filter((it) => {
+        const catId = String(it?.catalogoProcedimentoSaudeId || it?.catalogoId || '').trim();
+        const planItemId = String(it?.planejamentoItemId ?? it?.id ?? '').trim();
+        return catId && isRealUuid(planItemId);
+      });
+
+      if (itensValidos.length === 0) {
+        toast.error('Salve o plano antes de agendar os procedimentos.');
         return;
       }
-      const targetData = item?.dataPlanejada || item?.data || null;
+
+      const catalogoProcedimentoSaudeIds = itensValidos.map((it) =>
+        String(it.catalogoProcedimentoSaudeId || it.catalogoId).trim()
+      );
+
+      const mapaPorCatalogo = {};
+      const planejamentoItensLote = [];
+      for (const it of itensValidos) {
+        const catId = String(it.catalogoProcedimentoSaudeId || it.catalogoId).trim();
+        const planItemId = String(it.planejamentoItemId ?? it.id).trim();
+        const agendaIdOrigem = it?.sessaoAtiva?.agendaId || null;
+        mapaPorCatalogo[catId] = planItemId;
+        planejamentoItensLote.push({
+          catalogoProcedimentoSaudeId: catId,
+          planejamentoItemId: planItemId,
+          agendaIdOrigem,
+        });
+      }
+
+      const primeiroItem = itensValidos[0];
+      const targetData = primeiroItem?.dataPlanejada || primeiroItem?.data || null;
+
+      const callbackOnSaved =
+        typeof onSavedOuOpts === 'function'
+          ? onSavedOuOpts
+          : (typeof onSavedOuOpts?.onAgendaSaved === 'function' ? onSavedOuOpts.onAgendaSaved : null);
+
       agendaSchedule.openCreateModalForPatient(buildAgendaPacienteFromRecord(paciente), {
-        catalogoProcedimentoSaudeIds: [catId],
-        planejamentoItemId,
-        planejamentoItemIdPorCatalogo: {
-          [catId]: planejamentoItemId,
-        },
+        catalogoProcedimentoSaudeIds,
+        planejamentoItemId: itensValidos.length === 1 ? String(primeiroItem.planejamentoItemId ?? primeiroItem.id).trim() : null,
+        planejamentoItemIdPorCatalogo: mapaPorCatalogo,
+        planejamentoItensLote,
         data: targetData,
         profissionalRoleUserId: roleUserId,
-        onAgendaSaved: onSaved,
+        onAgendaSaved: callbackOnSaved,
       });
     },
     [agendaSchedule, buildAgendaPacienteFromRecord, roleUserId, toast],
@@ -1059,6 +1098,11 @@ function AppRefactoredInner({ onCanalAvisos }) {
         }
         setTermoBloqueio((prev) => ({ ...prev, open: false }));
       } catch {
+        setFalhaValidacaoTermosIds((prev) => {
+          const next = new Set(prev);
+          validIds.forEach((id) => next.add(id));
+          return next;
+        });
         /* rede: o gate do backend ainda bloqueia iniciar */
       }
       return true;
@@ -1478,6 +1522,28 @@ function AppRefactoredInner({ onCanalAvisos }) {
     resolucao: termosExecucaoBloqueio.resolucao,
     pfIdNestaSessao: pfIdCatalogoAtivo,
   });
+  const termosValidando = React.useMemo(() => {
+    if (journeyState.isAgendaRetorno || !pacienteAtual?.id) return false;
+    const ids = Array.isArray(catalogoIdsConsulta) && catalogoIdsConsulta.length > 0
+      ? catalogoIdsConsulta
+      : (journeyState.nomeProcedimentoCatalogoId ? [String(journeyState.nomeProcedimentoCatalogoId).trim()] : []);
+    const uuids = ids.filter((id) => UUID_REGEX_PROC.test(id));
+    if (uuids.length === 0) return false;
+    return uuids.some(
+      (id) =>
+        !pfIdNestaSessaoParaCatalogo(id, journeyState.procedimentosSessao) &&
+        !(id in resolucaoTermosPorCatalogo) &&
+        !falhaValidacaoTermosIds.has(id),
+    );
+  }, [
+    journeyState.isAgendaRetorno,
+    pacienteAtual?.id,
+    catalogoIdsConsulta,
+    journeyState.nomeProcedimentoCatalogoId,
+    journeyState.procedimentosSessao,
+    resolucaoTermosPorCatalogo,
+    falhaValidacaoTermosIds,
+  ]);
   /**
    * F3: a ordem da sessão segue a `ordem` do servidor (mesclarSessao). Se a mescla reordenou as linhas sem a pessoa
    * trocar de aba, o índice ativo acompanha o item (itemId), não a posição.
@@ -1516,10 +1582,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
   const consultaAtualServidor = consultaServidor.atual;
   const consultaDasFotos =
     activeView === 'consulta' &&
-    consultaModule != null &&
-    consultaAtualServidor &&
-    pacienteAtual?.id != null &&
-    String(consultaAtualServidor.pacienteId) === String(pacienteAtual.id)
+      consultaModule != null &&
+      consultaAtualServidor &&
+      pacienteAtual?.id != null &&
+      String(consultaAtualServidor.pacienteId) === String(pacienteAtual.id)
       ? consultaAtualServidor
       : null;
   /** Etapa 3: o encerrar vai pela rota única, com a consulta da tela no servidor; sem ela, nada é gravado. */
@@ -1548,13 +1614,37 @@ function AppRefactoredInner({ onCanalAvisos }) {
     }
     return true;
   }, [consultaEncerraNoServidor, esperarFilaAvaliacao, toast]);
-  const itemDoProcedimentoAtivo = React.useMemo(
-    () =>
-      mapearItensDaSessao(journeyState.procedimentosSessao, consultaAtualServidor?.itens)[
-        journeyState.activeProcedureIndex ?? 0
-      ] ?? null,
-    [journeyState.procedimentosSessao, consultaAtualServidor?.itens, journeyState.activeProcedureIndex],
-  );
+  const itemDoProcedimentoAtivo = React.useMemo(() => {
+    const itens = consultaAtualServidor?.itens;
+    if (!Array.isArray(itens) || itens.length === 0) return null;
+    const sessao = Array.isArray(journeyState.procedimentosSessao) ? journeyState.procedimentosSessao : [];
+    const mapaItens = mapearItensDaSessao(sessao, itens);
+    const idxAtivo = journeyState.activeProcedureIndex ?? 0;
+    const linhaAtiva = sessao[idxAtivo];
+    const linhaAtivaValida = linhaAtiva && !linhaAtiva.nomeSoDeTela && !ehLinhaConsultaSemCatalogo(linhaAtiva) && (
+      linhaAtiva.catalogoProcedimentoSaudeId || linhaAtiva.nomeProcedimentoCatalogoId || linhaAtiva.catalogoId || linhaAtiva.planejamentoItemId || (linhaAtiva.nomeProcedimento && !ehRotuloDeTela(linhaAtiva.nomeProcedimento))
+    );
+    if (linhaAtivaValida && mapaItens[idxAtivo]) {
+      return mapaItens[idxAtivo];
+    }
+    const idxPrimeiroValido = sessao.findIndex((p) => p && !p.nomeSoDeTela && !ehLinhaConsultaSemCatalogo(p) && (
+      p.catalogoProcedimentoSaudeId || p.nomeProcedimentoCatalogoId || p.catalogoId || p.planejamentoItemId || (p.nomeProcedimento && !ehRotuloDeTela(p.nomeProcedimento))
+    ));
+    if (idxPrimeiroValido >= 0 && mapaItens[idxPrimeiroValido]) {
+      return mapaItens[idxPrimeiroValido];
+    }
+    const fallbackAtivo = (linhaAtiva && (linhaAtiva.nomeSoDeTela || ehLinhaConsultaSemCatalogo(linhaAtiva)))
+      ? null
+      : mapaItens[idxAtivo];
+    const somenteVazioOuConsulta =
+      sessao.length > 0 && sessao.every((p) => !p || p.nomeSoDeTela || ehLinhaConsultaSemCatalogo(p));
+    if (somenteVazioOuConsulta) {
+      return (linhaAtiva && !ehLinhaConsultaSemCatalogo(linhaAtiva) && linhaAtiva.agendaId)
+        ? (mapaItens[idxAtivo] ?? null)
+        : null;
+    }
+    return fallbackAtivo ?? itens.find((it) => it?.catalogoProcedimentoSaudeId || it?.planejamentoItemId)?.id ?? mapaItens[idxAtivo] ?? itens[0]?.id ?? null;
+  }, [journeyState.procedimentosSessao, consultaAtualServidor?.itens, journeyState.activeProcedureIndex]);
   const avisarErroFoto = React.useCallback((mensagem) => toast.error(mensagem), [toast]);
   const envioFotos = useEnvioFotosConsulta({
     consulta: consultaDasFotos,
@@ -1576,12 +1666,19 @@ function AppRefactoredInner({ onCanalAvisos }) {
     aguardarPendentes: aguardarFotosPendentes,
     obterFotoId: obterFotoIdConsulta,
   } = envioFotos;
+  const listaPidsRetorno = React.useMemo(() => {
+    return (journeyState.procedimentosSessao || [])
+      .flatMap((p) => [p.id, p.procedimentoFeitoId, p.procedimentoFeitoOrigemId])
+      .filter(Boolean)
+      .map(String);
+  }, [journeyState.procedimentosSessao]);
   const { aguardarMapa: aguardarMapaRascunho } = useMapaRascunhoAutosave({
     consulta: consultaDasFotos,
     itemId: itemDoProcedimentoAtivo,
     mapaState: mapaAplicacaoState,
     roleUserId: roleUserId || null,
     avisarErro: avisarErroFoto,
+    invalidCatIds: listaPidsRetorno,
   });
   const itemDoRetornoAtivo = React.useMemo(() => {
     const itens = consultaAtualServidor?.itens || [];
@@ -1592,12 +1689,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
       null
     );
   }, [consultaAtualServidor?.itens, journeyState.procedimentosSessao]);
-  const listaPidsRetorno = React.useMemo(() => {
-    return (journeyState.procedimentosSessao || [])
-      .flatMap((p) => [p.id, p.procedimentoFeitoId, p.procedimentoFeitoOrigemId])
-      .filter(Boolean)
-      .map(String);
-  }, [journeyState.procedimentosSessao]);
   const { aguardarMapa: aguardarMapaRetorno } = useMapaRascunhoAutosave({
     consulta: consultaDasFotos,
     itemId: itemDoRetornoAtivo,
@@ -1662,6 +1753,20 @@ function AppRefactoredInner({ onCanalAvisos }) {
     [activeView, journeyState, trocarModuloPeloUsuario]
   );
 
+  const handleIrParaTermosGate = React.useCallback(
+    (focoId) => {
+      irParaTermosFaltantes({
+        termoId: typeof focoId === 'string' ? focoId : idsFilaExigida(termosExecucaoBloqueio.resolucao)[0],
+        termoIds: idsFilaExigida(termosExecucaoBloqueio.resolucao),
+        nomeProcedimento: journeyState.nomeProcedimento,
+      });
+      if (activeView !== 'consulta') {
+        setCurrentStep(3);
+      }
+    },
+    [activeView, irParaTermosFaltantes, journeyState.nomeProcedimento, setCurrentStep, termosExecucaoBloqueio.resolucao],
+  );
+
   const handleSelectCapturedPhoto = (idx) => {
     const photo = cameraState.evaluationCapturedPhotos[idx];
     if (!photo?.url) return;
@@ -1701,10 +1806,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
       destinoAvaliacao === 'avulso'
         ? null
         : (planejamentoId ||
-           prevPh?.planejamentoId ||
-           journeyState.journeyPlanejamentoCtx?.id ||
-           journeyState.journeyPlanejamentoCtx?.planejamentoId ||
-           null);
+          prevPh?.planejamentoId ||
+          journeyState.journeyPlanejamentoCtx?.id ||
+          journeyState.journeyPlanejamentoCtx?.planejamentoId ||
+          null);
     const resolvedPlanItemId = destinoAvaliacao === 'avulso' ? null : (planejamentoItemId || prevPh?.planejamentoItemId || null);
 
     if (resolvedMapaId) {
@@ -2287,11 +2392,20 @@ function AppRefactoredInner({ onCanalAvisos }) {
     if (!isSameDayResume) {
       const hasLote = Array.isArray(options.lote) && options.lote.length > 0;
       if (hasLote) {
+        const seenAg = new Set();
+        const seenCat = new Set();
         const loteValido = options.lote.filter((p) => {
-          const nome = String(p.procedimentoNome || p.nomeProcedimento || p.nome || '').trim();
+          const nome = String(p?.procedimentoNome || p?.nomeProcedimento || p?.nome || '').trim();
           const isPlaceholder = !nome || /^Procedimento\s*\d*$/i.test(nome);
-          const cid = p.catalogoProcedimentoSaudeId || p.catalogoId;
-          return Boolean((cid && String(cid).trim()) || (!isPlaceholder && nome));
+          const cid = p?.catalogoProcedimentoSaudeId || p?.catalogoId;
+          const cidKey = cid != null && String(cid).trim() !== '' ? String(cid).trim() : null;
+          const agKey = p?.agendaId != null && String(p.agendaId).trim() !== '' ? String(p.agendaId).trim() : null;
+          if (!cidKey && (isPlaceholder || !nome)) return false;
+          if (agKey && seenAg.has(agKey)) return false;
+          if (cidKey && seenCat.has(cidKey)) return false;
+          if (agKey) seenAg.add(agKey);
+          if (cidKey) seenCat.add(cidKey);
+          return true;
         });
         const loteNormalizado = criarLoteProcedimentosSessao(loteValido);
         setProcedimentosLote(loteNormalizado);
@@ -2304,8 +2418,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
       }
       // Limpa IDs de procedimentos da sessão anterior para evitar duplicações no prontuário
       setLoteProcedimentosFeitosIds([]);
-      journeyState.setNomeProcedimento('');
-      journeyState.setNomeProcedimentoCatalogoId(null);
       journeyState.setObservacoesExecucao('');
       clearTermosJornadaState(journeyState);
       limparResolucoesTermos();
@@ -2484,8 +2596,9 @@ function AppRefactoredInner({ onCanalAvisos }) {
         pacienteId: patient.id,
         agendaIds,
         agendaClicadaId: options.agendaId ?? null,
-        catalogoProcedimentoSaudeId: options.agendaId ? null : catalogo,
-        nomeLivre: options.agendaId || catalogo ? null : (String(options.procedimentoNome || '').trim() || null),
+        catalogoProcedimentoSaudeId: catalogo ?? null,
+        planejamentoItemId: options.planejamentoItemId ?? options.lote?.[0]?.planejamentoItemId ?? null,
+        nomeLivre: catalogo ? null : (String(options.procedimentoNome || '').trim() || null),
         tipoProcedimentoCodigo: wantsRetorno ? 'retorno' : null,
         procedimentoFeitoOrigemId: options.procedimentoFeitoOrigemId ?? null,
         modulo,
@@ -2496,13 +2609,39 @@ function AppRefactoredInner({ onCanalAvisos }) {
     } finally {
       abrindoConsultaRef.current = false;
     }
-    const { loteDaAgenda, ...resto } = options;
+    const { loteDaAgenda, lote: loteOriginal, ...restoSemLote } = options;
+    let loteAplicado = null;
     if (Array.isArray(loteDaAgenda)) {
-      setProcedimentosLote(loteDaAgenda);
-      journeyState.setProcedimentosSessao(loteDaAgenda);
+      const seenAg = new Set();
+      const seenCat = new Set();
+      loteAplicado = criarLoteProcedimentosSessao(
+        loteDaAgenda.filter((p) => {
+          const agKey = p?.agendaId != null && String(p.agendaId).trim() !== '' ? String(p.agendaId).trim() : null;
+          const cid = p?.catalogoProcedimentoSaudeId || p?.catalogoId;
+          const cidKey = cid != null && String(cid).trim() !== '' ? String(cid).trim() : null;
+          if (agKey && seenAg.has(agKey)) return false;
+          if (cidKey && seenCat.has(cidKey)) return false;
+          if (agKey) seenAg.add(agKey);
+          if (cidKey) seenCat.add(cidKey);
+          return true;
+        }),
+      );
+      setProcedimentosLote(loteAplicado);
+      journeyState.setProcedimentosSessao(loteAplicado);
       journeyState.setActiveProcedureIndex(0);
     }
-    entrarNaConsulta(patient, { ...resto, consultaDoServidor: dto });
+    const opcoesEntrar = Array.isArray(loteDaAgenda)
+      ? {
+          ...restoSemLote,
+          ...(loteAplicado && loteAplicado.length > 0 ? { lote: loteAplicado } : {}),
+          consultaDoServidor: dto,
+        }
+      : {
+          ...restoSemLote,
+          ...(loteOriginal !== undefined ? { lote: loteOriginal } : {}),
+          consultaDoServidor: dto,
+        };
+    entrarNaConsulta(patient, opcoesEntrar);
     const anterior = dto.consultaAnteriorFechada;
     if (anterior) {
       toast.info(
@@ -3491,7 +3630,9 @@ function AppRefactoredInner({ onCanalAvisos }) {
       }
 
       // Garante que a sessão e lote iniciais carreguem o item do planejamento vinculado com fábrica e corHex canônico
+      const itemIdServidor = dto?.itens?.[0]?.id != null ? String(dto.itens[0].id) : null;
       const itemInicial = criarItemProcedimentoSessao({
+        ...(itemIdServidor ? { itemId: itemIdServidor } : {}),
         agendaId,
         procedimentoNome: nome,
         nomeProcedimento: nome,
@@ -3502,6 +3643,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
       }, 0);
       journeyState.setProcedimentosSessao([itemInicial]);
       setProcedimentosLote([itemInicial]);
+      journeyState.setActiveProcedureIndex(0);
 
       if (isRetorno) {
         journeyState.setTipoAtendimento('retorno');
@@ -3710,8 +3852,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
       });
     };
   }, [emConsultaNaTela, finalizarAtendimentoNavegacao, pacienteAtual?.cpf, selectedPatientCpf]);
-
-  const UUID_REGEX_PROC = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   /**
    * Cria PF: com agendaId válido → POST /iniciar (grava agenda_id + promoção);
@@ -5205,9 +5345,11 @@ function AppRefactoredInner({ onCanalAvisos }) {
                           setProcedimentosSessao={journeyState.setProcedimentosSessao}
                           onValidarTermosCatalogo={validarTermosDoCatalogo}
                           execucaoBloqueadaPorTermos={execucaoBloqueadaPorTermos}
+                          termosValidando={termosValidando}
                           titulosTermosFaltantes={titulosFaltantes(termosExecucaoBloqueio.resolucao)}
                           resolucao={termosExecucaoBloqueio.resolucao}
                           consentimentosAguardandoExecucao={consentimentosAguardandoExecucao(termosExecucaoBloqueio.resolucao)}
+                          onIrParaTermosGate={handleIrParaTermosGate}
                           observacoesExecucao={journeyState.observacoesExecucao}
                           setObservacoesExecucao={journeyState.setObservacoesExecucao}
                           procedureCapturedPhotos={cameraState.procedureCapturedPhotos}
@@ -5722,12 +5864,12 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     fotosAvaliacao={fotosAvaliacaoParaProcedimento}
                     onProcedureFotoCategoriaSync={cameraState.setProcedureFotoCategoria}
                     onProcedureAnnotatePhoto={openProcedurePhotoAnnotation}
-                          urlArquivoReserva={urlArquivoReservaDaFoto}
+                    urlArquivoReserva={urlArquivoReservaDaFoto}
                     mapaState={mapaAplicacaoState}
                     roleUserId={roleUserId}
                     procedimentoFeitoId={loteProcedimentosFeitosIds[0]}
                     planejamentoItemId={resolvePlanejamentoItemId(
-                        journeyState.nomeProcedimentoCatalogoId,
+                      journeyState.nomeProcedimentoCatalogoId,
                     )}
                     planejamentoId={journeyState.journeyPlanejamentoCtx?.planejamentoId ?? null}
                     procedimentosComPontos={
@@ -5739,16 +5881,11 @@ function AppRefactoredInner({ onCanalAvisos }) {
                     onPrepareMapaCapture={handlePrepareMapaAplicacaoCapture}
                     onValidarTermosCatalogo={validarTermosDoCatalogo}
                     execucaoBloqueadaPorTermos={execucaoBloqueadaPorTermos}
+                    termosValidando={termosValidando}
                     titulosTermosFaltantes={titulosFaltantes(termosExecucaoBloqueio.resolucao)}
                     resolucao={termosExecucaoBloqueio.resolucao}
                     consentimentosAguardandoExecucao={consentimentosAguardandoExecucao(termosExecucaoBloqueio.resolucao)}
-                    onIrParaTermosGate={(focoId) =>
-                      irParaTermosFaltantes({
-                        termoId: typeof focoId === 'string' ? focoId : idsFilaExigida(termosExecucaoBloqueio.resolucao)[0],
-                        termoIds: idsFilaExigida(termosExecucaoBloqueio.resolucao),
-                        nomeProcedimento: journeyState.nomeProcedimento,
-                      })
-                    }
+                    onIrParaTermosGate={handleIrParaTermosGate}
                     onEnsureProcedimento={async () => {
                       const cat = journeyState.nomeProcedimentoCatalogoId;
                       const ok = await garantirTermosAntesDeIniciar(

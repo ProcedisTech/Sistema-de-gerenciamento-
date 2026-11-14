@@ -340,25 +340,29 @@ export function AgendaFormModal({ agenda }) {
       const pItemId = proc?.planejamentoItemId ? String(proc.planejamentoItemId).trim() : null;
 
       setProcedimentosSelecionados((current) => {
-        const existe = current.find((p) => p.id === procId);
+        const existeIndex = current.findIndex((p) => p.id === procId);
+        const existe = existeIndex >= 0;
         const proximos = existe
           ? current.filter((p) => p.id !== procId)
           : [
-              ...current,
-              {
-                id: procId,
-                nome: proc.nome,
-                tipoCodigo: proc.tipoCodigo,
-                duracaoMin: proc.duracaoMin,
-                duracaoSelecionada: proc.duracaoMin,
-                planejamentoItemId: pItemId,
-                isPlano: Boolean(pItemId),
-                planoTitulo: proc.planoTitulo,
-                sessaoNumero: proc.sessaoNumero,
-              },
-            ];
+            ...current,
+            {
+              id: procId,
+              nome: proc.nome,
+              tipoCodigo: proc.tipoCodigo,
+              duracaoMin: proc.duracaoMin,
+              duracaoSelecionada: proc.duracaoMin,
+              planejamentoItemId: pItemId,
+              isPlano: Boolean(pItemId),
+              planoTitulo: proc.planoTitulo,
+              sessaoNumero: proc.sessaoNumero,
+            },
+          ];
         // Sincroniza IDs com o hook
         agenda.updateForm('catalogoProcedimentoSaudeIds', proximos.map((p) => p.id));
+        if (existeIndex >= 0) {
+          agenda.removePlanejamentoItemLoteAtIndex?.(existeIndex);
+        }
         return proximos;
       });
 
@@ -377,11 +381,17 @@ export function AgendaFormModal({ agenda }) {
   );
 
   const handleRemoverProc = useCallback(
-    (id) => {
+    (id, index) => {
       const procId = String(id).trim();
       setProcedimentosSelecionados((current) => {
-        const proximos = current.filter((p) => p.id !== procId);
+        let proximos;
+        if (typeof index === 'number' && index >= 0 && index < current.length) {
+          proximos = current.filter((_, idx) => idx !== index);
+        } else {
+          proximos = current.filter((p) => p.id !== procId);
+        }
         agenda.updateForm('catalogoProcedimentoSaudeIds', proximos.map((p) => p.id));
+        agenda.removePlanejamentoItemLoteAtIndex?.(index);
         return proximos;
       });
       agenda.setPlanoItemEscolhidoPorCatalogo?.((prev) => {
@@ -528,16 +538,16 @@ export function AgendaFormModal({ agenda }) {
   const faixaIntervaloLabel =
     rangePhase === 'complete'
       ? [
-          `${String(agenda.form.horaInicio).slice(0, 5)}–${String(horaFimReal || agenda.form.horaFimSlot).slice(0, 5)}`,
-          `${duracaoTotalMin} min`,
-          procedimentosSelecionados.length > 0
-            ? procedimentosSelecionados.map((p) => p.nome).join(', ')
-            : isModoRetorno
-              ? 'Retorno'
-              : null,
-        ]
-          .filter(Boolean)
-          .join(' · ')
+        `${String(agenda.form.horaInicio).slice(0, 5)}–${String(horaFimReal || agenda.form.horaFimSlot).slice(0, 5)}`,
+        `${duracaoTotalMin} min`,
+        procedimentosSelecionados.length > 0
+          ? procedimentosSelecionados.map((p) => p.nome).join(', ')
+          : isModoRetorno
+            ? 'Retorno'
+            : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
       : '';
 
   const confirmLabel =
@@ -674,9 +684,8 @@ export function AgendaFormModal({ agenda }) {
                   {agenda.form.retornoStatusPai === 'realizado' && agenda.form.retornoDataPlanejada
                     ? `Procedimento realizado em: ${formatDataPt(agenda.form.retornoDataPlanejada)}`
                     : agenda.form.retornoDataPlanejada
-                      ? `Procedimento marcado para: ${formatDataPt(agenda.form.retornoDataPlanejada)}${
-                          agenda.form.retornoHoraPai ? ` às ${String(agenda.form.retornoHoraPai).slice(0, 5)}` : ''
-                        }`
+                      ? `Procedimento marcado para: ${formatDataPt(agenda.form.retornoDataPlanejada)}${agenda.form.retornoHoraPai ? ` às ${String(agenda.form.retornoHoraPai).slice(0, 5)}` : ''
+                      }`
                       : 'Procedimento aguardando agendamento na agenda'}
                 </span>
               </p>
@@ -749,8 +758,8 @@ export function AgendaFormModal({ agenda }) {
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-200">
                       {isPlano
                         ? (statusPai === 'realizado'
-                            ? (visitaLabel ? `Concluído · ${visitaLabel}` : 'Concluído')
-                            : (visitaLabel ? `No Plano · ${visitaLabel}` : 'No Plano'))
+                          ? (visitaLabel ? `Concluído · ${visitaLabel}` : 'Concluído')
+                          : (visitaLabel ? `No Plano · ${visitaLabel}` : 'No Plano'))
                         : 'Histórico / Prontuário'}
                     </span>
                     <button
@@ -786,9 +795,8 @@ export function AgendaFormModal({ agenda }) {
                     {statusPai === 'realizado' && dataOrigem
                       ? `Procedimento realizado em: ${formatDataPt(dataOrigem)}`
                       : dataOrigem
-                        ? `Procedimento marcado para: ${formatDataPt(dataOrigem)}${
-                            horaOrigem ? ` às ${String(horaOrigem).slice(0, 5)}` : ''
-                          }`
+                        ? `Procedimento marcado para: ${formatDataPt(dataOrigem)}${horaOrigem ? ` às ${String(horaOrigem).slice(0, 5)}` : ''
+                        }`
                         : 'Procedimento aguardando agendamento na agenda'}
                   </span>
                 </p>
@@ -947,11 +955,10 @@ export function AgendaFormModal({ agenda }) {
           {/* Alerta de Retorno Vinculado no Reagendamento do Procedimento Pai */}
           {isReagendar && agenda.retornosVinculadosReagendar?.length > 0 ? (
             <div
-              className={`mt-3 rounded-xl border p-3 text-xs space-y-1.5 ${
-                agenda.form.data && agenda.retornosVinculadosReagendar.some((r) => agenda.form.data >= (r.dataAgendamento || r.data))
+              className={`mt-3 rounded-xl border p-3 text-xs space-y-1.5 ${agenda.form.data && agenda.retornosVinculadosReagendar.some((r) => agenda.form.data >= (r.dataAgendamento || r.data))
                   ? 'border-red-300 bg-red-50 text-red-950'
                   : 'border-amber-300 bg-amber-50 text-amber-950'
-              }`}
+                }`}
             >
               <div className="flex items-center gap-1.5 font-bold">
                 <AlertTriangle className="h-4 w-4 shrink-0 text-amber-700" />
@@ -977,14 +984,12 @@ export function AgendaFormModal({ agenda }) {
         {isDesktop && (
           <div className="min-h-0 flex-1 overflow-hidden">
             <div
-              className={`grid h-full min-h-0 grid-rows-1 ${
-                rangeCompleteDesktop ? 'grid-cols-1' : 'grid-cols-[1.9fr_1fr]'
-              }`}
+              className={`grid h-full min-h-0 grid-rows-1 ${rangeCompleteDesktop ? 'grid-cols-1' : 'grid-cols-[1.9fr_1fr]'
+                }`}
             >
               <div
-                className={`flex h-full min-h-0 flex-col overflow-hidden px-6 py-3 ${
-                  rangeCompleteDesktop ? '' : 'border-r border-ink-100'
-                }`}
+                className={`flex h-full min-h-0 flex-col overflow-hidden px-6 py-3 ${rangeCompleteDesktop ? '' : 'border-r border-ink-100'
+                  }`}
               >
                 {rangeCompleteDesktop ? (
                   <div className="mb-2 flex shrink-0 items-center justify-between gap-2 rounded-xl border border-vivid-teal-200 bg-vivid-teal-50/80 px-3 py-2">
@@ -1074,20 +1079,18 @@ export function AgendaFormModal({ agenda }) {
             <button
               type="button"
               onClick={() => setDispSheetOpen(true)}
-              className={`flex w-full items-center justify-between gap-2 rounded-xl border px-4 py-3.5 text-left transition-colors ${FOCUS_RING} ${
-                ctaPreenchido
+              className={`flex w-full items-center justify-between gap-2 rounded-xl border px-4 py-3.5 text-left transition-colors ${FOCUS_RING} ${ctaPreenchido
                   ? 'border-vivid-teal-300 bg-vivid-teal-50'
                   : 'border-ink-200 bg-white hover:border-vivid-teal-200 hover:bg-vivid-teal-50'
-              }`}
+                }`}
             >
               <span className="flex min-w-0 items-center gap-2">
                 <Calendar
                   className={`h-4 w-4 shrink-0 ${ctaPreenchido ? 'text-vivid-teal-600' : 'text-ink-400'}`}
                 />
                 <span
-                  className={`truncate text-sm font-semibold ${
-                    ctaPreenchido ? 'text-[#0f766e]' : 'text-ink-500'
-                  }`}
+                  className={`truncate text-sm font-semibold ${ctaPreenchido ? 'text-[#0f766e]' : 'text-ink-500'
+                    }`}
                 >
                   {ctaLabel}
                 </span>

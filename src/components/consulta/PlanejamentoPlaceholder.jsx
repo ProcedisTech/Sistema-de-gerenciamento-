@@ -4,7 +4,7 @@ import React from 'react';
 export function PlanejamentoPlaceholder({ onVoltar }) {
   return (
     <div className="flex flex-col gap-4">
-      <h2 className="text-[18px] font-bold text-[#0f172a] sm:text-[20px]">Planejamento</h2>
+      <h2 className="text-[18px] font-bold text-[#0f172a] sm:text-[20px]">Plano de Tratamento</h2>
       <textarea
         rows={8}
         placeholder="Rascunho do plano de tratamento…"

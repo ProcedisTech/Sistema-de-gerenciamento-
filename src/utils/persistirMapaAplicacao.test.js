@@ -107,4 +107,57 @@ describe('persistirMapaAplicacao - Sessão Multi-Procedimentos', () => {
     expect(payload.marcacoes[2].corHex).toBe('#ec4899');
     expect(payload.marcacoes[3].corHex).toBe('#3b82f6');
   });
+
+  it('ignora linha CONSULTA no slot 0 ao validar procedimentoIndex e montar listaProcedimentoIds', async () => {
+    const catBiopsia = 'ae05fd5a-3362-46ff-9c0f-2846190ccb87';
+    const snapshot = {
+      fotosPorVista: {},
+      dirtyVistas: ['frontal'],
+      pontosPorVista: {
+        frontal: [
+          {
+            localId: 'p0',
+            procedimentoIndex: 0,
+            catalogoProcedimentoSaudeId: catBiopsia,
+            posX: 40,
+            posY: 40,
+            quantidade: 1,
+            tamanho: 1,
+          },
+        ],
+      },
+    };
+
+    const res = await persistirMapaAplicacao({
+      pacienteId: 'pac-1',
+      roleUserId: 'user-1',
+      procedimentoFeitoIds: ['pf-biopsia'],
+      catalogoProcedimentoSaudeId: catBiopsia,
+      procedimentosSessao: [
+        {
+          id: null,
+          itemId: 'srv-consulta',
+          tipoAgendaCodigo: 'CONSULTA',
+          nomeProcedimento: 'Consulta',
+          nomeSoDeTela: true,
+          catalogoProcedimentoSaudeId: null,
+        },
+        {
+          id: 'pf-biopsia',
+          itemId: 'srv-biopsia',
+          catalogoProcedimentoSaudeId: catBiopsia,
+          nomeProcedimento: 'Biópsia',
+          corHex: '#d946ef',
+        },
+      ],
+      snapshot,
+    });
+
+    expect(res.ok).toBe(true);
+    const payload = mapasApi.salvar.mock.calls[0][0];
+    expect(payload.procedimentos).toHaveLength(1);
+    expect(payload.procedimentos[0].procedimentoFeitoId).toBe('pf-biopsia');
+    expect(payload.marcacoes[0].procedimentoIndex).toBe(0);
+    expect(payload.marcacoes[0].catalogoProcedimentoSaudeId).toBe(catBiopsia);
+  });
 });
