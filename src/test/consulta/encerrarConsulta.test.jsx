@@ -157,8 +157,9 @@ describe('encerrar da consulta no servidor (Etapa 3)', () => {
     clicarBotao(/(^|sessões|assinatura)Procedimento/);
     await assentarMuito();
     expect(srv.leituras.some((l) => l.path.startsWith('/api/v1/termos/resolucao?'))).toBe(true);
-    expect(screen.getByRole('button', { name: /Ir para a aba de termos e assinar o termo de Toxina botulínica/ })).toBeTruthy();
-    clicarBotao(/^Fechar$/);
+    expect(screen.getByText(/Procedimento bloqueado até a assinatura de:/i)).toBeTruthy();
+    expect(screen.getByText(/Toxina botulínica/)).toBeTruthy();
+    clicarBotao(/Voltar ao hub/);
     await assentarMuito();
 
     await finalizarPeloHub();

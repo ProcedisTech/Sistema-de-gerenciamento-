@@ -31,6 +31,7 @@ import {
   organizacaoApi,
 } from '../../services/api';
 import { ProcedimentoSearchInput } from '../agenda/ProcedimentoSearchInput.jsx';
+import { ConfirmarExclusaoProcedimentoModal } from './mapeamento/ConfirmarExclusaoProcedimentoModal.jsx';
 import { ehLinhaConsultaSemCatalogo, ehRotuloDeTela } from '../consulta/consultaServidor.js';
 import { useProcedimentosOptions } from '../../hooks/useProcedimentosOptions';
 import { TermoVisualizacao } from '../termos/TermoVisualizacao';
@@ -2046,6 +2047,7 @@ export function Step4Procedimento({
   setProcedimentoDoCatalogo: _setProcedimentoDoCatalogo,
   onValidarTermosCatalogo,
   execucaoBloqueadaPorTermos = false,
+  termosValidando = false,
   titulosTermosFaltantes = [],
   resolucao = null,
   onIrParaTermosGate,
@@ -2093,6 +2095,7 @@ export function Step4Procedimento({
   const { fuso } = useFusoClinica();
   const acaoProcedimentoInFlightRef = React.useRef(false);
   const [acaoProcedimentoBusy, setAcaoProcedimentoBusy] = React.useState(false);
+  const [confirmRemoverProc, setConfirmRemoverProc] = React.useState(null);
 
   const [modalDecisaoPlano, setModalDecisaoPlano] = React.useState({ open: false, catalogo: null, itemPlano: null });
   const [obsaveStatus, setObsaveStatus] = React.useState(''); // '' | 'saving' | 'saved'
@@ -2286,6 +2289,7 @@ export function Step4Procedimento({
 
     acaoProcedimentoInFlightRef.current = true;
     setAcaoProcedimentoBusy(true);
+    let validarArgs = null;
     try {
       const novoItem = criarItemProcedimentoSessao(
         {
@@ -2323,16 +2327,121 @@ export function Step4Procedimento({
         const todosIds = procsReais
           .map((p) => p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
           .filter((id) => id && id !== 'undefined' && id !== 'null');
+        validarArgs = [
+          todosIds,
+          procsReais.map((p) => p.nomeProcedimento || p.nome).join(' + '),
+          {
+            abrirModal: false,
+            procedimentosSessaoOverride: novaLista,
+          },
+        ];
+      }
+    } finally {
+      acaoProcedimentoInFlightRef.current = false;
+      setAcaoProcedimentoBusy(false);
+    }
+    if (validarArgs) {
+      await onValidarTermosCatalogo(...validarArgs);
+    }
+  }, [procedimentosSessao, setProcedimentosSessao, setActiveProcedimentoIndex, setStep4Errors, onValidarTermosCatalogo, ehSlotInicialVazio]);
+
+  const matchProcSessao = React.useCallback((p, pid) => {
+    const matchCat = String(p?.catalogoProcedimentoSaudeId || p?.catalogoId || p?.nomeProcedimentoCatalogoId || '').trim() === pid;
+    const matchItem = String(p?.itemId || '').trim() === pid;
+    const matchUid = String(p?._uid || '').trim() === pid;
+    const matchId = String(p?.id || '').trim() === pid;
+    const matchNome = String(p?.nomeProcedimento || p?.procedimentoNome || p?.nome || '').trim().toLowerCase() === pid.toLowerCase();
+    return matchCat || matchItem || matchUid || matchId || matchNome;
+  }, []);
+
+  const executarRemocaoProcedimentoConfirmada = React.useCallback(async (procId) => {
+    const pid = String(procId || '').trim();
+    if (!pid) return;
+    acaoProcedimentoInFlightRef.current = true;
+    setAcaoProcedimentoBusy(true);
+    try {
+      const listaAtual = Array.isArray(procedimentosSessao) ? procedimentosSessao : [];
+      const procsReaisAntes = listaAtual.filter((p) => !ehLinhaConsultaSemCatalogo(p) && !p.nomeSoDeTela);
+      const idxAlvo = procsReaisAntes.findIndex((p) => matchProcSessao(p, pid));
+      const procAlvo = idxAlvo >= 0 ? procsReaisAntes[idxAlvo] : null;
+
+      if (mapaState && typeof mapaState.removerPontosPorProcedimento === 'function') {
+        mapaState.removerPontosPorProcedimento(procAlvo || pid, {
+          ehUnicoProcedimento: procsReaisAntes.length <= 1,
+          procedimentoIndex: idxAlvo >= 0 ? idxAlvo : null,
+        });
+      }
+
+      const novaLista = listaAtual.filter((p) => {
+        if (ehLinhaConsultaSemCatalogo(p)) return true;
+        return !matchProcSessao(p, pid);
+      });
+      const slotBase = listaAtual.find((p) => p?.itemId && !ehLinhaConsultaSemCatalogo(p)) || listaAtual[0];
+      const ehSlotAgenda = Boolean(slotBase?.agendaId || slotBase?.isAgendaRetorno);
+      const listaFinal = novaLista.length === 0 && slotBase?.itemId && !ehLinhaConsultaSemCatalogo(slotBase)
+        ? [{
+          itemId: ehSlotAgenda ? slotBase.itemId : null,
+          agendaId: slotBase.agendaId ?? null,
+          isAgendaRetorno: Boolean(slotBase.isAgendaRetorno),
+          legado: false,
+          observacoesExecucao: slotBase.observacoesExecucao ?? '',
+          orient: null,
+          catalogoProcedimentoSaudeId: null,
+          nomeProcedimentoCatalogoId: null,
+          catalogoId: null,
+          planejamentoItemId: null,
+          nomeProcedimento: '',
+          procedimentoNome: '',
+          nome: '',
+          nomeSoDeTela: true,
+        }]
+        : novaLista;
+      if (typeof setProcedimentosSessao === 'function') {
+        setProcedimentosSessao(listaFinal);
+      }
+      const primeiroRealIdx = listaFinal.findIndex((p) => p && !ehLinhaConsultaSemCatalogo(p) && !p.nomeSoDeTela);
+      if (typeof setActiveProcedimentoIndex === 'function') {
+        setActiveProcedimentoIndex(primeiroRealIdx >= 0 ? primeiroRealIdx : 0);
+      }
+      const procsReais = listaFinal.filter((p) => !ehLinhaConsultaSemCatalogo(p) && !p.nomeSoDeTela);
+      setStep4Errors((prev) => ({
+        ...prev,
+        nomeProcedimento: false,
+        catalogoId: false,
+      }));
+      if (typeof onValidarTermosCatalogo === 'function') {
+        const todosIds = procsReais
+          .map((p) => p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
+          .filter((id) => id && id !== 'undefined' && id !== 'null');
         await onValidarTermosCatalogo(todosIds, procsReais.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
           abrirModal: false,
-          procedimentosSessaoOverride: novaLista,
+          procedimentosSessaoOverride: listaFinal,
         });
       }
     } finally {
       acaoProcedimentoInFlightRef.current = false;
       setAcaoProcedimentoBusy(false);
     }
-  }, [procedimentosSessao, setProcedimentosSessao, setActiveProcedimentoIndex, setStep4Errors, onValidarTermosCatalogo, ehSlotInicialVazio]);
+  }, [procedimentosSessao, matchProcSessao, mapaState, setProcedimentosSessao, setActiveProcedimentoIndex, setStep4Errors, onValidarTermosCatalogo]);
+
+  const solicitarRemocaoProcedimento = React.useCallback(async (procId) => {
+    const pid = String(procId || '').trim();
+    if (!pid) return;
+    const procsReais = (procedimentosSessao || []).filter((p) => !ehLinhaConsultaSemCatalogo(p) && !p.nomeSoDeTela);
+    const idxAlvo = procsReais.findIndex((p) => matchProcSessao(p, pid));
+    const procAlvo = idxAlvo >= 0 ? procsReais[idxAlvo] : null;
+    if (mapaState && typeof mapaState.contarPontosPorProcedimento === 'function') {
+      const stats = mapaState.contarPontosPorProcedimento(procAlvo || pid, {
+        ehUnicoProcedimento: procsReais.length <= 1,
+        procedimentoIndex: idxAlvo >= 0 ? idxAlvo : null,
+      });
+      if ((stats?.pontosCount || 0) > 0) {
+        setConfirmRemoverProc({ procId: pid, proc: procAlvo, stats });
+        return;
+      }
+    }
+    await executarRemocaoProcedimentoConfirmada(pid);
+  }, [procedimentosSessao, matchProcSessao, mapaState, executarRemocaoProcedimentoConfirmada]);
 
   const handleToggleProcedimento = React.useCallback(async (proc) => {
     if (acaoProcedimentoInFlightRef.current) return;
@@ -2342,57 +2451,7 @@ export function Step4Procedimento({
       (p) => !ehLinhaConsultaSemCatalogo(p) && String(p.catalogoProcedimentoSaudeId || p.catalogoId || p.nomeProcedimentoCatalogoId || p.id || '').trim() === procId,
     );
     if (jaExiste) {
-      acaoProcedimentoInFlightRef.current = true;
-      setAcaoProcedimentoBusy(true);
-      try {
-        const novaLista = (procedimentosSessao || []).filter(
-          (p) => ehLinhaConsultaSemCatalogo(p) || String(p.catalogoProcedimentoSaudeId || p.catalogoId || p.nomeProcedimentoCatalogoId || p.id || '').trim() !== procId,
-        );
-        const slotBase = (procedimentosSessao || []).find((p) => p?.itemId && !ehLinhaConsultaSemCatalogo(p)) || (procedimentosSessao || [])[0];
-        const listaFinal = novaLista.length === 0 && slotBase?.itemId && !ehLinhaConsultaSemCatalogo(slotBase)
-          ? [{
-            itemId: slotBase.itemId,
-            agendaId: slotBase.agendaId ?? null,
-            isAgendaRetorno: Boolean(slotBase.isAgendaRetorno),
-            legado: false,
-            observacoesExecucao: slotBase.observacoesExecucao ?? '',
-            orient: null,
-            catalogoProcedimentoSaudeId: null,
-            nomeProcedimentoCatalogoId: null,
-            catalogoId: null,
-            planejamentoItemId: null,
-            nomeProcedimento: '',
-            procedimentoNome: '',
-            nome: '',
-            nomeSoDeTela: true,
-          }]
-          : novaLista;
-        if (typeof setProcedimentosSessao === 'function') {
-          setProcedimentosSessao(listaFinal);
-        }
-        const primeiroRealIdx = listaFinal.findIndex((p) => p && !ehLinhaConsultaSemCatalogo(p) && !p.nomeSoDeTela);
-        if (typeof setActiveProcedimentoIndex === 'function') {
-          setActiveProcedimentoIndex(primeiroRealIdx >= 0 ? primeiroRealIdx : 0);
-        }
-        const procsReais = listaFinal.filter((p) => !ehLinhaConsultaSemCatalogo(p) && !p.nomeSoDeTela);
-        setStep4Errors((prev) => ({
-          ...prev,
-          nomeProcedimento: false,
-          catalogoId: false,
-        }));
-        if (typeof onValidarTermosCatalogo === 'function') {
-          const todosIds = procsReais
-            .map((p) => p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
-            .filter((id) => id && id !== 'undefined' && id !== 'null');
-          await onValidarTermosCatalogo(todosIds, procsReais.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
-            abrirModal: false,
-            procedimentosSessaoOverride: listaFinal,
-          });
-        }
-      } finally {
-        acaoProcedimentoInFlightRef.current = false;
-        setAcaoProcedimentoBusy(false);
-      }
+      await solicitarRemocaoProcedimento(procId);
       return;
     }
 
@@ -2411,6 +2470,7 @@ export function Step4Procedimento({
 
     acaoProcedimentoInFlightRef.current = true;
     setAcaoProcedimentoBusy(true);
+    let validarArgs = null;
     try {
       // Caso não esteja no plano, adiciona como avulso
       const novoItem = criarItemProcedimentoSessao(
@@ -2452,71 +2512,30 @@ export function Step4Procedimento({
         const todosIds = procsReais
           .map((p) => p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
           .filter((id) => id && id !== 'undefined' && id !== 'null');
-        await onValidarTermosCatalogo(todosIds, procsReais.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
+        validarArgs = [todosIds, procsReais.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
           abrirModal: false,
           procedimentosSessaoOverride: novaLista,
-        });
+        }];
       }
     } finally {
       acaoProcedimentoInFlightRef.current = false;
       setAcaoProcedimentoBusy(false);
     }
-  }, [procedimentosSessao, itensPlanoPendentes, setProcedimentosSessao, setActiveProcedimentoIndex, setStep4Errors, onValidarTermosCatalogo, setModalDecisaoPlano, ehSlotInicialVazio]);
+    if (validarArgs && typeof onValidarTermosCatalogo === 'function') {
+      await onValidarTermosCatalogo(...validarArgs);
+    }
+  }, [procedimentosSessao, itensPlanoPendentes, solicitarRemocaoProcedimento, setProcedimentosSessao, setActiveProcedimentoIndex, setStep4Errors, onValidarTermosCatalogo, setModalDecisaoPlano, ehSlotInicialVazio]);
 
   const handleRemoverProcedimento = React.useCallback(async (procId) => {
-    const pid = String(procId || '').trim();
-    if (!pid) return;
-    const novaLista = (procedimentosSessao || []).filter((p) => {
-      if (ehLinhaConsultaSemCatalogo(p)) return true;
-      const matchCat = String(p.catalogoProcedimentoSaudeId || p.catalogoId || p.nomeProcedimentoCatalogoId || '').trim() === pid;
-      const matchItem = String(p.itemId || '').trim() === pid;
-      const matchUid = String(p._uid || '').trim() === pid;
-      const matchId = String(p.id || '').trim() === pid;
-      const matchNome = String(p.nomeProcedimento || p.nome || '').trim().toLowerCase() === pid.toLowerCase();
-      return !(matchCat || matchItem || matchUid || matchId || matchNome);
-    });
-    const slotBase = (procedimentosSessao || []).find((p) => p?.itemId && !ehLinhaConsultaSemCatalogo(p)) || (procedimentosSessao || [])[0];
-    const listaFinal = novaLista.length === 0 && slotBase?.itemId && !ehLinhaConsultaSemCatalogo(slotBase)
-      ? [{
-        itemId: slotBase.itemId,
-        agendaId: slotBase.agendaId ?? null,
-        isAgendaRetorno: Boolean(slotBase.isAgendaRetorno),
-        legado: false,
-        observacoesExecucao: slotBase.observacoesExecucao ?? '',
-        orient: null,
-        catalogoProcedimentoSaudeId: null,
-        nomeProcedimentoCatalogoId: null,
-        catalogoId: null,
-        planejamentoItemId: null,
-        nomeProcedimento: '',
-        procedimentoNome: '',
-        nome: '',
-        nomeSoDeTela: true,
-      }]
-      : novaLista;
-    if (typeof setProcedimentosSessao === 'function') {
-      setProcedimentosSessao(listaFinal);
-    }
-    const primeiroRealIdx = listaFinal.findIndex((p) => p && !ehLinhaConsultaSemCatalogo(p) && !p.nomeSoDeTela);
-    if (typeof setActiveProcedimentoIndex === 'function') {
-      setActiveProcedimentoIndex(primeiroRealIdx >= 0 ? primeiroRealIdx : 0);
-    }
-    const procsReais = listaFinal.filter((p) => !ehLinhaConsultaSemCatalogo(p) && !p.nomeSoDeTela);
-    if (typeof onValidarTermosCatalogo === 'function') {
-      const todosIds = procsReais
-        .map((p) => p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
-        .filter((id) => id && id !== 'undefined' && id !== 'null');
-      await onValidarTermosCatalogo(todosIds, procsReais.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
-        abrirModal: false,
-        procedimentosSessaoOverride: listaFinal,
-      });
-    }
-  }, [procedimentosSessao, setProcedimentosSessao, setActiveProcedimentoIndex, onValidarTermosCatalogo]);
+    if (acaoProcedimentoInFlightRef.current) return;
+    await solicitarRemocaoProcedimento(procId);
+  }, [solicitarRemocaoProcedimento]);
 
   const handleConfirmarDecisaoAvulso = React.useCallback(async () => {
     if (acaoProcedimentoInFlightRef.current || !modalDecisaoPlano.catalogo) return;
     acaoProcedimentoInFlightRef.current = true;
     setAcaoProcedimentoBusy(true);
+    let validarArgs = null;
     try {
       const proc = modalDecisaoPlano.catalogo;
       const procId = String(proc.id || '').trim();
@@ -2563,15 +2582,18 @@ export function Step4Procedimento({
         const todosIds = procsReais
           .map((p) => p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
           .filter((id) => id && id !== 'undefined' && id !== 'null');
-        await onValidarTermosCatalogo(todosIds, procsReais.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
+        validarArgs = [todosIds, procsReais.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
           abrirModal: false,
           procedimentosSessaoOverride: novaLista,
-        });
+        }];
       }
       setModalDecisaoPlano({ open: false, catalogo: null, itemPlano: null });
     } finally {
       acaoProcedimentoInFlightRef.current = false;
       setAcaoProcedimentoBusy(false);
+    }
+    if (validarArgs && typeof onValidarTermosCatalogo === 'function') {
+      await onValidarTermosCatalogo(...validarArgs);
     }
   }, [modalDecisaoPlano, procedimentosSessao, setProcedimentosSessao, setActiveProcedimentoIndex, setStep4Errors, onValidarTermosCatalogo, ehSlotInicialVazio]);
 
@@ -3102,9 +3124,9 @@ export function Step4Procedimento({
         setLegendas={setLegendas}
         onUpload={handleLaneUploadClick}
         onRemove={onProcedureRemovePhoto}
-        onAnnotate={onProcedureAnnotatePhoto}
+        onAnnotate={(execucaoBloqueadaPorTermos || termosValidando || acaoProcedimentoBusy) ? undefined : onProcedureAnnotatePhoto}
         urlArquivoReserva={urlArquivoReserva}
-        showUpload={!execucaoBloqueadaPorTermos}
+        showUpload={!execucaoBloqueadaPorTermos && !termosValidando}
         emptyHint={`Nenhuma foto '${GALERIA_CATEGORIA_LABELS.antes}' adicionada.`}
       />
 
@@ -3116,9 +3138,9 @@ export function Step4Procedimento({
         setLegendas={setLegendas}
         onUpload={handleLaneUploadClick}
         onRemove={onProcedureRemovePhoto}
-        onAnnotate={onProcedureAnnotatePhoto}
+        onAnnotate={(execucaoBloqueadaPorTermos || termosValidando || acaoProcedimentoBusy) ? undefined : onProcedureAnnotatePhoto}
         urlArquivoReserva={urlArquivoReserva}
-        showUpload={!execucaoBloqueadaPorTermos}
+        showUpload={!execucaoBloqueadaPorTermos && !termosValidando}
         emptyHint={`Nenhuma foto '${GALERIA_CATEGORIA_LABELS.depois}' adicionada.`}
       />
 
@@ -3130,7 +3152,7 @@ export function Step4Procedimento({
           legendas={legendas}
           setLegendas={setLegendas}
           onRemove={onProcedureRemovePhoto}
-          onAnnotate={onProcedureAnnotatePhoto}
+          onAnnotate={(execucaoBloqueadaPorTermos || termosValidando || acaoProcedimentoBusy) ? undefined : onProcedureAnnotatePhoto}
           urlArquivoReserva={urlArquivoReserva}
           showUpload={false}
           emptyHint="Sem fotos mapa (Legado)"
@@ -3146,9 +3168,9 @@ export function Step4Procedimento({
           setLegendas={setLegendas}
           onUpload={handleLaneUploadClick}
           onRemove={onProcedureRemovePhoto}
-          onAnnotate={onProcedureAnnotatePhoto}
+          onAnnotate={(execucaoBloqueadaPorTermos || termosValidando || acaoProcedimentoBusy) ? undefined : onProcedureAnnotatePhoto}
           urlArquivoReserva={urlArquivoReserva}
-          showUpload={!execucaoBloqueadaPorTermos}
+          showUpload={!execucaoBloqueadaPorTermos && !termosValidando}
           emptyHint="Nenhuma foto diversa adicionada."
         />
       )}
@@ -3174,6 +3196,11 @@ export function Step4Procedimento({
             onCaptureConsumed={onMapaCaptureConsumed}
             onPrepareCapture={onPrepareMapaCapture}
             onEnsureProcedimento={onEnsureProcedimento}
+            execucaoBloqueadaPorTermos={execucaoBloqueadaPorTermos}
+            termosValidando={termosValidando}
+            titulosTermosFaltantes={titulosTermosFaltantes}
+            resolucao={resolucao}
+            onIrParaTermosGate={onIrParaTermosGate}
             disabled={
               procedimentosSelecionados.length === 0 ||
               execucaoBloqueadaPorTermos
@@ -3191,7 +3218,7 @@ export function Step4Procedimento({
         <div className="mt-4 flex justify-end">
           <button
             type="button"
-            disabled={execucaoBloqueadaPorTermos}
+            disabled={execucaoBloqueadaPorTermos || termosValidando}
             onClick={() => handleLaneUploadClick(null, GALERIA_CATEGORIA.OUTRO, false)}
             className="flex items-center gap-2 rounded-lg px-4 py-2 text-[12px] font-semibold text-[#64748b] hover:bg-[#f1f5f9] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -3338,6 +3365,29 @@ export function Step4Procedimento({
         </div>,
         document.body,
       ) : null}
+
+      <ConfirmarExclusaoProcedimentoModal
+        open={Boolean(confirmRemoverProc)}
+        procedimentoNome={
+          confirmRemoverProc?.proc?.nomeProcedimento ||
+          confirmRemoverProc?.proc?.procedimentoNome ||
+          confirmRemoverProc?.proc?.nome ||
+          'Procedimento'
+        }
+        pontosCount={confirmRemoverProc?.stats?.pontosCount || 0}
+        doseTotal={confirmRemoverProc?.stats?.doseTotal || 0}
+        unidadeMedida={confirmRemoverProc?.proc?.unidadeMedida || ''}
+        vistasAfetadas={confirmRemoverProc?.stats?.vistasAfetadas || []}
+        busy={acaoProcedimentoBusy}
+        onCancel={() => setConfirmRemoverProc(null)}
+        onConfirm={async () => {
+          const alvoId = confirmRemoverProc?.procId;
+          setConfirmRemoverProc(null);
+          if (alvoId) {
+            await executarRemocaoProcedimentoConfirmada(alvoId);
+          }
+        }}
+      />
     </div>
   );
 }

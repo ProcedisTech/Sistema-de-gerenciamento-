@@ -243,9 +243,13 @@ export function mapearItensDaSessao(sessao, itensServidor) {
   const livres = itens.filter((i) => !usados.has(i.id) && !idOuNulo(i.agendaId));
   return porCatalogo.map((id, idx) => {
     if (id) return id;
+    const linha = linhas[idx];
     // F3: linha local sem itemId casa por posição com um item livre do servidor mesmo com agendaId local (o item
     // do servidor pode ter nascido sem agenda): sem isso o item vira aba fantasma ao lado da linha local.
-    if (idOuNulo(linhas[idx]?.itemId)) return null;
+    if (idOuNulo(linha?.itemId)) return null;
+    const mem = camposDaLinhaSessao(linha);
+    // Slot vazio criado ao remover o último procedimento avulso não deve recapturar o item livre em remoção.
+    if (linha?.nomeSoDeTela && !idOuNulo(linha?.agendaId) && !mem.cat && !mem.nome) return null;
     const item = livres.shift();
     return item ? item.id : null;
   });

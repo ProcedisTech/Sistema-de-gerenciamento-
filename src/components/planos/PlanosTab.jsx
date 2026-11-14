@@ -2298,10 +2298,16 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
 
   // Handler de Agendamento em Lote (+0, +1, +7, +15, +30 dias ou livre)
   const handleBatchAgendar = useCallback(
-    async (diasOffset = 0) => {
+    async (diasOffset = null) => {
       if (isPacienteInativo) return;
       const planoAtivo = displayPlanos[0];
       if (!planoAtivo || selecionados.size === 0) return;
+
+      const fnAgendar = onAgendarItem;
+      if (typeof fnAgendar !== 'function') {
+        toast.error('Agendamento de plano não disponível nesta visualização.');
+        return;
+      }
 
       setPopoverAgendarAberto(false);
 
@@ -2317,10 +2323,12 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
       const temItensDraftSemId = itensParaAgendar.some((it) => !isRealUuid(it.id));
       if (temItensDraftSemId && pid) {
         try {
-          await handleSalvarPlano(pid);
-          const detalhe = await planejamentosApi.detalhe(pid);
-          applyDetalhe(pid, detalhe, catalogoOptions);
-          baseItens = detalhe.itens || [];
+          const detalheSalvoAntes = await handleSalvarPlano(pid);
+          if (!detalheSalvoAntes) {
+            setActionError('Salve o plano antes de agendar os procedimentos.');
+            return;
+          }
+          baseItens = detalheSalvoAntes.itens || [];
           itensParaAgendar = baseItens.filter((it) =>
             selecionados.has(String(it.id || it.tempId)),
           );
@@ -2331,33 +2339,7 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
         }
       }
 
-      // Se foi passado offset numérico (+0, +1, +7, +15, +30), agenda diretamente via delta-PUT
-      if (diasOffset !== null) {
-        const dataIso = somarDias(hojeDaClinica(fuso), diasOffset);
-        try {
-          for (const item of itensParaAgendar) {
-            updateItem(
-              planoAtivo.id,
-              itemReactKey(item),
-              { dataPlanejada: dataIso },
-              catalogoOptions,
-            );
-          }
-          await handleSalvarPlano(planoAtivo.id);
-          toast.success(`${itensParaAgendar.length} procedimentos agendados para ${formatarDataCalendario(dataIso, 'curta')}!`);
-          limparSelecao();
-        } catch (e) {
-          setActionError(getApiErrorDetail(e) || e?.message || 'Erro ao agendar em lote.');
-        }
-        return;
-      }
-
-      // Se diasOffset === null: caminho "Escolher na Agenda..." (abre modal de agendamento)
-      const fnAgendar = onAgendarItem;
-      if (typeof fnAgendar !== 'function') {
-        toast.error('Agendamento de plano não disponível nesta visualização.');
-        return;
-      }
+      const dataIso = diasOffset != null ? somarDias(hojeDaClinica(fuso), diasOffset) : null;
 
       const itensComData = itensParaAgendar.map((it) => {
         const resolvedId = it.planejamentoItemId || it.id;
@@ -2368,8 +2350,8 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
           planejamentoItemId: resolvedId,
           catalogoProcedimentoSaudeId: catId,
           catalogoNome: it.catalogoNome || it.nome,
-          dataPlanejada: it.dataPlanejada || null,
-          data: it.data || null,
+          dataPlanejada: dataIso || it.dataPlanejada || null,
+          data: dataIso || it.data || null,
           planoTitulo: planoAtivo.titulo || planoAtivo.nome || 'Plano de Tratamento',
         };
       });
@@ -2379,22 +2361,61 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
           if (savedAgenda?.dataAgendamento) {
             const dataConfirmada = savedAgenda.dataAgendamento;
             const itensAgendadosOk = Array.isArray(savedAgenda.resultadosOk)
-              ? new Set(savedAgenda.resultadosOk.map((r) => String(r.planejamentoItemId || r.id)).filter(Boolean))
+              ? new Set(
+                  savedAgenda.resultadosOk
+                    .map((r) => String(r.planejamentoItemId || '').trim())
+                    .filter(Boolean),
+                )
               : null;
             const currentBase = isConsulta ? (getDraft(pid)?.itens ?? planoAtivo.itens ?? []) : (planoAtivo.itens ?? []);
-            for (const it of currentBase) {
-              const isSelecionado = selecionados.has(String(it.id || it.tempId));
-              const wasAgendado = itensAgendadosOk ? (it.id && itensAgendadosOk.has(String(it.id))) : isSelecionado;
-              if (wasAgendado) {
-                updateItem(
-                  pid,
-                  itemReactKey(it),
-                  { dataPlanejada: dataConfirmada },
-                  catalogoOptions,
-                );
+            const temRascunhoConsulta = Boolean(isConsulta && getDraft(pid));
+            let detalheSincronizado = null;
+            if (temRascunhoConsulta) {
+              for (const it of currentBase) {
+                const isSelecionado = selecionados.has(String(it.id || it.tempId));
+                const wasAgendado =
+                  itensAgendadosOk && itensAgendadosOk.size > 0
+                    ? Boolean(it.id && itensAgendadosOk.has(String(it.id)))
+                    : isSelecionado;
+                if (wasAgendado) {
+                  updateItem(
+                    pid,
+                    itemReactKey(it),
+                    { dataPlanejada: dataConfirmada },
+                    catalogoOptions,
+                  );
+                }
               }
+              detalheSincronizado = await handleSalvarPlano(pid);
+            } else {
+              const payloadItens = currentBase.map((it) => {
+                const isSelecionado = selecionados.has(String(it.id || it.tempId));
+                const wasAgendado =
+                  itensAgendadosOk && itensAgendadosOk.size > 0
+                    ? Boolean(it.id && itensAgendadosOk.has(String(it.id)))
+                    : isSelecionado;
+                const catId = it.catalogoProcedimentoSaudeId || it.catalogoId || it.catalogoProcedimentoSaude?.id;
+                return {
+                  id: it.id && isRealUuid(it.id) ? it.id : null,
+                  catalogoProcedimentoSaudeId: catId,
+                  valorOrcado: it.valorOrcado != null ? Number(it.valorOrcado) : 0,
+                  dataPlanejada: wasAgendado ? dataConfirmada : (it.dataPlanejada || null),
+                };
+              });
+
+              const obsAtual = planoAtivo.observacao ?? '';
+              const bodyOverride = {
+                observacao: String(obsAtual).trim(),
+                itens: payloadItens,
+                removidos: [],
+              };
+              detalheSincronizado = await handleSalvarPlano(pid, bodyOverride);
             }
-            await handleSalvarPlano(pid);
+            if (!detalheSincronizado) {
+              await refresh();
+              limparSelecao();
+              return;
+            }
           } else {
             await refresh();
           }
@@ -2408,7 +2429,7 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
         }
       });
     },
-    [applyDetalhe, catalogoOptions, displayPlanos, fuso, getDraft, handleSalvarPlano, isConsulta, isPacienteInativo, limparSelecao, onAgendarItem, refresh, selecionados, toast, updateItem],
+    [catalogoOptions, displayPlanos, fuso, getDraft, handleSalvarPlano, isConsulta, isPacienteInativo, limparSelecao, onAgendarItem, refresh, selecionados, toast, updateItem],
   );
 
   // Handler de Agendamento em Lote escolhendo dia e horário reais na Agenda
@@ -3422,7 +3443,7 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
                         onClick={() => handleBatchAgendar(0)}
                         className="flex flex-col items-start px-2.5 py-1.5 rounded-lg border border-slate-100 bg-slate-50/70 hover:bg-teal-50 hover:border-teal-200 hover:text-teal-800 transition-all text-left"
                       >
-                        <span className="font-bold text-slate-800 text-xs">Hoje (+0 dias)</span>
+                        <span className="font-bold text-slate-800 text-xs">Hoje</span>
                         <span className="text-[10px] text-slate-500">agora</span>
                       </button>
 
@@ -3431,7 +3452,7 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
                         onClick={() => handleBatchAgendar(1)}
                         className="flex flex-col items-start px-2.5 py-1.5 rounded-lg border border-slate-100 bg-slate-50/70 hover:bg-teal-50 hover:border-teal-200 hover:text-teal-800 transition-all text-left"
                       >
-                        <span className="font-bold text-slate-800 text-xs">Amanhã (+1 dia)</span>
+                        <span className="font-bold text-slate-800 text-xs">Amanhã</span>
                         <span className="text-[10px] text-slate-500">+1 dia</span>
                       </button>
 
@@ -3440,7 +3461,7 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
                         onClick={() => handleBatchAgendar(7)}
                         className="flex flex-col items-start px-2.5 py-1.5 rounded-lg border border-slate-100 bg-slate-50/70 hover:bg-teal-50 hover:border-teal-200 hover:text-teal-800 transition-all text-left"
                       >
-                        <span className="font-bold text-slate-800 text-xs">Em 1 semana (+7 dias)</span>
+                        <span className="font-bold text-slate-800 text-xs">Em 7 dias</span>
                         <span className="text-[10px] text-slate-500">próx. semana</span>
                       </button>
 
@@ -3449,7 +3470,7 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
                         onClick={() => handleBatchAgendar(15)}
                         className="flex flex-col items-start px-2.5 py-1.5 rounded-lg border border-slate-100 bg-slate-50/70 hover:bg-teal-50 hover:border-teal-200 hover:text-teal-800 transition-all text-left"
                       >
-                        <span className="font-bold text-slate-800 text-xs">Em 15 dias (+15 dias)</span>
+                        <span className="font-bold text-slate-800 text-xs">Em 15 dias</span>
                         <span className="text-[10px] text-slate-500">+15 dias</span>
                       </button>
                     </div>
@@ -3460,7 +3481,7 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
                       className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg border border-slate-100 bg-slate-50/70 hover:bg-teal-50 hover:border-teal-200 hover:text-teal-800 transition-all text-left"
                     >
                       <div className="flex flex-col">
-                        <span className="font-bold text-slate-800 text-xs">Em 1 mês (+30 dias)</span>
+                        <span className="font-bold text-slate-800 text-xs">Em 30 dias</span>
                         <span className="text-[10px] text-slate-500">retorno dos selecionados</span>
                       </div>
                       <span className="text-[10px] font-bold text-teal-600">Controle ›</span>

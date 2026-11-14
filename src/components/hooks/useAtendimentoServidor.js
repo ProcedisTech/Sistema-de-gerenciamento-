@@ -304,6 +304,8 @@ export function useAtendimentoServidor({
   // B4: campos que o servidor recusou com 404/410 e cuja releitura está em voo: o texto local fica protegido da mescla
   // até a marca "não salvo" entrar (a marca só entra DEPOIS da releitura).
   const emReleituraRef = useRef(new Set());
+  /** Índices de `itens.criar` já vistos nesta consulta: evita descartar `item:novo` restaurado offline antes da sessão hidratar. */
+  const indicesCriarVistosRef = useRef(new Set());
   /** F4: valores e setter dos textos da avaliação, sempre os da última renderização (`null` sem a opção). */
   const avaliacaoRef = useRef(avaliacao);
   avaliacaoRef.current = avaliacao;
@@ -382,6 +384,7 @@ export function useAtendimentoServidor({
     sobrescreveuRef.current.clear();
     naoSalvoRef.current.clear();
     emReleituraRef.current.clear();
+    indicesCriarVistosRef.current.clear();
     aplicarTermos([]);
     definirAtual(null);
   }, [aplicarTermos, cancelarEsperaOutraAba, cancelarRetentativa, definirAtual, pararFila]);
@@ -1176,6 +1179,7 @@ export function useAtendimentoServidor({
     const at = atualRef.current;
     if (!at || hidratadoRef.current === at.id) return;
     if (pacienteId != null && String(at.pacienteId) !== String(pacienteId)) return;
+    indicesCriarVistosRef.current.clear();
     hidratar(at);
     hidratadoRef.current = at.id;
     // O item novo que esperava a pessoa entrar na consulta pode sair agora.
@@ -1187,7 +1191,11 @@ export function useAtendimentoServidor({
   useEffect(() => {
     const at = atualRef.current;
     const fila = filaRef.current;
-    if (!emConsulta || !at || !fila || hidratadoRef.current !== at.id || suspensoRef.current) return;
+    if (!emConsulta || !at || !fila || hidratadoRef.current !== at.id) {
+      indicesCriarVistosRef.current.clear();
+      return;
+    }
+    if (suspensoRef.current) return;
 
     const mapa = mapearItensDaSessao(procedimentosSessao, at.itens);
     const itens = diferencasDosItens(procedimentosSessao, mapa, baseItensRef.current);
@@ -1210,10 +1218,12 @@ export function useAtendimentoServidor({
     const ehRetorno = String(at?.tipoProcedimentoCodigo || '').toLowerCase() === 'retorno';
     const indicesCriar = new Set(itens.criar.map((c) => c.indice));
     for (let i = 0; i < 20; i++) {
-      if (!indicesCriar.has(i) && fila.temPendente(`item:novo:${i}`)) {
+      if (indicesCriarVistosRef.current.has(i) && !indicesCriar.has(i) && fila.temPendente(`item:novo:${i}`)) {
         fila.descartar(`item:novo:${i}`);
+        indicesCriarVistosRef.current.delete(i);
       }
     }
+    indicesCriar.forEach((i) => indicesCriarVistosRef.current.add(i));
     for (const novo of itens.criar) {
       let catId = novo.catalogoProcedimentoSaudeId || null;
       if (ehRetorno && at?.procedimentoFeitoOrigemId && String(catId) === String(at.procedimentoFeitoOrigemId)) {

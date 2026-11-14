@@ -830,7 +830,7 @@ export function PlanoVisitasTimeline({
                           return null;
                         })()}
 
-                        {visita.itens.length > 1 && (
+                        {visita.itens.length > 1 && (todosFinalizados || visita.isRetornoVisita) && (
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
                             {visita.itens.length} procedimentos
                           </span>
