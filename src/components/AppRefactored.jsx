@@ -1620,12 +1620,19 @@ function AppRefactoredInner({ onCanalAvisos }) {
     aguardarPendentes: aguardarFotosPendentes,
     obterFotoId: obterFotoIdConsulta,
   } = envioFotos;
+  const listaPidsRetorno = React.useMemo(() => {
+    return (journeyState.procedimentosSessao || [])
+      .flatMap((p) => [p.id, p.procedimentoFeitoId, p.procedimentoFeitoOrigemId])
+      .filter(Boolean)
+      .map(String);
+  }, [journeyState.procedimentosSessao]);
   const { aguardarMapa: aguardarMapaRascunho } = useMapaRascunhoAutosave({
     consulta: consultaDasFotos,
     itemId: itemDoProcedimentoAtivo,
     mapaState: mapaAplicacaoState,
     roleUserId: roleUserId || null,
     avisarErro: avisarErroFoto,
+    invalidCatIds: listaPidsRetorno,
   });
   const itemDoRetornoAtivo = React.useMemo(() => {
     const itens = consultaAtualServidor?.itens || [];
@@ -1636,12 +1643,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
       null
     );
   }, [consultaAtualServidor?.itens, journeyState.procedimentosSessao]);
-  const listaPidsRetorno = React.useMemo(() => {
-    return (journeyState.procedimentosSessao || [])
-      .flatMap((p) => [p.id, p.procedimentoFeitoId, p.procedimentoFeitoOrigemId])
-      .filter(Boolean)
-      .map(String);
-  }, [journeyState.procedimentosSessao]);
   const { aguardarMapa: aguardarMapaRetorno } = useMapaRascunhoAutosave({
     consulta: consultaDasFotos,
     itemId: itemDoRetornoAtivo,
@@ -2328,11 +2329,20 @@ function AppRefactoredInner({ onCanalAvisos }) {
     if (!isSameDayResume) {
       const hasLote = Array.isArray(options.lote) && options.lote.length > 0;
       if (hasLote) {
+        const seenAg = new Set();
+        const seenCat = new Set();
         const loteValido = options.lote.filter((p) => {
-          const nome = String(p.procedimentoNome || p.nomeProcedimento || p.nome || '').trim();
+          const nome = String(p?.procedimentoNome || p?.nomeProcedimento || p?.nome || '').trim();
           const isPlaceholder = !nome || /^Procedimento\s*\d*$/i.test(nome);
-          const cid = p.catalogoProcedimentoSaudeId || p.catalogoId;
-          return Boolean((cid && String(cid).trim()) || (!isPlaceholder && nome));
+          const cid = p?.catalogoProcedimentoSaudeId || p?.catalogoId;
+          const cidKey = cid != null && String(cid).trim() !== '' ? String(cid).trim() : null;
+          const agKey = p?.agendaId != null && String(p.agendaId).trim() !== '' ? String(p.agendaId).trim() : null;
+          if (!cidKey && (isPlaceholder || !nome)) return false;
+          if (agKey && seenAg.has(agKey)) return false;
+          if (cidKey && seenCat.has(cidKey)) return false;
+          if (agKey) seenAg.add(agKey);
+          if (cidKey) seenCat.add(cidKey);
+          return true;
         });
         const loteNormalizado = criarLoteProcedimentosSessao(loteValido);
         setProcedimentosLote(loteNormalizado);
@@ -2345,8 +2355,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
       }
       // Limpa IDs de procedimentos da sessão anterior para evitar duplicações no prontuário
       setLoteProcedimentosFeitosIds([]);
-      journeyState.setNomeProcedimento('');
-      journeyState.setNomeProcedimentoCatalogoId(null);
       journeyState.setObservacoesExecucao('');
       clearTermosJornadaState(journeyState);
       limparResolucoesTermos();
@@ -2538,13 +2546,39 @@ function AppRefactoredInner({ onCanalAvisos }) {
     } finally {
       abrindoConsultaRef.current = false;
     }
-    const { loteDaAgenda, ...resto } = options;
+    const { loteDaAgenda, lote: loteOriginal, ...restoSemLote } = options;
+    let loteAplicado = null;
     if (Array.isArray(loteDaAgenda)) {
-      setProcedimentosLote(loteDaAgenda);
-      journeyState.setProcedimentosSessao(loteDaAgenda);
+      const seenAg = new Set();
+      const seenCat = new Set();
+      loteAplicado = criarLoteProcedimentosSessao(
+        loteDaAgenda.filter((p) => {
+          const agKey = p?.agendaId != null && String(p.agendaId).trim() !== '' ? String(p.agendaId).trim() : null;
+          const cid = p?.catalogoProcedimentoSaudeId || p?.catalogoId;
+          const cidKey = cid != null && String(cid).trim() !== '' ? String(cid).trim() : null;
+          if (agKey && seenAg.has(agKey)) return false;
+          if (cidKey && seenCat.has(cidKey)) return false;
+          if (agKey) seenAg.add(agKey);
+          if (cidKey) seenCat.add(cidKey);
+          return true;
+        }),
+      );
+      setProcedimentosLote(loteAplicado);
+      journeyState.setProcedimentosSessao(loteAplicado);
       journeyState.setActiveProcedureIndex(0);
     }
-    entrarNaConsulta(patient, { ...resto, consultaDoServidor: dto });
+    const opcoesEntrar = Array.isArray(loteDaAgenda)
+      ? {
+          ...restoSemLote,
+          ...(loteAplicado && loteAplicado.length > 0 ? { lote: loteAplicado } : {}),
+          consultaDoServidor: dto,
+        }
+      : {
+          ...restoSemLote,
+          ...(loteOriginal !== undefined ? { lote: loteOriginal } : {}),
+          consultaDoServidor: dto,
+        };
+    entrarNaConsulta(patient, opcoesEntrar);
     const anterior = dto.consultaAnteriorFechada;
     if (anterior) {
       toast.info(
@@ -3533,7 +3567,9 @@ function AppRefactoredInner({ onCanalAvisos }) {
       }
 
       // Garante que a sessão e lote iniciais carreguem o item do planejamento vinculado com fábrica e corHex canônico
+      const itemIdServidor = dto?.itens?.[0]?.id != null ? String(dto.itens[0].id) : null;
       const itemInicial = criarItemProcedimentoSessao({
+        ...(itemIdServidor ? { itemId: itemIdServidor } : {}),
         agendaId,
         procedimentoNome: nome,
         nomeProcedimento: nome,
@@ -3544,6 +3580,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
       }, 0);
       journeyState.setProcedimentosSessao([itemInicial]);
       setProcedimentosLote([itemInicial]);
+      journeyState.setActiveProcedureIndex(0);
 
       if (isRetorno) {
         journeyState.setTipoAtendimento('retorno');

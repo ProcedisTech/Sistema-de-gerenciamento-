@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   CheckCircle2,
   Shield,
@@ -2040,9 +2041,9 @@ export function Step3Termos({
 export function Step4Procedimento({
   pacienteIdForProcedures: _pacienteIdForProcedures = null,
   nomeProcedimento = '',
-  setNomeProcedimento = () => { },
-  setNomeProcedimentoCatalogoId = () => { },
-  setProcedimentoDoCatalogo,
+  setNomeProcedimento: _setNomeProcedimento = () => { },
+  setNomeProcedimentoCatalogoId: _setNomeProcedimentoCatalogoId = () => { },
+  setProcedimentoDoCatalogo: _setProcedimentoDoCatalogo,
   onValidarTermosCatalogo,
   execucaoBloqueadaPorTermos = false,
   titulosTermosFaltantes = [],
@@ -2070,6 +2071,8 @@ export function Step4Procedimento({
       console.warn('[Step4LGPD] setProcedimentosSessao chamado com handler default vazio:', arg);
     }
   },
+  activeProcedimentoIndex: _activeProcedimentoIndex = 0,
+  setActiveProcedimentoIndex = null,
   journeyPlanejamentoCtx = null,
   planejamentoItemId = null,
   planejamentoId = null,
@@ -2088,17 +2091,8 @@ export function Step4Procedimento({
   urlArquivoReserva = null,
 }) {
   const { fuso } = useFusoClinica();
-  const gravarProcedimentoCatalogo = React.useCallback((nome, id) => {
-    if (typeof setProcedimentoDoCatalogo === 'function') {
-      setProcedimentoDoCatalogo(nome, id);
-    }
-    if (typeof setNomeProcedimento === 'function') {
-      setNomeProcedimento(nome);
-    }
-    if (typeof setNomeProcedimentoCatalogoId === 'function') {
-      setNomeProcedimentoCatalogoId(id);
-    }
-  }, [setProcedimentoDoCatalogo, setNomeProcedimento, setNomeProcedimentoCatalogoId]);
+  const acaoProcedimentoInFlightRef = React.useRef(false);
+  const [acaoProcedimentoBusy, setAcaoProcedimentoBusy] = React.useState(false);
 
   const [modalDecisaoPlano, setModalDecisaoPlano] = React.useState({ open: false, catalogo: null, itemPlano: null });
   const [obsaveStatus, setObsaveStatus] = React.useState(''); // '' | 'saving' | 'saved'
@@ -2275,105 +2269,51 @@ export function Step4Procedimento({
   }, []);
 
   const handleAdicionarItemDoPlano = React.useCallback(async (itemPlano) => {
+    if (acaoProcedimentoInFlightRef.current) return;
     const safeCatId = itemPlano.catalogoProcedimentoSaudeId
-      ? String(itemPlano.catalogoProcedimentoSaudeId)
+      ? String(itemPlano.catalogoProcedimentoSaudeId).trim()
       : null;
-    const jaExiste = (procedimentosSessao || []).some(
-      (p) => (safeCatId && String(p.catalogoProcedimentoSaudeId || p.catalogoId) === safeCatId) ||
-        (itemPlano.planejamentoItemId && String(p.planejamentoItemId) === String(itemPlano.planejamentoItemId)) ||
-        String(p.id) === String(itemPlano.id),
-    );
-    if (jaExiste) return;
-    const novoItem = criarItemProcedimentoSessao(
-      {
-        catalogoProcedimentoSaudeId: safeCatId,
-        catalogoId: safeCatId,
-        nomeProcedimento: itemPlano.nome,
-        nome: itemPlano.nome,
-        planejamentoItemId: itemPlano.planejamentoItemId || null,
-        isAvulso: false,
-      },
-      (procedimentosSessao || []).length,
-      procedimentosSessao || [],
-    );
-    const isFirstEmpty = (procedimentosSessao || []).length === 1 && ehSlotInicialVazio(procedimentosSessao[0]);
-    const itemFinal = isFirstEmpty && procedimentosSessao[0]?.itemId
-      ? { ...novoItem, itemId: procedimentosSessao[0].itemId, nomeSoDeTela: false }
-      : { ...novoItem, nomeSoDeTela: false };
-    const novaLista = isFirstEmpty
-      ? [itemFinal]
-      : [...(procedimentosSessao || []), itemFinal];
-    if (typeof setProcedimentosSessao === 'function') {
-      setProcedimentosSessao(novaLista);
-    }
-    const procsReais = novaLista.filter((p) => !ehLinhaConsultaSemCatalogo(p));
-    if (procsReais.length > 0) {
-      const primeiro = procsReais[0];
-      const rawPrimeiroId = primeiro.catalogoProcedimentoSaudeId || primeiro.catalogoId || primeiro.nomeProcedimentoCatalogoId || primeiro.id;
-      const primeiroId = rawPrimeiroId && rawPrimeiroId !== 'undefined' ? String(rawPrimeiroId).trim() : null;
-      gravarProcedimentoCatalogo(primeiro.nomeProcedimento || primeiro.nome, primeiroId);
-    } else {
-      gravarProcedimentoCatalogo('', null);
-    }
-    setStep4Errors((prev) => ({
-      ...prev,
-      nomeProcedimento: false,
-      catalogoId: false,
-    }));
-    if (typeof onValidarTermosCatalogo === 'function') {
-      const todosIds = procsReais
-        .map((p) => p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
-        .filter((id) => id && id !== 'undefined' && id !== 'null');
-      await onValidarTermosCatalogo(todosIds, procsReais.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
-        abrirModal: false,
-        procedimentosSessaoOverride: novaLista,
-      });
-    }
-  }, [procedimentosSessao, setProcedimentosSessao, setStep4Errors, onValidarTermosCatalogo, gravarProcedimentoCatalogo]);
-
-  const handleToggleProcedimento = React.useCallback(async (proc) => {
-    const procId = String(proc.id);
-    const jaExiste = (procedimentosSessao || []).some(
-      (p) => String(p.catalogoProcedimentoSaudeId || p.catalogoId || p.id) === procId,
-    );
-    if (jaExiste) {
-      const novaLista = (procedimentosSessao || []).filter(
-        (p) => String(p.catalogoProcedimentoSaudeId || p.catalogoId || p.id) !== procId,
+    const jaExiste = (procedimentosSessao || []).some((p) => {
+      if (!p || ehLinhaConsultaSemCatalogo(p)) return false;
+      const pCid = String(p.catalogoProcedimentoSaudeId || p.catalogoId || p.nomeProcedimentoCatalogoId || '').trim();
+      return (
+        (safeCatId && pCid === safeCatId) ||
+        (itemPlano.planejamentoItemId && String(p.planejamentoItemId || '') === String(itemPlano.planejamentoItemId)) ||
+        (p.id != null && itemPlano.id != null && String(p.id) === String(itemPlano.id))
       );
-      const slotBase = (procedimentosSessao || [])[0];
-      const listaFinal = novaLista.length === 0 && slotBase?.itemId
-        ? [{
-          itemId: slotBase.itemId,
-          agendaId: slotBase.agendaId ?? null,
-          isAgendaRetorno: Boolean(slotBase.isAgendaRetorno),
-          legado: false,
-          observacoesExecucao: slotBase.observacoesExecucao ?? '',
-          orient: null,
-          catalogoProcedimentoSaudeId: null,
-          nomeProcedimentoCatalogoId: null,
-          catalogoId: null,
-          planejamentoItemId: null,
-          nomeProcedimento: '',
-          procedimentoNome: '',
-          nome: '',
-          nomeSoDeTela: true,
-        }]
-        : novaLista;
+    });
+    if (jaExiste) return;
+
+    acaoProcedimentoInFlightRef.current = true;
+    setAcaoProcedimentoBusy(true);
+    try {
+      const novoItem = criarItemProcedimentoSessao(
+        {
+          catalogoProcedimentoSaudeId: safeCatId,
+          catalogoId: safeCatId,
+          nomeProcedimentoCatalogoId: safeCatId,
+          nomeProcedimento: itemPlano.nome,
+          nome: itemPlano.nome,
+          planejamentoItemId: itemPlano.planejamentoItemId || null,
+          isAvulso: false,
+        },
+        (procedimentosSessao || []).length,
+        procedimentosSessao || [],
+      );
+      const isFirstEmpty = (procedimentosSessao || []).length === 1 && ehSlotInicialVazio(procedimentosSessao[0]);
+      const itemFinal = isFirstEmpty && procedimentosSessao[0]?.itemId
+        ? { ...novoItem, itemId: procedimentosSessao[0].itemId, nomeSoDeTela: false }
+        : { ...novoItem, nomeSoDeTela: false };
+      const novaLista = isFirstEmpty
+        ? [itemFinal]
+        : [...(procedimentosSessao || []), itemFinal];
       if (typeof setProcedimentosSessao === 'function') {
-        setProcedimentosSessao(listaFinal);
+        setProcedimentosSessao(novaLista);
+      }
+      if (typeof setActiveProcedimentoIndex === 'function') {
+        setActiveProcedimentoIndex(isFirstEmpty ? 0 : novaLista.length - 1);
       }
       const procsReais = novaLista.filter((p) => !ehLinhaConsultaSemCatalogo(p));
-      if (procsReais.length > 0) {
-        const primeiro = procsReais[0];
-        const rawPrimeiroId = primeiro.catalogoProcedimentoSaudeId || primeiro.catalogoId || primeiro.nomeProcedimentoCatalogoId || primeiro.id;
-        const primeiroId = rawPrimeiroId && rawPrimeiroId !== 'undefined' ? String(rawPrimeiroId).trim() : null;
-        gravarProcedimentoCatalogo(
-          primeiro.nomeProcedimento || primeiro.nome,
-          primeiroId,
-        );
-      } else {
-        gravarProcedimentoCatalogo('', null);
-      }
       setStep4Errors((prev) => ({
         ...prev,
         nomeProcedimento: false,
@@ -2385,8 +2325,73 @@ export function Step4Procedimento({
           .filter((id) => id && id !== 'undefined' && id !== 'null');
         await onValidarTermosCatalogo(todosIds, procsReais.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
           abrirModal: false,
-          procedimentosSessaoOverride: listaFinal,
+          procedimentosSessaoOverride: novaLista,
         });
+      }
+    } finally {
+      acaoProcedimentoInFlightRef.current = false;
+      setAcaoProcedimentoBusy(false);
+    }
+  }, [procedimentosSessao, setProcedimentosSessao, setActiveProcedimentoIndex, setStep4Errors, onValidarTermosCatalogo, ehSlotInicialVazio]);
+
+  const handleToggleProcedimento = React.useCallback(async (proc) => {
+    if (acaoProcedimentoInFlightRef.current) return;
+    const procId = String(proc.id || '').trim();
+    if (!procId) return;
+    const jaExiste = (procedimentosSessao || []).some(
+      (p) => !ehLinhaConsultaSemCatalogo(p) && String(p.catalogoProcedimentoSaudeId || p.catalogoId || p.nomeProcedimentoCatalogoId || p.id || '').trim() === procId,
+    );
+    if (jaExiste) {
+      acaoProcedimentoInFlightRef.current = true;
+      setAcaoProcedimentoBusy(true);
+      try {
+        const novaLista = (procedimentosSessao || []).filter(
+          (p) => ehLinhaConsultaSemCatalogo(p) || String(p.catalogoProcedimentoSaudeId || p.catalogoId || p.nomeProcedimentoCatalogoId || p.id || '').trim() !== procId,
+        );
+        const slotBase = (procedimentosSessao || []).find((p) => p?.itemId && !ehLinhaConsultaSemCatalogo(p)) || (procedimentosSessao || [])[0];
+        const listaFinal = novaLista.length === 0 && slotBase?.itemId && !ehLinhaConsultaSemCatalogo(slotBase)
+          ? [{
+            itemId: slotBase.itemId,
+            agendaId: slotBase.agendaId ?? null,
+            isAgendaRetorno: Boolean(slotBase.isAgendaRetorno),
+            legado: false,
+            observacoesExecucao: slotBase.observacoesExecucao ?? '',
+            orient: null,
+            catalogoProcedimentoSaudeId: null,
+            nomeProcedimentoCatalogoId: null,
+            catalogoId: null,
+            planejamentoItemId: null,
+            nomeProcedimento: '',
+            procedimentoNome: '',
+            nome: '',
+            nomeSoDeTela: true,
+          }]
+          : novaLista;
+        if (typeof setProcedimentosSessao === 'function') {
+          setProcedimentosSessao(listaFinal);
+        }
+        const primeiroRealIdx = listaFinal.findIndex((p) => p && !ehLinhaConsultaSemCatalogo(p) && !p.nomeSoDeTela);
+        if (typeof setActiveProcedimentoIndex === 'function') {
+          setActiveProcedimentoIndex(primeiroRealIdx >= 0 ? primeiroRealIdx : 0);
+        }
+        const procsReais = listaFinal.filter((p) => !ehLinhaConsultaSemCatalogo(p) && !p.nomeSoDeTela);
+        setStep4Errors((prev) => ({
+          ...prev,
+          nomeProcedimento: false,
+          catalogoId: false,
+        }));
+        if (typeof onValidarTermosCatalogo === 'function') {
+          const todosIds = procsReais
+            .map((p) => p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
+            .filter((id) => id && id !== 'undefined' && id !== 'null');
+          await onValidarTermosCatalogo(todosIds, procsReais.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
+            abrirModal: false,
+            procedimentosSessaoOverride: listaFinal,
+          });
+        }
+      } finally {
+        acaoProcedimentoInFlightRef.current = false;
+        setAcaoProcedimentoBusy(false);
       }
       return;
     }
@@ -2404,72 +2409,74 @@ export function Step4Procedimento({
       return;
     }
 
-    // Caso não esteja no plano, adiciona como avulso
-    const novoItem = criarItemProcedimentoSessao(
-      {
-        catalogoProcedimentoSaudeId: procId,
-        catalogoId: procId,
-        nomeProcedimento: proc.nome,
-        nome: proc.nome,
-        isAvulso: true,
-        planejamentoItemId: null,
-      },
-      (procedimentosSessao || []).length,
-      procedimentosSessao || [],
-    );
-    const isFirstEmpty = (procedimentosSessao || []).length === 1 && ehSlotInicialVazio(procedimentosSessao[0]);
-    const itemFinal = isFirstEmpty && procedimentosSessao[0]?.itemId
-      ? { ...novoItem, itemId: procedimentosSessao[0].itemId, nomeSoDeTela: false }
-      : { ...novoItem, nomeSoDeTela: false };
-    const novaLista = isFirstEmpty
-      ? [itemFinal]
-      : [
-        ...(procedimentosSessao || []),
-        itemFinal,
-      ];
-    if (typeof setProcedimentosSessao === 'function') {
-      setProcedimentosSessao(novaLista);
-    }
-    const procsReais = novaLista.filter((p) => !ehLinhaConsultaSemCatalogo(p));
-    if (procsReais.length > 0) {
-      const primeiro = procsReais[0];
-      const rawPrimeiroId = primeiro.catalogoProcedimentoSaudeId || primeiro.catalogoId || primeiro.nomeProcedimentoCatalogoId || primeiro.id;
-      const primeiroId = rawPrimeiroId && rawPrimeiroId !== 'undefined' ? String(rawPrimeiroId).trim() : null;
-      gravarProcedimentoCatalogo(
-        primeiro.nomeProcedimento || primeiro.nome,
-        primeiroId,
+    acaoProcedimentoInFlightRef.current = true;
+    setAcaoProcedimentoBusy(true);
+    try {
+      // Caso não esteja no plano, adiciona como avulso
+      const novoItem = criarItemProcedimentoSessao(
+        {
+          catalogoProcedimentoSaudeId: procId,
+          catalogoId: procId,
+          nomeProcedimentoCatalogoId: procId,
+          nomeProcedimento: proc.nome,
+          nome: proc.nome,
+          isAvulso: true,
+          planejamentoItemId: null,
+        },
+        (procedimentosSessao || []).length,
+        procedimentosSessao || [],
       );
-    } else {
-      gravarProcedimentoCatalogo('', null);
+      const isFirstEmpty = (procedimentosSessao || []).length === 1 && ehSlotInicialVazio(procedimentosSessao[0]);
+      const itemFinal = isFirstEmpty && procedimentosSessao[0]?.itemId
+        ? { ...novoItem, itemId: procedimentosSessao[0].itemId, nomeSoDeTela: false }
+        : { ...novoItem, nomeSoDeTela: false };
+      const novaLista = isFirstEmpty
+        ? [itemFinal]
+        : [
+          ...(procedimentosSessao || []),
+          itemFinal,
+        ];
+      if (typeof setProcedimentosSessao === 'function') {
+        setProcedimentosSessao(novaLista);
+      }
+      if (typeof setActiveProcedimentoIndex === 'function') {
+        setActiveProcedimentoIndex(isFirstEmpty ? 0 : novaLista.length - 1);
+      }
+      const procsReais = novaLista.filter((p) => !ehLinhaConsultaSemCatalogo(p));
+      setStep4Errors((prev) => ({
+        ...prev,
+        nomeProcedimento: false,
+        catalogoId: false,
+      }));
+      if (typeof onValidarTermosCatalogo === 'function') {
+        const todosIds = procsReais
+          .map((p) => p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
+          .filter((id) => id && id !== 'undefined' && id !== 'null');
+        await onValidarTermosCatalogo(todosIds, procsReais.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
+          abrirModal: false,
+          procedimentosSessaoOverride: novaLista,
+        });
+      }
+    } finally {
+      acaoProcedimentoInFlightRef.current = false;
+      setAcaoProcedimentoBusy(false);
     }
-    setStep4Errors((prev) => ({
-      ...prev,
-      nomeProcedimento: false,
-      catalogoId: false,
-    }));
-    if (typeof onValidarTermosCatalogo === 'function') {
-      const todosIds = procsReais
-        .map((p) => p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
-        .filter((id) => id && id !== 'undefined' && id !== 'null');
-      await onValidarTermosCatalogo(todosIds, procsReais.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
-        abrirModal: false,
-        procedimentosSessaoOverride: novaLista,
-      });
-    }
-  }, [procedimentosSessao, itensPlanoPendentes, setProcedimentosSessao, setStep4Errors, onValidarTermosCatalogo, gravarProcedimentoCatalogo, setModalDecisaoPlano]);
+  }, [procedimentosSessao, itensPlanoPendentes, setProcedimentosSessao, setActiveProcedimentoIndex, setStep4Errors, onValidarTermosCatalogo, setModalDecisaoPlano, ehSlotInicialVazio]);
 
   const handleRemoverProcedimento = React.useCallback(async (procId) => {
-    const pid = String(procId);
+    const pid = String(procId || '').trim();
+    if (!pid) return;
     const novaLista = (procedimentosSessao || []).filter((p) => {
-      const matchCat = String(p.catalogoProcedimentoSaudeId || p.catalogoId || '') === pid;
-      const matchItem = String(p.itemId || '') === pid;
-      const matchUid = String(p._uid || '') === pid;
-      const matchId = String(p.id || '') === pid;
-      const matchNome = String(p.nomeProcedimento || p.nome || '').trim().toLowerCase() === pid.trim().toLowerCase();
+      if (ehLinhaConsultaSemCatalogo(p)) return true;
+      const matchCat = String(p.catalogoProcedimentoSaudeId || p.catalogoId || p.nomeProcedimentoCatalogoId || '').trim() === pid;
+      const matchItem = String(p.itemId || '').trim() === pid;
+      const matchUid = String(p._uid || '').trim() === pid;
+      const matchId = String(p.id || '').trim() === pid;
+      const matchNome = String(p.nomeProcedimento || p.nome || '').trim().toLowerCase() === pid.toLowerCase();
       return !(matchCat || matchItem || matchUid || matchId || matchNome);
     });
-    const slotBase = (procedimentosSessao || [])[0];
-    const listaFinal = novaLista.length === 0 && slotBase?.itemId
+    const slotBase = (procedimentosSessao || []).find((p) => p?.itemId && !ehLinhaConsultaSemCatalogo(p)) || (procedimentosSessao || [])[0];
+    const listaFinal = novaLista.length === 0 && slotBase?.itemId && !ehLinhaConsultaSemCatalogo(slotBase)
       ? [{
         itemId: slotBase.itemId,
         agendaId: slotBase.agendaId ?? null,
@@ -2490,18 +2497,11 @@ export function Step4Procedimento({
     if (typeof setProcedimentosSessao === 'function') {
       setProcedimentosSessao(listaFinal);
     }
-    const procsReais = novaLista.filter((p) => !ehLinhaConsultaSemCatalogo(p));
-    if (procsReais.length > 0) {
-      const primeiro = procsReais[0];
-      const rawPrimeiroId = primeiro.catalogoProcedimentoSaudeId || primeiro.catalogoId || primeiro.nomeProcedimentoCatalogoId || primeiro.id;
-      const primeiroId = rawPrimeiroId && rawPrimeiroId !== 'undefined' ? String(rawPrimeiroId).trim() : null;
-      gravarProcedimentoCatalogo(
-        primeiro.nomeProcedimento || primeiro.nome,
-        primeiroId,
-      );
-    } else {
-      gravarProcedimentoCatalogo('', null);
+    const primeiroRealIdx = listaFinal.findIndex((p) => p && !ehLinhaConsultaSemCatalogo(p) && !p.nomeSoDeTela);
+    if (typeof setActiveProcedimentoIndex === 'function') {
+      setActiveProcedimentoIndex(primeiroRealIdx >= 0 ? primeiroRealIdx : 0);
     }
+    const procsReais = listaFinal.filter((p) => !ehLinhaConsultaSemCatalogo(p) && !p.nomeSoDeTela);
     if (typeof onValidarTermosCatalogo === 'function') {
       const todosIds = procsReais
         .map((p) => p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
@@ -2511,59 +2511,69 @@ export function Step4Procedimento({
         procedimentosSessaoOverride: listaFinal,
       });
     }
-  }, [procedimentosSessao, setProcedimentosSessao, onValidarTermosCatalogo, gravarProcedimentoCatalogo]);
+  }, [procedimentosSessao, setProcedimentosSessao, setActiveProcedimentoIndex, onValidarTermosCatalogo]);
 
   const handleConfirmarDecisaoAvulso = React.useCallback(async () => {
-    if (!modalDecisaoPlano.catalogo) return;
-    const proc = modalDecisaoPlano.catalogo;
-    const procId = String(proc.id);
-    const novoItem = criarItemProcedimentoSessao(
-      {
-        catalogoProcedimentoSaudeId: procId,
-        catalogoId: procId,
-        nomeProcedimento: proc.nome,
-        nome: proc.nome,
-        isAvulso: true,
-        planejamentoItemId: null,
-      },
-      (procedimentosSessao || []).length,
-      procedimentosSessao || [],
-    );
-    const isFirstEmpty = (procedimentosSessao || []).length === 1 && ehSlotInicialVazio(procedimentosSessao[0]);
-    const itemFinal = isFirstEmpty && procedimentosSessao[0]?.itemId
-      ? { ...novoItem, itemId: procedimentosSessao[0].itemId, nomeSoDeTela: false }
-      : { ...novoItem, nomeSoDeTela: false };
-    const novaLista = isFirstEmpty
-      ? [itemFinal]
-      : [...(procedimentosSessao || []), itemFinal];
-    if (typeof setProcedimentosSessao === 'function') {
-      setProcedimentosSessao(novaLista);
+    if (acaoProcedimentoInFlightRef.current || !modalDecisaoPlano.catalogo) return;
+    acaoProcedimentoInFlightRef.current = true;
+    setAcaoProcedimentoBusy(true);
+    try {
+      const proc = modalDecisaoPlano.catalogo;
+      const procId = String(proc.id || '').trim();
+      const jaExiste = (procedimentosSessao || []).some(
+        (p) => !ehLinhaConsultaSemCatalogo(p) && String(p.catalogoProcedimentoSaudeId || p.catalogoId || p.nomeProcedimentoCatalogoId || p.id || '').trim() === procId,
+      );
+      if (jaExiste) {
+        setModalDecisaoPlano({ open: false, catalogo: null, itemPlano: null });
+        return;
+      }
+      const novoItem = criarItemProcedimentoSessao(
+        {
+          catalogoProcedimentoSaudeId: procId,
+          catalogoId: procId,
+          nomeProcedimentoCatalogoId: procId,
+          nomeProcedimento: proc.nome,
+          nome: proc.nome,
+          isAvulso: true,
+          planejamentoItemId: null,
+        },
+        (procedimentosSessao || []).length,
+        procedimentosSessao || [],
+      );
+      const isFirstEmpty = (procedimentosSessao || []).length === 1 && ehSlotInicialVazio(procedimentosSessao[0]);
+      const itemFinal = isFirstEmpty && procedimentosSessao[0]?.itemId
+        ? { ...novoItem, itemId: procedimentosSessao[0].itemId, nomeSoDeTela: false }
+        : { ...novoItem, nomeSoDeTela: false };
+      const novaLista = isFirstEmpty
+        ? [itemFinal]
+        : [...(procedimentosSessao || []), itemFinal];
+      if (typeof setProcedimentosSessao === 'function') {
+        setProcedimentosSessao(novaLista);
+      }
+      if (typeof setActiveProcedimentoIndex === 'function') {
+        setActiveProcedimentoIndex(isFirstEmpty ? 0 : novaLista.length - 1);
+      }
+      const procsReais = novaLista.filter((p) => !ehLinhaConsultaSemCatalogo(p));
+      setStep4Errors((prev) => ({
+        ...prev,
+        nomeProcedimento: false,
+        catalogoId: false,
+      }));
+      if (typeof onValidarTermosCatalogo === 'function') {
+        const todosIds = procsReais
+          .map((p) => p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
+          .filter((id) => id && id !== 'undefined' && id !== 'null');
+        await onValidarTermosCatalogo(todosIds, procsReais.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
+          abrirModal: false,
+          procedimentosSessaoOverride: novaLista,
+        });
+      }
+      setModalDecisaoPlano({ open: false, catalogo: null, itemPlano: null });
+    } finally {
+      acaoProcedimentoInFlightRef.current = false;
+      setAcaoProcedimentoBusy(false);
     }
-    const procsReais = novaLista.filter((p) => !ehLinhaConsultaSemCatalogo(p));
-    if (procsReais.length > 0) {
-      const primeiro = procsReais[0];
-      const rawPrimeiroId = primeiro.catalogoProcedimentoSaudeId || primeiro.catalogoId || primeiro.nomeProcedimentoCatalogoId || primeiro.id;
-      const primeiroId = rawPrimeiroId && rawPrimeiroId !== 'undefined' ? String(rawPrimeiroId).trim() : null;
-      gravarProcedimentoCatalogo(primeiro.nomeProcedimento || primeiro.nome, primeiroId);
-    } else {
-      gravarProcedimentoCatalogo('', null);
-    }
-    setStep4Errors((prev) => ({
-      ...prev,
-      nomeProcedimento: false,
-      catalogoId: false,
-    }));
-    if (typeof onValidarTermosCatalogo === 'function') {
-      const todosIds = procsReais
-        .map((p) => p.catalogoProcedimentoSaudeId || p.catalogoId || p.id)
-        .filter((id) => id && id !== 'undefined' && id !== 'null');
-      await onValidarTermosCatalogo(todosIds, procsReais.map((p) => p.nomeProcedimento || p.nome).join(' + '), {
-        abrirModal: false,
-        procedimentosSessaoOverride: novaLista,
-      });
-    }
-    setModalDecisaoPlano({ open: false, catalogo: null, itemPlano: null });
-  }, [modalDecisaoPlano, procedimentosSessao, setProcedimentosSessao, setStep4Errors, onValidarTermosCatalogo, gravarProcedimentoCatalogo]);
+  }, [modalDecisaoPlano, procedimentosSessao, setProcedimentosSessao, setActiveProcedimentoIndex, setStep4Errors, onValidarTermosCatalogo, ehSlotInicialVazio]);
 
   const handleMudarCorProcedimento = React.useCallback((procId, novaCor, outroProcId, corAntiga) => {
     if (typeof setProcedimentosSessao !== 'function') return;
@@ -2589,7 +2599,7 @@ export function Step4Procedimento({
   }, [setProcedimentosSessao]);
 
   const handleConfirmarDecisaoPlano = React.useCallback(async () => {
-    if (!modalDecisaoPlano.itemPlano) return;
+    if (acaoProcedimentoInFlightRef.current || !modalDecisaoPlano.itemPlano) return;
     const item = modalDecisaoPlano.itemPlano;
     setModalDecisaoPlano({ open: false, catalogo: null, itemPlano: null });
     await handleAdicionarItemDoPlano(item);
@@ -2709,12 +2719,16 @@ export function Step4Procedimento({
     const catId = String(proc.catalogoProcedimentoSaudeId || proc.catalogoId || proc.id || '').trim();
     const nome = String(proc.nome || proc.nomeProcedimento || '').trim();
     if (!catId && !nome) return;
+    const jaExiste = (procedimentosSessao || []).some(
+      (p) => !ehLinhaConsultaSemCatalogo(p) && String(p.catalogoProcedimentoSaudeId || p.catalogoId || p.nomeProcedimentoCatalogoId || p.id || '').trim() === catId,
+    );
+    if (jaExiste) return;
     handleToggleProcedimento({
       id: catId,
       nome: nome,
       unidadeMedida: proc.unidadeMedida,
     });
-  }, [handleToggleProcedimento]);
+  }, [procedimentosSessao, handleToggleProcedimento]);
 
   return (
     <div className="min-w-0">
@@ -2784,10 +2798,11 @@ export function Step4Procedimento({
                 </span>
               </div>
               <div className="flex flex-wrap gap-2">
-                {itensPlanoPendentes.map((item) => (
+                {itensPlanoPendentes.map((item, idx) => (
                   <button
-                    key={item.id}
+                    key={item.planejamentoItemId || item.id || `${item.catalogoId || 'plano'}_${idx}`}
                     type="button"
+                    disabled={acaoProcedimentoBusy}
                     onClick={() => handleAdicionarItemDoPlano(item)}
                     className="group inline-flex items-center gap-2 rounded-xl border border-teal-300/80 bg-white px-3 py-1.5 text-[12px] font-semibold text-teal-900 shadow-2xs hover:border-teal-500 hover:bg-teal-50 hover:text-teal-950 transition-all cursor-pointer"
                   >
@@ -2963,7 +2978,7 @@ export function Step4Procedimento({
             ))}
 
             {itensSemTermoExigido.map((item, idx) => (
-              <div key={item.catalogoId || item.id || `sem_termo_${idx}`} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+              <div key={item.itemId || item._uid || `${item.catalogoId || item.id || 'sem_termo'}_${idx}`} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
                     <Info className="h-3.5 w-3.5 stroke-[2.5]" />
@@ -3236,16 +3251,17 @@ export function Step4Procedimento({
       )}
 
       {/* Modal Interceptor de Decisão: Plano vs Avulso */}
-      {modalDecisaoPlano.open && (
+      {modalDecisaoPlano.open && typeof document !== 'undefined' ? createPortal(
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby="modal-decisao-plano-title"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150"
+          className="fixed inset-0 z-[220] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150"
         >
           <div className="relative w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
             <button
               type="button"
+              disabled={acaoProcedimentoBusy}
               onClick={() => setModalDecisaoPlano({ open: false, catalogo: null, itemPlano: null })}
               className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
               aria-label="Fechar"
@@ -3275,8 +3291,9 @@ export function Step4Procedimento({
               {/* Opção 1: Realizar pelo Plano */}
               <button
                 type="button"
+                disabled={acaoProcedimentoBusy}
                 onClick={handleConfirmarDecisaoPlano}
-                className="w-full text-left rounded-xl border-2 border-teal-500 bg-teal-50/40 p-3.5 hover:bg-teal-50/80 transition-all cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-teal-500/20"
+                className="w-full text-left rounded-xl border-2 border-teal-500 bg-teal-50/40 p-3.5 hover:bg-teal-50/80 transition-all cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-teal-500/20 disabled:opacity-60"
               >
                 <div className="flex items-center justify-between gap-2 mb-1">
                   <div className="flex items-center gap-2">
@@ -3299,8 +3316,9 @@ export function Step4Procedimento({
               {/* Opção 2: Realizar como Avulso */}
               <button
                 type="button"
+                disabled={acaoProcedimentoBusy}
                 onClick={handleConfirmarDecisaoAvulso}
-                className="w-full text-left rounded-xl border border-slate-200 bg-white p-3.5 hover:border-slate-300 hover:bg-slate-50 transition-all cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-slate-300"
+                className="w-full text-left rounded-xl border border-slate-200 bg-white p-3.5 hover:border-slate-300 hover:bg-slate-50 transition-all cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-slate-300 disabled:opacity-60"
               >
                 <div className="flex items-center gap-2 mb-1">
                   <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-300 text-[10px] font-bold text-slate-500">
@@ -3317,8 +3335,9 @@ export function Step4Procedimento({
               </button>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+        document.body,
+      ) : null}
     </div>
   );
 }

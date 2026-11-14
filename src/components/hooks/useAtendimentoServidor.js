@@ -28,6 +28,31 @@ import {
   textosDaAvaliacao,
 } from '../consulta/consultaServidor.js';
 
+function encontrarIndiceLinhaItemNovo(sessao, dados) {
+  if (!Array.isArray(sessao) || sessao.length === 0) return -1;
+  if (dados?.uid != null) {
+    const byUid = sessao.findIndex((l) => l && l._uid != null && String(l._uid) === String(dados.uid));
+    if (byUid >= 0) return byUid;
+  }
+  const reqCat = dados?.catalogoProcedimentoSaudeId ?? dados?.corpo?.catalogoProcedimentoSaudeId ?? null;
+  const reqNome = dados?.nomeLivre ?? dados?.corpo?.nomeLivre ?? null;
+  const reqIdx = dados?.indice;
+  const coincide = (l) => {
+    if (!l || l.itemId != null) return false;
+    const lCat = l.catalogoProcedimentoSaudeId || l.catalogoId || l.nomeProcedimentoCatalogoId || null;
+    if (reqCat && lCat) return String(lCat) === String(reqCat);
+    if (!reqCat && !lCat) {
+      const lNome = String(l.nomeProcedimento || l.procedimentoNome || l.nome || '').trim();
+      return !reqNome || lNome === String(reqNome).trim();
+    }
+    return false;
+  };
+  if (reqIdx != null && reqIdx >= 0 && reqIdx < sessao.length && coincide(sessao[reqIdx])) {
+    return reqIdx;
+  }
+  return sessao.findIndex(coincide);
+}
+
 const DEBOUNCE_TEXTO_MS = 700;
 /**
  * F6a: esperas (ms) entre as novas tentativas da releitura da consulta quando a rede cai ou o servidor responde 5xx.
@@ -1006,8 +1031,8 @@ export function useAtendimentoServidor({
         if (entrada.tipo === 'itemNovo' && res?.id) {
           const at = atualRef.current;
           const sessao = valoresRef.current.procedimentosSessao;
-          const indice = entrada.dados?.indice;
-          const linha = Array.isArray(sessao) ? sessao[indice] : null;
+          const indice = encontrarIndiceLinhaItemNovo(sessao, entrada.dados);
+          const linha = indice >= 0 && Array.isArray(sessao) ? sessao[indice] : null;
           // Se o usuário removeu o procedimento enquanto o POST estava em voo:
           if (!linha) {
             filasRef.current.get(id)?.enfileirar({
@@ -1198,12 +1223,16 @@ export function useAtendimentoServidor({
       if (novo.planejamentoItemId) {
         corpo.planejamentoItemId = novo.planejamentoItemId;
       }
+      const linhaCriar = Array.isArray(procedimentosSessao) ? procedimentosSessao[novo.indice] : null;
       fila.enfileirar({
         chave: `item:novo:${novo.indice}`,
         grupo: 'item:novo',
         tipo: 'itemNovo',
         dados: {
           indice: novo.indice,
+          uid: linhaCriar?._uid ?? null,
+          catalogoProcedimentoSaudeId: catId,
+          nomeLivre: novo.nomeLivre ?? null,
           corpo,
         },
         debounceMs: DEBOUNCE_TEXTO_MS,

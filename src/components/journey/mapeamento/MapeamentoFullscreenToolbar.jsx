@@ -32,6 +32,7 @@ import {
 } from './mapeamentoFullscreenSidebarStorage.js';
 import { MAPEAMENTO_PALETA_CORES, corParaProcedimento } from '../../../constants/mapeamentoPaletaCores.js';
 import { getPresetsForUnidade, getPassoFallback } from '../../../constants/quantidadePresets.js';
+import { chaveReactProcedimento } from '../../../utils/deduplicarProcedimentosMapa.js';
 
 const DEFAULT_TOOLBAR_WIDTH_PX = 240;
 const COLLAPSED_WIDTH_PX = 48;
@@ -544,7 +545,7 @@ export function MapeamentoFullscreenToolbar({
                 Toque para trazer ao mapa e marcar pontos:
               </p>
               <div className="flex flex-wrap gap-1.5">
-                {procedimentosPlanoNaoAdicionados.map((procPlano) => {
+                {procedimentosPlanoNaoAdicionados.map((procPlano, idx) => {
                   const catOpt = catalogoOptions.find(
                     (o) => String(o.id).trim() === String(procPlano.catalogoProcedimentoSaudeId || procPlano.id).trim()
                   );
@@ -555,7 +556,7 @@ export function MapeamentoFullscreenToolbar({
 
                   return (
                     <button
-                      key={procPlano.id}
+                      key={procPlano.planejamentoItemId || procPlano.id || `plano_${idx}`}
                       type="button"
                       onClick={() => onAdicionarProcedimento?.(procPlano)}
                       title={`Adicionar ${nomeExibicao} ao mapa e armar pincel`}
@@ -591,12 +592,12 @@ export function MapeamentoFullscreenToolbar({
           {Array.isArray(procedimentos) && procedimentos.length > 0 ? (
             collapsed ? (
               <div className="flex flex-col items-center gap-1.5 py-1">
-                {procedimentos.map((proc) => {
+                {procedimentos.map((proc, idx) => {
                   const isSelected = activeProcedimentoId === proc.id;
                   const cor = proc.corHex || corParaProcedimento(proc.id);
                   return (
                     <button
-                      key={proc.id}
+                      key={chaveReactProcedimento(proc, idx)}
                       type="button"
                       title={`${proc.nome} (${isSelected ? 'Ativo' : 'Clique para ativar'})`}
                       onClick={() => onSelectProcedimento?.(proc)}
@@ -609,7 +610,7 @@ export function MapeamentoFullscreenToolbar({
               </div>
             ) : (
               <div className="flex flex-col gap-1.5 px-0.5">
-                {procedimentos.map((proc) => {
+                {procedimentos.map((proc, idx) => {
                   const isSelected = activeProcedimentoId === proc.id;
                   const stats = getProcedimentoStats ? getProcedimentoStats(proc.id) : { pontosCount: 0, doseTotal: 0 };
                   const cor = proc.corHex || corParaProcedimento(proc.id);
@@ -618,7 +619,7 @@ export function MapeamentoFullscreenToolbar({
 
                   return (
                     <div
-                      key={proc.id}
+                      key={chaveReactProcedimento(proc, idx)}
                       onClick={() => onSelectProcedimento?.(proc)}
                       className={`group relative flex flex-col gap-1 rounded-xl border p-2 text-left transition-all cursor-pointer ${isSelected
                           ? 'border-emerald-500/70 bg-emerald-50/70 shadow-2xs'

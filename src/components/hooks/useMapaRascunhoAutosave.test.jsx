@@ -501,4 +501,31 @@ describe('useMapaRascunhoAutosave: releitura ao voltar', () => {
     await assentar();
     expect(buscasDe('item-1')).toBe(1);
   });
+
+  it('sanitiza catalogoProcedimentoSaudeId sintético não-UUID (idx_0 / item_retorno_*) antes de enviar PUT /mapa', async () => {
+    const { result } = montar();
+    await assentar();
+
+    act(() => {
+      result.current.mapa.adicionarPonto('FRONTAL', {
+        ...ponto(0.15, 2),
+        procedimentoIndex: 0,
+        catalogoProcedimentoSaudeId: 'idx_0',
+      });
+      result.current.mapa.adicionarPonto('FRONTAL', {
+        ...ponto(0.45, 3),
+        procedimentoIndex: 1,
+        catalogoProcedimentoSaudeId: 'item_retorno_1700000_0',
+      });
+    });
+    await assentar();
+
+    expect(atendimentosApi.salvarMapa).toHaveBeenCalled();
+    const [, , corpo] = atendimentosApi.salvarMapa.mock.calls.at(-1);
+    expect(corpo.marcacoes).toHaveLength(2);
+    expect(corpo.marcacoes[0].catalogoProcedimentoSaudeId).toBeNull();
+    expect(corpo.marcacoes[1].catalogoProcedimentoSaudeId).toBeNull();
+    expect(corpo.marcacoes[0].procedimentoIndex).toBe(0);
+    expect(corpo.marcacoes[1].procedimentoIndex).toBe(1);
+  });
 });

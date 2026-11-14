@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { corParaProcedimento } from '../../constants/mapeamentoPaletaCores.js';
+import { ehLinhaConsultaSemCatalogo } from '../consulta/consultaServidor.js';
 
 /** Formato antigo do horário de início no sessionStorage (com o CPF do paciente na chave): só para remover. */
 const PREFIXO_HORARIO_ANTIGO = 'procedis_start_time_';
@@ -84,12 +85,18 @@ export const useJourneyState = () => {
   const updateActiveProcedure = useCallback((patch) => {
     setProcedimentosSessao((prev) => {
       const next = [...prev];
+      const cur = next[activeProcedureIndex] || {};
+      const patchObj = typeof patch === 'function' ? patch(cur) : patch;
+      if (prev.length === 0) {
+        const hasVal = patchObj && Object.values(patchObj).some((v) => v != null && String(v).trim() !== '');
+        if (!hasVal) return prev;
+      }
       if (!next[activeProcedureIndex]) {
         next[activeProcedureIndex] = {};
       }
       next[activeProcedureIndex] = {
         ...next[activeProcedureIndex],
-        ...(typeof patch === 'function' ? patch(next[activeProcedureIndex]) : patch)
+        ...patchObj,
       };
       return next;
     });
@@ -167,6 +174,10 @@ export const useJourneyState = () => {
    */
   const setNomeProcedimento = useCallback((value, opcoes = {}) => {
     setProcedimentosSessao((prev) => {
+      if (prev.length === 0) {
+        const emptyCheck = typeof value === 'function' ? value('') : value;
+        if (String(emptyCheck ?? '').trim() === '') return prev;
+      }
       const nextArr = [...prev];
       const cur = nextArr[activeProcedureIndex] || {};
       const prevVal = cur.nomeProcedimento || '';
@@ -186,15 +197,38 @@ export const useJourneyState = () => {
 
   const setProcedimentoDoCatalogo = useCallback((nome, catalogoId) => {
     setProcedimentosSessao((prev) => {
-      const nextArr = [...prev];
-      const cur = nextArr[activeProcedureIndex] || {};
       const nextNome = nome != null ? String(nome) : '';
       const nextTrim = nextNome.trim();
       const cid = catalogoId != null && String(catalogoId).trim() !== '' ? String(catalogoId).trim() : null;
+      if (prev.length === 0 && nextTrim === '' && cid == null) {
+        return prev;
+      }
+      const nextArr = [...prev];
+      const existingIdx = cid
+        ? nextArr.findIndex((p) => {
+            if (!p || ehLinhaConsultaSemCatalogo(p)) return false;
+            const pCid = p.catalogoProcedimentoSaudeId || p.catalogoId || p.nomeProcedimentoCatalogoId;
+            return pCid != null && String(pCid).trim() === cid;
+          })
+        : -1;
+
+      let targetIdx = existingIdx >= 0 ? existingIdx : activeProcedureIndex;
+      if (existingIdx < 0 && nextArr[targetIdx] && ehLinhaConsultaSemCatalogo(nextArr[targetIdx])) {
+        const nonConsultaIdx = nextArr.findIndex((p) => p && !ehLinhaConsultaSemCatalogo(p));
+        if (nonConsultaIdx >= 0) {
+          targetIdx = nonConsultaIdx;
+        } else if (cid != null) {
+          targetIdx = nextArr.length;
+        } else if (nextTrim === '') {
+          return prev;
+        }
+      }
+
+      const cur = nextArr[targetIdx] || {};
       const naTela = String(cur.nomeProcedimento || cur.procedimentoNome || '').trim();
       // B-42 F3: escolher do catálogo (ou outro nome) é a pessoa mudando o procedimento: a linha perde a marca.
       const trocou = cid != null || (nextTrim !== '' && nextTrim !== naTela);
-      nextArr[activeProcedureIndex] = {
+      nextArr[targetIdx] = {
         ...cur,
         nomeProcedimento: nextNome,
         nomeProcedimentoCatalogoId: cid,

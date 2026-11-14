@@ -14,6 +14,8 @@ import { ZoomableGalleryLightbox } from '../patients/ZoomableGalleryLightbox.jsx
 import { formatarInstante } from '../../utils/datasClinica.js';
 import { useFusoClinica } from '../hooks/useFusoClinica.js';
 
+let retornoProcSeq = 0;
+
 const SATISFACAO_OPTS = [1, 2, 3, 4, 5];
 const SIMETRIA_OPTS = [
   { value: 'sim', label: 'Simétrico' },
@@ -244,10 +246,11 @@ export function ConsultaRetornoFlow({
             return false;
           });
           if (jaExiste) return listaAtual;
+          retornoProcSeq += 1;
           return [
             ...listaAtual,
             {
-              id: `item_retorno_${Date.now()}`,
+              id: `item_retorno_${Date.now()}_${retornoProcSeq}`,
               catalogoProcedimentoSaudeId: catId,
               catalogoId: catId,
               nomeProcedimento: nome,

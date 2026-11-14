@@ -25,6 +25,11 @@ import { MapeamentoFullscreenOverlay } from '../mapeamento/MapeamentoFullscreenO
 import { UnidadeMedidaSelect } from '../mapeamento/UnidadeMedidaSelect.jsx';
 import { corParaProcedimento } from '../../../constants/mapeamentoPaletaCores.js';
 import { ehRotuloDeTela } from '../../consulta/consultaServidor.js';
+import {
+  chaveReactProcedimento,
+  deduplicarProcedimentosPorCatalogo,
+  extrairCatalogoIdProcedimento,
+} from '../../../utils/deduplicarProcedimentosMapa.js';
 
 function EscolherVistaMapaModal({ open, vistasDisponiveis, onSelect, onClose, hasFoto, countPontosVista }) {
   if (!open) return null;
@@ -142,25 +147,52 @@ export function MapaAplicacaoPanel({
 
   const mediaBusy = galeriaLoading || galeriaSelecting || photoActionBusy;
 
-  // Lista normalizada de procedimentos da sessão
+  // Lista normalizada e deduplicada 1:1 por catálogo de procedimentos da sessão (espaço mapeável sem CONSULTA)
   const listaProcedimentosSessao = useMemo(() => {
     const isPlaceholder = (nome) => !nome || /^Procedimento\s*\d*$/i.test(String(nome).trim());
 
     if (Array.isArray(procedimentosSessao) && procedimentosSessao.length > 0) {
       const validos = procedimentosSessao.filter((p) => {
         if (p?.nomeSoDeTela === true) return false;
-        const cid = p.catalogoProcedimentoSaudeId || p.nomeProcedimentoCatalogoId || p.catalogoId;
+        const cid = extrairCatalogoIdProcedimento(p);
         const nome = p.nomeProcedimento || p.procedimentoNome || p.nome;
         if (!cid && ehRotuloDeTela(nome)) return false;
         return Boolean((cid && String(cid).trim()) || (nome && String(nome).trim() && !isPlaceholder(nome)));
       });
       if (validos.length > 0) {
-        return validos
+        if (import.meta.env.DEV) {
+          const contagem = new Map();
+          validos.forEach((p) => {
+            const cid = extrairCatalogoIdProcedimento(p);
+            if (!cid) return;
+            contagem.set(cid, (contagem.get(cid) || 0) + 1);
+          });
+          const duplicados = Array.from(contagem.entries()).filter(([, qtd]) => qtd > 1);
+          if (duplicados.length > 0) {
+            console.warn(
+              '[Fase0:MapaAplicacaoPanel] procedimentosSessao chegou com catálogo duplicado antes da consolidação:',
+              {
+                duplicados,
+                itens: validos.map((p) => ({
+                  itemId: p.itemId || p.id || null,
+                  agendaId: p.agendaId || null,
+                  planejamentoItemId: p.planejamentoItemId || null,
+                  catalogoId: extrairCatalogoIdProcedimento(p),
+                  nomeSoDeTela: Boolean(p.nomeSoDeTela),
+                })),
+              },
+            );
+          }
+        }
+
+        const normalizados = validos
           .map((p, idx) => {
             const rawNome = p.nomeProcedimento || p.procedimentoNome || p.nome;
             const cid = p.catalogoProcedimentoSaudeId || p.nomeProcedimentoCatalogoId || p.catalogoId || p.id;
             return {
+              ...p,
               id: String(cid || `idx_${idx}`),
+              catalogoProcedimentoSaudeId: extrairCatalogoIdProcedimento(p) || null,
               nome: rawNome,
               unidadeMedida: p.unidadeMedida || 'u',
               corHex: p.corHex || (cid ? corParaProcedimento(cid) : null),
@@ -168,16 +200,19 @@ export function MapaAplicacaoPanel({
             };
           })
           .filter((item) => item.nome && !isPlaceholder(item.nome));
+
+        return deduplicarProcedimentosPorCatalogo(normalizados);
       }
     }
     if (catalogoId && nomeProcedimento && String(nomeProcedimento).trim() && !isPlaceholder(nomeProcedimento)) {
-      return [{
+      return deduplicarProcedimentosPorCatalogo([{
         id: String(catalogoId),
+        catalogoProcedimentoSaudeId: String(catalogoId),
         nome: String(nomeProcedimento),
         unidadeMedida: 'u',
         corHex: corParaProcedimento(catalogoId),
         index: 0,
-      }];
+      }]);
     }
     return [];
   }, [procedimentosSessao, catalogoId, nomeProcedimento]);
@@ -549,12 +584,12 @@ export function MapaAplicacaoPanel({
               <span className="text-[12px] font-bold uppercase tracking-wider text-slate-500">
                 Procedimento Marcador:
               </span>
-              {listaProcedimentosSessao.map((proc) => {
+              {listaProcedimentosSessao.map((proc, idx) => {
                 const isArmado = proc.id === procedimentoArmado?.id;
                 const cor = proc.corHex || corParaProcedimento(proc.id);
                 return (
                   <button
-                    key={proc.id}
+                    key={chaveReactProcedimento(proc, idx)}
                     type="button"
                     onClick={() => setProcedimentoArmadoId(proc.id)}
                     className={`inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-bold transition-all shadow-xs cursor-pointer ${isArmado
@@ -694,6 +729,8 @@ export function MapaAplicacaoPanel({
 
       <MapeamentoFullscreenOverlay
         open={fullscreenOpen}
+        scope="procedure"
+        pacienteId={pacienteId}
         vistaAtual={vistaAtual}
         foto={fotoAtual}
         procedimentoArmado={procedimentoArmado}

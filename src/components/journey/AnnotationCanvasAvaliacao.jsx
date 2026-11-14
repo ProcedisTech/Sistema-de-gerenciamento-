@@ -27,6 +27,7 @@ import { mapasApi, planejamentosApi, catalogosApi, pacientesGaleriaApi } from '.
 import { isRealUuid } from '../../utils/planejamentoDraftUtils.js';
 import { garantirProcedimentosNoPlano } from '../../utils/sincronizarProcedimentosPlanoAgenda.js';
 import { ehRotuloDeTela } from '../consulta/consultaServidor.js';
+import { deduplicarProcedimentosPorCatalogo } from '../../utils/deduplicarProcedimentosMapa.js';
 
 const COR_PADRAO_AVALIACAO = '#0ea5e9';
 
@@ -109,22 +110,24 @@ export function AnnotationCanvasAvaliacao({
           }
         });
 
-        return validos.map((proc, idx) => {
-          const catId = proc.catalogoProcedimentoSaudeId || proc.id;
-          let cor = proc.corHex || proc.cor;
-          if (!cor || typeof cor !== 'string' || !cor.startsWith('#')) {
-            cor = getCorLivreParaProcedimento(catId, coresOcupadas);
-          }
-          coresOcupadas.add(cor.toLowerCase());
-          return {
-            id: proc.id || proc.catalogoProcedimentoSaudeId || `proc_${idx}`,
-            catalogoProcedimentoSaudeId: catId,
-            nome: proc.catalogoNome || proc.nome,
-            unidadeMedida: proc.unidadeMedida || proc.unidade || 'un',
-            corHex: cor,
-            planejamentoItemId: proc.planejamentoItemId || null,
-          };
-        });
+        return deduplicarProcedimentosPorCatalogo(
+          validos.map((proc, idx) => {
+            const catId = proc.catalogoProcedimentoSaudeId || proc.id;
+            let cor = proc.corHex || proc.cor;
+            if (!cor || typeof cor !== 'string' || !cor.startsWith('#')) {
+              cor = getCorLivreParaProcedimento(catId, coresOcupadas);
+            }
+            coresOcupadas.add(cor.toLowerCase());
+            return {
+              id: proc.catalogoProcedimentoSaudeId || proc.id || `proc_${idx}`,
+              catalogoProcedimentoSaudeId: catId,
+              nome: proc.catalogoNome || proc.nome,
+              unidadeMedida: proc.unidadeMedida || proc.unidade || 'un',
+              corHex: cor,
+              planejamentoItemId: proc.planejamentoItemId || null,
+            };
+          }),
+        );
       }
     }
     return [];
@@ -212,20 +215,22 @@ export function AnnotationCanvasAvaliacao({
 
     if (Array.isArray(procs) && procs.length > 0) {
       setProcedimentos((prev) => {
-        // Preserva cores já existentes sem sobrescrever
-        const jaExistem = new Map(prev.map((p) => [String(p.id || p.catalogoProcedimentoSaudeId), p]));
-        return procs.map((p) => {
-          const key = String(p.id || p.catalogoProcedimentoSaudeId);
-          const anterior = jaExistem.get(key);
-          return {
-            id: p.catalogoProcedimentoSaudeId || p.id,
-            catalogoProcedimentoSaudeId: p.catalogoProcedimentoSaudeId || p.id,
-            nome: p.nomeProcedimento || p.catalogoNome || p.nome || 'Procedimento',
-            corHex: anterior?.corHex || p.corHex || p.cor || null,
-            unidadeMedida: p.unidadeMedida || 'un',
-            planejamentoItemId: p.planejamentoItemId || null,
-          };
-        });
+        // Preserva cores já existentes sem sobrescrever e garante unicidade 1:1 por catálogo
+        const jaExistem = new Map(prev.map((p) => [String(p.catalogoProcedimentoSaudeId || p.id), p]));
+        return deduplicarProcedimentosPorCatalogo(
+          procs.map((p) => {
+            const key = String(p.catalogoProcedimentoSaudeId || p.id);
+            const anterior = jaExistem.get(key);
+            return {
+              id: p.catalogoProcedimentoSaudeId || p.id,
+              catalogoProcedimentoSaudeId: p.catalogoProcedimentoSaudeId || p.id,
+              nome: p.nomeProcedimento || p.catalogoNome || p.nome || 'Procedimento',
+              corHex: anterior?.corHex || p.corHex || p.cor || null,
+              unidadeMedida: p.unidadeMedida || 'un',
+              planejamentoItemId: p.planejamentoItemId || null,
+            };
+          }),
+        );
       });
     }
 
@@ -234,7 +239,7 @@ export function AnnotationCanvasAvaliacao({
 
   // Carrega procedimentos do Plano de Tratamento Ativo do paciente
   useEffect(() => {
-    if (!pacienteId) {
+    if (!pacienteId || !isRealUuid(pacienteId)) {
       setProcedimentosDoPlano([]);
       return;
     }
@@ -274,21 +279,23 @@ export function AnnotationCanvasAvaliacao({
           }
         });
 
-        const itensDoPlano = planoAtivo.itens
-          .map((item, idx) => {
-            const catId = item.catalogoProcedimentoSaudeId || item.catalogoId;
-            const catInfo = catMap.get(String(catId || '')) || {};
-            const nome = item.nome || item.catalogoNome || catInfo.nome || 'Procedimento';
-            return {
-              id: catId || item.id || `plano_proc_${idx}`,
-              catalogoProcedimentoSaudeId: catId,
-              planejamentoItemId: item.id || null,
-              nome,
-              unidadeMedida: item.unidadeMedida || catInfo.unidadeMedida || 'un',
-              corHex: item.corHex || null,
-            };
-          })
-          .filter((it) => Boolean(it.catalogoProcedimentoSaudeId));
+        const itensDoPlano = deduplicarProcedimentosPorCatalogo(
+          planoAtivo.itens
+            .map((item, idx) => {
+              const catId = item.catalogoProcedimentoSaudeId || item.catalogoId;
+              const catInfo = catMap.get(String(catId || '')) || {};
+              const nome = item.nome || item.catalogoNome || catInfo.nome || 'Procedimento';
+              return {
+                id: catId || item.id || `plano_proc_${idx}`,
+                catalogoProcedimentoSaudeId: catId,
+                planejamentoItemId: item.id || null,
+                nome,
+                unidadeMedida: item.unidadeMedida || catInfo.unidadeMedida || 'un',
+                corHex: item.corHex || null,
+              };
+            })
+            .filter((it) => Boolean(it.catalogoProcedimentoSaudeId)),
+        );
 
         setProcedimentosDoPlano(itensDoPlano);
       })

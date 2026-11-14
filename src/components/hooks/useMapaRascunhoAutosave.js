@@ -5,6 +5,7 @@ import { PREFIXO_AVISO } from '../../services/avisos/tiposAviso.js';
 import { mapLocalPontoToApi } from '../../utils/procedimentoMapaPayload.js';
 import { formatGaleriaLegendaForUpload, GALERIA_CATEGORIA, normalizePacienteGaleriaResponse } from '../../utils/pacienteGaleria.js';
 import { getVistaLabel } from '../../constants/vistasMapaAplicacao.js';
+import { isRealUuid } from '../../utils/planejamentoDraftUtils.js';
 import { comTentativas } from './useEnvioFotosConsulta.js';
 
 const DEBOUNCE_MS = 700;
@@ -27,7 +28,7 @@ function marcacoesDo(pontosPorVista, invalidCatIds = []) {
     for (const p of lista) {
       const pt = mapLocalPontoToApi(p);
       let catId = pt.catalogoProcedimentoSaudeId || pt.catalogoId || null;
-      if (catId && invalidSet.has(String(catId))) {
+      if (catId && (!isRealUuid(catId) || invalidSet.has(String(catId)))) {
         catId = null;
       }
       marcacoes.push({

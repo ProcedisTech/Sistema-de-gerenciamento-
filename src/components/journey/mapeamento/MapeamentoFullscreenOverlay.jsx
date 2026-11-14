@@ -43,6 +43,8 @@ import { isRealUuid } from '../../../utils/planejamentoDraftUtils.js';
 import { garantirProcedimentosNoPlano } from '../../../utils/sincronizarProcedimentosPlanoAgenda.js';
 import { normalizeListaPlanos, enriquecerPlanosComCatalogo } from '../../../utils/planejamentoNormalize.js';
 import { isItemFinalizado, isItemCancelado } from '../../../utils/planejamentoStatusUi.js';
+import { deduplicarProcedimentosPorCatalogo } from '../../../utils/deduplicarProcedimentosMapa.js';
+import { ehLinhaConsultaSemCatalogo } from '../../consulta/consultaServidor.js';
 
 const COR_PADRAO_AVALIACAO = '#0d9488';
 
@@ -216,6 +218,7 @@ export function MapeamentoFullscreenOverlay({
 
   const prevActiveIndexRef = useRef(activeIndex);
   const prevOverlaySigRef = useRef('');
+  const prevPacienteIdRef = useRef(pacienteId);
   const removedProcIdsRef = useRef(new Set());
   const [catalogoMap, setCatalogoMap] = useState(() => new Map());
 
@@ -274,9 +277,21 @@ export function MapeamentoFullscreenOverlay({
 
   const [procedimentosLocais, setProcedimentosLocais] = useState(() => {
     const fromPhoto = activePhoto?.mapaOverlay?.procedimentos || activePhoto?.procedimentosMapeados;
-    if (Array.isArray(fromPhoto) && fromPhoto.length > 0) return normalizarListaProcedimentos(fromPhoto);
-    if (Array.isArray(procedimentosUsados) && procedimentosUsados.length > 0) return normalizarListaProcedimentos(procedimentosUsados);
-    if (Array.isArray(procedimentosIniciais) && procedimentosIniciais.length > 0) return normalizarListaProcedimentos(procedimentosIniciais);
+    if (Array.isArray(fromPhoto) && fromPhoto.length > 0) {
+      return deduplicarProcedimentosPorCatalogo(
+        normalizarListaProcedimentos(fromPhoto.filter((p) => p && !p.nomeSoDeTela && !ehLinhaConsultaSemCatalogo(p))),
+      );
+    }
+    if (Array.isArray(procedimentosUsados) && procedimentosUsados.length > 0) {
+      return deduplicarProcedimentosPorCatalogo(
+        normalizarListaProcedimentos(procedimentosUsados.filter((p) => p && !p.nomeSoDeTela && !ehLinhaConsultaSemCatalogo(p))),
+      );
+    }
+    if (Array.isArray(procedimentosIniciais) && procedimentosIniciais.length > 0) {
+      return deduplicarProcedimentosPorCatalogo(
+        normalizarListaProcedimentos(procedimentosIniciais.filter((p) => p && !p.nomeSoDeTela && !ehLinhaConsultaSemCatalogo(p))),
+      );
+    }
     return [];
   });
 
@@ -287,12 +302,47 @@ export function MapeamentoFullscreenOverlay({
         : Array.isArray(procedimentosIniciais) && procedimentosIniciais.length > 0
           ? procedimentosIniciais
           : [];
-    if (fonteExternaBruta.length === 0) return;
-    const fonteExterna = normalizarListaProcedimentos(fonteExternaBruta, catalogoMap).filter(
-      (p) => !removedProcIdsRef.current.has(String(p.catalogoProcedimentoSaudeId || p.id).trim())
+    const fonteFiltrada = fonteExternaBruta.filter(
+      (p) => p && p.nomeSoDeTela !== true && !ehLinhaConsultaSemCatalogo(p),
     );
-    if (fonteExterna.length === 0) return;
+    const controlledSync = isControlledMode && scope !== 'evaluation';
+    if (fonteFiltrada.length === 0) {
+      if (controlledSync) {
+        setProcedimentosLocais((prev) => (prev.length === 0 ? prev : []));
+      }
+      return;
+    }
+    const fonteExterna = deduplicarProcedimentosPorCatalogo(
+      normalizarListaProcedimentos(fonteFiltrada, catalogoMap).filter(
+        (p) => !removedProcIdsRef.current.has(String(p.catalogoProcedimentoSaudeId || p.id).trim()),
+      ),
+    );
+    if (fonteExterna.length === 0) {
+      if (controlledSync) {
+        setProcedimentosLocais((prev) => (prev.length === 0 ? prev : []));
+      }
+      return;
+    }
     setProcedimentosLocais((prev) => {
+      if (controlledSync) {
+        const sameLength = Array.isArray(prev) && prev.length === fonteExterna.length;
+        if (
+          sameLength &&
+          prev.every((p, idx) => {
+            const ext = fonteExterna[idx];
+            return (
+              ext &&
+              String(p.id) === String(ext.id) &&
+              String(p.nome) === String(ext.nome) &&
+              String(p.corHex || '') === String(ext.corHex || '') &&
+              String(p.planejamentoItemId || '') === String(ext.planejamentoItemId || '')
+            );
+          })
+        ) {
+          return prev;
+        }
+        return fonteExterna;
+      }
       if (!Array.isArray(prev) || prev.length === 0) return prev;
       const getKey = (p) => String(p?.catalogoProcedimentoSaudeId || p?.catalogoId || p?.id || '').trim();
       const mapPrev = new Map(prev.map((p) => [getKey(p), p]));
@@ -315,9 +365,9 @@ export function MapeamentoFullscreenOverlay({
           }
         }
       }
-      return mudou ? merged : prev;
+      return mudou ? deduplicarProcedimentosPorCatalogo(merged) : prev;
     });
-  }, [procedimentosUsados, procedimentosIniciais, catalogoMap]);
+  }, [procedimentosUsados, procedimentosIniciais, catalogoMap, isControlledMode, scope]);
 
   const listaProcedimentos = useMemo(() => {
     if (procedimentosLocais.length > 0) return procedimentosLocais;
@@ -351,6 +401,17 @@ export function MapeamentoFullscreenOverlay({
 
   // Carregamento resiliente dos procedimentos do Plano Ativo do paciente com Catálogo em paralelo
   const [procedimentosDoPlano, setProcedimentosDoPlano] = useState([]);
+  useEffect(() => {
+    if (prevPacienteIdRef.current === pacienteId) return;
+    prevPacienteIdRef.current = pacienteId;
+    removedProcIdsRef.current.clear();
+    setCatalogoMap(new Map());
+    setProcedimentosDoPlano([]);
+    if (!isControlledMode) {
+      setProcedimentosLocais([]);
+    }
+    setActiveProcedimentoId(null);
+  }, [pacienteId, isControlledMode]);
   useEffect(() => {
     if (!pacienteId || !isRealUuid(pacienteId)) {
       setProcedimentosDoPlano([]);
@@ -480,6 +541,15 @@ export function MapeamentoFullscreenOverlay({
     if (catId) {
       removedProcIdsRef.current.delete(catId);
     }
+    const jaExiste = catId
+      ? procedimentosLocais.some((p) => matchProcId(p, catId))
+      : false;
+    if (jaExiste) {
+      const existente = procedimentosLocais.find((p) => matchProcId(p, catId));
+      setActiveProcedimentoId(existente?.id || catId);
+      onArmar?.(existente || proc);
+      return;
+    }
     const catInfo = catId && catalogoMap instanceof Map ? catalogoMap.get(catId) : null;
     const candidatosNome = [
       proc.nomeProcedimento,
@@ -510,13 +580,16 @@ export function MapeamentoFullscreenOverlay({
       corHex: corAtribuida,
       unidadeMedida: proc.unidadeMedida || catInfo?.unidadeMedida || catInfo?.unidadePadrao || 'un',
     };
-    setProcedimentosLocais((prev) => {
-      const jaExiste = prev.some((p) => matchProcId(p, catId));
-      if (jaExiste) return prev;
-      return [...prev, procNormalizado];
-    });
-    setActiveProcedimentoId(catId);
-    onArmar?.(procNormalizado);
+    const controladoPeloPai =
+      isControlledMode && scope !== 'evaluation' && typeof onAdicionarProcedimento === 'function';
+    if (!controladoPeloPai) {
+      setProcedimentosLocais((prev) => {
+        if (prev.some((p) => matchProcId(p, catId))) return prev;
+        return deduplicarProcedimentosPorCatalogo([...prev, procNormalizado]);
+      });
+      setActiveProcedimentoId(catId);
+      onArmar?.(procNormalizado);
+    }
     onAdicionarProcedimento?.(procNormalizado);
   };
 

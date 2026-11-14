@@ -3,6 +3,7 @@ import { ShieldCheck, CheckCircle2, Info, AlertCircle, Trash2, X } from 'lucide-
 import { Step4Procedimento } from '../journey/Step4LGPD.jsx';
 import { Step5Finalization } from '../journey/Step5Finalization.jsx';
 import { statusTermoPorProcedimento } from '../../utils/termoResolucao.js';
+import { ehLinhaConsultaSemCatalogo } from './consultaServidor.js';
 
 /** Fluxo modular: registro do procedimento → orientações → encerramento. */
 export function ConsultaProcedimentoFlow({
@@ -15,8 +16,8 @@ export function ConsultaProcedimentoFlow({
   procedimentosLote = [],
   setProcedimentosLote = () => {},
   journeyPlanejamentoCtx = null,
-  activeProcedimentoIndex: _activeProcedimentoIndex = 0,
-  setActiveProcedimentoIndex: _setActiveProcedimentoIndex = () => {},
+  activeProcedimentoIndex = 0,
+  setActiveProcedimentoIndex = () => {},
   observacoesExecucao,
   setObservacoesExecucao,
   procedureCapturedPhotos,
@@ -121,23 +122,55 @@ export function ConsultaProcedimentoFlow({
   };
 
   const handleRemoverDoLote = async (procId) => {
-    const pid = String(procId);
-    const novaLista = (procedimentosLote || []).filter(
-      (p) => String(p.catalogoProcedimentoSaudeId || p.nomeProcedimentoCatalogoId || p.catalogoId || p.id) !== pid,
-    );
+    const pid = String(procId || '').trim();
+    if (!pid) return;
+    const atual = Array.isArray(procedimentosLote) ? procedimentosLote : [];
+    const novaLista = atual.filter((p) => {
+      if (ehLinhaConsultaSemCatalogo(p)) return true;
+      const cat = String(p.catalogoProcedimentoSaudeId || p.nomeProcedimentoCatalogoId || p.catalogoId || '').trim();
+      const matchCat = cat !== '' && cat === pid;
+      const matchItem = p.itemId != null && String(p.itemId).trim() === pid;
+      const matchUid = p._uid != null && String(p._uid).trim() === pid;
+      const matchId = p.id != null && String(p.id).trim() === pid;
+      return !(matchCat || matchItem || matchUid || matchId);
+    });
+    const slotBase = atual.find((p) => p?.itemId && !ehLinhaConsultaSemCatalogo(p)) || atual[0];
+    const listaFinal = novaLista.length === 0 && slotBase?.itemId && !ehLinhaConsultaSemCatalogo(slotBase)
+      ? [{
+        itemId: slotBase.itemId,
+        agendaId: slotBase.agendaId ?? null,
+        isAgendaRetorno: Boolean(slotBase.isAgendaRetorno),
+        legado: false,
+        observacoesExecucao: slotBase.observacoesExecucao ?? '',
+        orient: null,
+        catalogoProcedimentoSaudeId: null,
+        nomeProcedimentoCatalogoId: null,
+        catalogoId: null,
+        planejamentoItemId: null,
+        nomeProcedimento: '',
+        procedimentoNome: '',
+        nome: '',
+        nomeSoDeTela: true,
+      }]
+      : novaLista;
     if (typeof setProcedimentosLote === 'function') {
-      setProcedimentosLote(novaLista);
+      setProcedimentosLote(listaFinal);
     }
+    const primeiroRealIdx = listaFinal.findIndex((p) => p && !ehLinhaConsultaSemCatalogo(p) && !p.nomeSoDeTela);
+    if (typeof setActiveProcedimentoIndex === 'function') {
+      setActiveProcedimentoIndex(primeiroRealIdx >= 0 ? primeiroRealIdx : 0);
+    }
+    const procsReais = listaFinal.filter((p) => p && !ehLinhaConsultaSemCatalogo(p) && !p.nomeSoDeTela);
     if (typeof onValidarTermosCatalogo === 'function') {
-      const todosIds = novaLista
+      const todosIds = procsReais
         .map((p) => p.catalogoProcedimentoSaudeId || p.nomeProcedimentoCatalogoId || p.catalogoId || p.id)
         .filter((id) => id && id !== 'undefined' && id !== 'null');
-      await onValidarTermosCatalogo(todosIds, novaLista.map((p) => p.nomeProcedimento || p.procedimentoNome || p.nome).join(' + '), {
+      await onValidarTermosCatalogo(todosIds, procsReais.map((p) => p.nomeProcedimento || p.procedimentoNome || p.nome).join(' + '), {
         abrirModal: false,
-        procedimentosSessaoOverride: novaLista,
+        procedimentosSessaoOverride: listaFinal,
       });
     }
-    if (novaLista.length === 0) {
+    if (procsReais.length === 0) {
       setConfirmacaoLoteOpen(false);
       setPhase('registro');
     }
@@ -187,17 +220,21 @@ export function ConsultaProcedimentoFlow({
     }
   };
 
+  const itemAtivo = procedimentosLote?.[activeProcedimentoIndex] || procedimentosLote?.[0] || null;
+
   if (phase === 'registro') {
     return (
       <>
         <Step4Procedimento
           pacienteIdForProcedures={pacienteIdForProcedures}
-          nomeProcedimento={procedimentosLote?.[0]?.procedimentoNome || nomeProcedimento}
+          nomeProcedimento={itemAtivo?.procedimentoNome || itemAtivo?.nomeProcedimento || nomeProcedimento}
           setNomeProcedimento={setNomeProcedimento}
           setNomeProcedimentoCatalogoId={setNomeProcedimentoCatalogoId}
           setProcedimentoDoCatalogo={setProcedimentoDoCatalogo}
           procedimentosSessao={procedimentosLote}
           setProcedimentosSessao={setProcedimentosLote}
+          activeProcedimentoIndex={activeProcedimentoIndex}
+          setActiveProcedimentoIndex={setActiveProcedimentoIndex}
           journeyPlanejamentoCtx={journeyPlanejamentoCtx}
           onValidarTermosCatalogo={onValidarTermosCatalogo}
           execucaoBloqueadaPorTermos={execucaoBloqueadaPorTermos}
@@ -231,7 +268,7 @@ export function ConsultaProcedimentoFlow({
           onProcedureOpenCamera={execucaoBloqueadaPorTermos ? undefined : onProcedureOpenCamera}
           onClearMapaCaptureIntent={onClearMapaCaptureIntent}
           urlArquivoReserva={urlArquivoReserva}
-          itemId={procedimentosLote?.[0]?.itemId || null}
+          itemId={itemAtivo?.itemId || null}
         />
         <div className="mt-8 flex justify-end border-t border-app-border pt-8">
           <button
@@ -250,7 +287,7 @@ export function ConsultaProcedimentoFlow({
   return (
     <>
       <Step5Finalization
-        key={String(nomeProcedimento || '')}
+        key={String(itemAtivo?.itemId || itemAtivo?._uid || activeProcedimentoIndex || 0)}
         procedimentosLote={procedimentosLote}
         procedureDateIso={procedureDateIso}
         itensOrientacoes={itensOrientacoes}
@@ -331,14 +368,17 @@ export function ConsultaProcedimentoFlow({
             </div>
 
             <div className="max-h-[320px] overflow-y-auto space-y-2.5 pr-1 divide-y divide-slate-100">
-              {(procedimentosLote || []).map((proc, idx) => {
+              {(procedimentosLote || [])
+                .filter((proc) => proc && !ehLinhaConsultaSemCatalogo(proc) && !proc.nomeSoDeTela)
+                .map((proc, idx) => {
                 const catId = proc.catalogoProcedimentoSaudeId || proc.nomeProcedimentoCatalogoId || proc.catalogoId || proc.id;
+                const removerKey = catId || proc.itemId || proc._uid || proc.id;
                 const nomeProc = proc.nomeProcedimento || proc.procedimentoNome || proc.nome || 'Procedimento';
                 const isPlano = Boolean(proc.planejamentoItemId) || proc.isAvulso === false;
                 const statusTermo = statusTermoPorProcedimento(catId, resolucao);
 
                 return (
-                  <div key={catId || idx} className="pt-2.5 first:pt-0 flex items-start justify-between gap-3">
+                  <div key={proc.itemId || proc._uid || proc.planejamentoItemId || `${catId || 'semcat'}_${idx}`} className="pt-2.5 first:pt-0 flex items-start justify-between gap-3">
                     <div className="space-y-1 min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-bold text-slate-900 truncate">
@@ -381,7 +421,7 @@ export function ConsultaProcedimentoFlow({
 
                     <button
                       type="button"
-                      onClick={() => handleRemoverDoLote(catId)}
+                      onClick={() => handleRemoverDoLote(removerKey)}
                       className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 hover:text-rose-800 hover:bg-rose-50 px-2 py-1 rounded transition-colors shrink-0"
                       title="Remover deste atendimento (retorna para o plano de tratamento se for do plano)"
                     >
