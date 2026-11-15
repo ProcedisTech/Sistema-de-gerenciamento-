@@ -2786,11 +2786,45 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     setDispMonthError('');
   }, []);
 
-  const removePlanejamentoItemLoteAtIndex = useCallback((index) => {
-    if (Array.isArray(planejamentoItensLoteRef.current)) {
-      if (typeof index === 'number' && index >= 0 && index < planejamentoItensLoteRef.current.length) {
-        planejamentoItensLoteRef.current.splice(index, 1);
+  const removePlanejamentoItemLoteAtIndex = useCallback((arg) => {
+    const list = planejamentoItensLoteRef.current;
+    if (!Array.isArray(list) || list.length === 0) return;
+    if (typeof arg === 'number') {
+      if (arg >= 0 && arg < list.length) {
+        list.splice(arg, 1);
       }
+      return;
+    }
+    const {
+      planejamentoItemId = null,
+      catalogoProcedimentoSaudeId = null,
+      index = -1,
+    } = arg || {};
+    let targetIdx = -1;
+    if (planejamentoItemId) {
+      const targetPlanId = String(planejamentoItemId).trim();
+      targetIdx = list.findIndex(
+        (it) => String(it?.planejamentoItemId || '').trim() === targetPlanId,
+      );
+    }
+    if (targetIdx < 0 && catalogoProcedimentoSaudeId) {
+      const targetCatId = String(catalogoProcedimentoSaudeId).trim();
+      targetIdx = list.findIndex(
+        (it) => String(it?.catalogoProcedimentoSaudeId || '').trim() === targetCatId,
+      );
+    }
+    if (
+      targetIdx < 0 &&
+      !planejamentoItemId &&
+      !catalogoProcedimentoSaudeId &&
+      typeof index === 'number' &&
+      index >= 0 &&
+      index < list.length
+    ) {
+      targetIdx = index;
+    }
+    if (targetIdx >= 0) {
+      list.splice(targetIdx, 1);
     }
   }, []);
 

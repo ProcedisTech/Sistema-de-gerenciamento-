@@ -441,4 +441,57 @@ describe('useAgendaPage — Regras de Vínculo entre Agenda e Plano de Tratament
     const createPayload = mockState.agendasCreate.mock.calls[0][0];
     expect(createPayload.planejamentoItemId).toBe('11111111-1111-4111-8111-111111111111');
   });
+
+  it('Cenário 7: removePlanejamentoItemLoteAtIndex remove por planejamentoItemId/catalogoProcedimentoSaudeId sem desalinhamento com itens da clínica', async () => {
+    const canal = criarAvisosFalsos();
+    const { result } = renderHook(() => useAgendaPage({ authEnabled: true }), {
+      wrapper: canal.Wrapper,
+    });
+
+    act(() => {
+      result.current.openCreateModalForPatient(
+        { id: 'pac-lote', nome: 'Paciente Lote' },
+        {
+          catalogoProcedimentoSaudeIds: ['cat-toxina', 'cat-preenchimento'],
+          planejamentoItensLote: [
+            {
+              planejamentoItemId: 'plan-item-1',
+              catalogoProcedimentoSaudeId: 'cat-toxina',
+              tipoProcedimentoId: 'tipo-proc-1',
+              duracaoMin: 30,
+            },
+            {
+              planejamentoItemId: 'plan-item-2',
+              catalogoProcedimentoSaudeId: 'cat-preenchimento',
+              tipoProcedimentoId: 'tipo-proc-1',
+              duracaoMin: 45,
+            },
+          ],
+          data: '2029-10-25',
+        },
+      );
+    });
+
+    act(() => {
+      result.current.setTipoAtendimento('procedimento');
+      result.current.updateForm('horaInicio', '10:00');
+      result.current.updateForm('horaFimSlot', '10:30');
+      result.current.updateForm('catalogoProcedimentoSaudeIds', ['cat-toxina']);
+      // Simula remoção do segundo item do plano usando IDs (mesmo passando index=0 errado de UI mista)
+      result.current.removePlanejamentoItemLoteAtIndex({
+        planejamentoItemId: 'plan-item-2',
+        catalogoProcedimentoSaudeId: 'cat-preenchimento',
+        index: 0,
+      });
+    });
+
+    let saveSuccess = false;
+    await act(async () => {
+      saveSuccess = await result.current.saveAppointment();
+    });
+
+    expect(saveSuccess).toBe(true);
+    expect(mockState.agendasCreate).toHaveBeenCalledTimes(1);
+    expect(mockState.agendasCreate.mock.calls[0][0].planejamentoItemId).toBe('plan-item-1');
+  });
 });
