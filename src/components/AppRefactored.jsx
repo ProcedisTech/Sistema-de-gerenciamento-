@@ -87,6 +87,7 @@ import { evaluateProximoRetornoStep5 } from '../utils/proximoRetornoStep5.js';
 import { PatientsView } from './patients';
 import { ConfiguracoesView, GestaoUsuariosView, AuditoriaView } from './configuracoes';
 import { UnsavedChangesModal } from './shared/UnsavedChangesModal';
+import { travar, liberar } from '../pwa/travaAtualizacao';
 import { useRotaAtual } from '../rotas/useRotaAtual';
 import { usePacientePorId } from '../rotas/usePacientePorId';
 import { AgendaDashboard } from './agenda';
@@ -2215,6 +2216,18 @@ function AppRefactoredInner({ onCanalAvisos }) {
   const [isDirtyFicha, setIsDirtyFicha] = React.useState(false);
   // Guarda só na tela de Configurações; POP (voltar/avançar) ou navegação com state.guarda (irParaTela com guarda).
   const [isDirtyEquipe, setIsDirtyEquipe] = React.useState(false);
+  const guardaConfigAtiva = (isDirtyHorarios || isDirtyFicha) && activeView === 'configuracoes';
+  React.useEffect(() => {
+    if (!guardaConfigAtiva) return;
+    travar('config');
+    return () => liberar('config');
+  }, [guardaConfigAtiva]);
+  const guardaEquipeAtiva = isDirtyEquipe && activeView === 'gestao-equipe';
+  React.useEffect(() => {
+    if (!guardaEquipeAtiva) return;
+    travar('equipe');
+    return () => liberar('equipe');
+  }, [guardaEquipeAtiva]);
   const bloqueio = useBlocker(({ currentLocation, nextLocation, historyAction }) =>
     ((isDirtyHorarios || isDirtyFicha) && activeView === 'configuracoes' &&
     (nextLocation.state?.guarda === true || historyAction === 'POP')) ||
@@ -2736,6 +2749,12 @@ function AppRefactoredInner({ onCanalAvisos }) {
   React.useEffect(() => {
     onCanalAvisos?.({ orgId: orgId || null, ativo: canalAvisosAtivo, emConsulta: emConsultaNaTela });
   }, [onCanalAvisos, orgId, canalAvisosAtivo, emConsultaNaTela]);
+  const consultaAberta = consultaModule != null;
+  React.useEffect(() => {
+    if (!consultaAberta) return;
+    travar('consulta');
+    return () => liberar('consulta');
+  }, [consultaAberta]);
   // F7: saiu da consulta com o encerrar esperando outro aparelho: cancela a espera (idempotente com o do hook).
   React.useEffect(() => {
     if (!emConsultaNaTela) cancelarEsperaEncerrar();

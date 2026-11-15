@@ -2,6 +2,7 @@ import React from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { HorarioClinicaPanel } from './HorarioClinicaPanel.jsx';
+import { estaTravado, liberar, travar } from '../../pwa/travaAtualizacao.js';
 
 const mocks = vi.hoisted(() => ({
   buscarHorarios: vi.fn(),
@@ -123,4 +124,35 @@ it('preserva rascunho e permite tentar salvar novamente quando a API falha', asy
 
   fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
   await waitFor(() => expect(dirty).toHaveBeenLastCalledWith(false));
+});
+
+it('PWA: ficar sujo trava a atualização com o motivo "horario" e desmontar libera', async () => {
+  const { unmount } = render(<HorarioClinicaPanel onDirtyChange={vi.fn()} onDisponibilidadeInvalidate={vi.fn()} />);
+  await screen.findByRole('button', { name: 'Salvar' });
+  expect(estaTravado()).toBe(false);
+  fireEvent.click(screen.getByRole('switch', { name: 'Terça-feira inativo' }));
+  await waitFor(() => expect(estaTravado()).toBe(true));
+  // O motivo certo: soltar só 'horario' destrava (ninguém mais segura).
+  unmount();
+  expect(estaTravado()).toBe(false);
+});
+
+it('PWA: o motivo da trava é exatamente "horario" (outro motivo segurado de fora não é solto)', async () => {
+  // Fase A: segura 'ficha' de fora; o painel não pode soltá-lo ao desmontar.
+  travar('ficha');
+  let r = render(<HorarioClinicaPanel onDirtyChange={vi.fn()} onDisponibilidadeInvalidate={vi.fn()} />);
+  await screen.findByRole('button', { name: 'Salvar' });
+  fireEvent.click(screen.getByRole('switch', { name: 'Terça-feira inativo' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Salvar' })).not.toBeDisabled());
+  r.unmount();
+  expect(estaTravado()).toBe(true);
+  liberar('ficha');
+  // Fase B: segura 'horario' de fora; o painel sujo, ao desmontar, solta exatamente esse motivo.
+  travar('horario');
+  r = render(<HorarioClinicaPanel onDirtyChange={vi.fn()} onDisponibilidadeInvalidate={vi.fn()} />);
+  await screen.findByRole('button', { name: 'Salvar' });
+  fireEvent.click(screen.getByRole('switch', { name: 'Terça-feira inativo' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Salvar' })).not.toBeDisabled());
+  r.unmount();
+  expect(estaTravado()).toBe(false);
 });
