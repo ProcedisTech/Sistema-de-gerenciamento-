@@ -1,3 +1,4 @@
-// Copia useRotaAtual.js:7 (e AppRefactored.jsx:4874-4879); manter em sincronia.
-const PREFIXOS = ['/c/', '/anamnese', '/assinar']
+import { caminhos } from '../rotas/caminhos.js'
+export const PREFIXOS = ['/c/', '/anamnese', '/assinar']
 export function ehRotaPublica(pathname) { return PREFIXOS.some((p) => String(pathname).startsWith(p)) }
+export function ehRotaConsulta(pathname) { const c = caminhos.consulta(); return pathname === c || pathname.startsWith(c + '/') }

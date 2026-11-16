@@ -87,7 +87,7 @@ import { evaluateProximoRetornoStep5 } from '../utils/proximoRetornoStep5.js';
 import { PatientsView } from './patients';
 import { ConfiguracoesView, GestaoUsuariosView, AuditoriaView } from './configuracoes';
 import { UnsavedChangesModal } from './shared/UnsavedChangesModal';
-import { travar, liberar } from '../pwa/travaAtualizacao';
+import { travar, liberar, segurarEntreAbas, CONSULTA_ENTRE_ABAS } from '../pwa/travaAtualizacao';
 import { useRotaAtual } from '../rotas/useRotaAtual';
 import { usePacientePorId } from '../rotas/usePacientePorId';
 import { AgendaDashboard } from './agenda';
@@ -2749,12 +2749,12 @@ function AppRefactoredInner({ onCanalAvisos }) {
   React.useEffect(() => {
     onCanalAvisos?.({ orgId: orgId || null, ativo: canalAvisosAtivo, emConsulta: emConsultaNaTela });
   }, [onCanalAvisos, orgId, canalAvisosAtivo, emConsultaNaTela]);
-  const consultaAberta = consultaModule != null;
   React.useEffect(() => {
-    if (!consultaAberta) return;
+    if (!emConsultaNaTela) return;
     travar('consulta');
-    return () => liberar('consulta');
-  }, [consultaAberta]);
+    const soltar = segurarEntreAbas(CONSULTA_ENTRE_ABAS);
+    return () => { liberar('consulta'); soltar(); };
+  }, [emConsultaNaTela]);
   // F7: saiu da consulta com o encerrar esperando outro aparelho: cancela a espera (idempotente com o do hook).
   React.useEffect(() => {
     if (!emConsultaNaTela) cancelarEsperaEncerrar();
