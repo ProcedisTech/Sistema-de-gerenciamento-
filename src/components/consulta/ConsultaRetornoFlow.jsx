@@ -1083,7 +1083,7 @@ export function ConsultaRetornoFlow({
                         </div>
                       )}
                       <FotoVistaCanvas
-                        previewMode={false}
+                        previewMode={true}
                         showToolbar={true}
                         vistaAtual={retornoVistaAtual}
                         foto={retornoFotoAtual}
