@@ -163,11 +163,17 @@ export function AgendaFormModal({ agenda }) {
   // Array de { id, nome, tipoCodigo, duracaoMin, duracaoSelecionada }
   // fonte autoritativa de IDs: form.catalogoProcedimentoSaudeIds (sincronizados via handlers)
   const [procedimentosSelecionados, setProcedimentosSelecionados] = useState([]);
+  const procedimentosSelecionadosRef = useRef([]);
   const prevIdsRef = useRef([]);
   const [procSearchExpanded, setProcSearchExpanded] = useState(false);
   const [retornoOrigemExpanded, setRetornoOrigemExpanded] = useState(false);
   const procSearchWrapRef = useRef(null);
   const modalPanelRef = useRef(null);
+
+  const aplicarProcedimentosSelecionados = useCallback((proximos) => {
+    procedimentosSelecionadosRef.current = proximos;
+    setProcedimentosSelecionados(proximos);
+  }, []);
 
   // Hidratação: sincroniza chips com form.catalogoProcedimentoSaudeIds
   // Roda quando: (A) ids mudaram OU (B) há chips fallback resolvíveis pelo catálogo
@@ -175,6 +181,7 @@ export function AgendaFormModal({ agenda }) {
     const ids = agenda.form.catalogoProcedimentoSaudeIds ?? [];
     const opts = agenda.procedimentoOptions ?? [];
     const prevIds = prevIdsRef.current;
+    const current = procedimentosSelecionadosRef.current;
 
     const idsIguais =
       ids.length === prevIds.length && ids.every((id, i) => id === prevIds[i]);
@@ -182,7 +189,7 @@ export function AgendaFormModal({ agenda }) {
     // Condição B: chip fallback + catálogo já chegou
     const temFallbackResolvivel =
       idsIguais &&
-      procedimentosSelecionados.some(
+      current.some(
         (p) => p.nome === '(Procedimento)' && opts.find((o) => String(o.id) === String(p.id))
       );
 
@@ -191,30 +198,50 @@ export function AgendaFormModal({ agenda }) {
     prevIdsRef.current = ids;
 
     if (ids.length === 0) {
-      setProcedimentosSelecionados([]);
+      aplicarProcedimentosSelecionados([]);
       return;
     }
 
-    setProcedimentosSelecionados((current) =>
-      ids.map((id) => {
-        const existente = current.find((p) => p.id === id);
-        const opt = opts.find((o) => String(o.id) === String(id));
-        if (opt) {
-          // Se já existe com nome real, preserva (inclusive duracaoSelecionada editada)
-          if (existente && existente.nome !== '(Procedimento)') return existente;
-          return {
-            id: opt.id,
-            nome: opt.nome,
-            tipoCodigo: opt.tipoCodigo,
-            duracaoMin: opt.duracaoMin,
-            duracaoSelecionada: existente?.duracaoSelecionada ?? (agenda.grupoReagendarDuracoes?.[id] ?? opt.duracaoMin),
-          };
+    const proximos = ids.map((id) => {
+      const existente = current.find((p) => p.id === id);
+      const opt = opts.find((o) => String(o.id) === String(id));
+      const planoIdMap = agenda.planoItemEscolhidoPorCatalogo?.[id] ?? null;
+      if (opt) {
+        // Se já existe com nome real, preserva (inclusive duracaoSelecionada e metadados do plano)
+        if (existente && existente.nome !== '(Procedimento)') return existente;
+        return {
+          id: opt.id,
+          nome: opt.nome,
+          tipoCodigo: opt.tipoCodigo,
+          duracaoMin: opt.duracaoMin,
+          duracaoSelecionada: existente?.duracaoSelecionada ?? (agenda.grupoReagendarDuracoes?.[id] ?? opt.duracaoMin),
+          planejamentoItemId: existente?.planejamentoItemId ?? planoIdMap,
+          isPlano: existente?.isPlano ?? (planoIdMap ? true : undefined),
+          planoTitulo: existente?.planoTitulo,
+          sessaoNumero: existente?.sessaoNumero,
+        };
+      }
+      // Catálogo ainda não chegou — fallback temporário
+      return (
+        existente ?? {
+          id,
+          nome: '(Procedimento)',
+          tipoCodigo: '',
+          duracaoMin: 45,
+          duracaoSelecionada: 45,
+          planejamentoItemId: planoIdMap,
+          isPlano: planoIdMap ? true : undefined,
         }
-        // Catálogo ainda não chegou — fallback temporário
-        return existente ?? { id, nome: '(Procedimento)', tipoCodigo: '', duracaoMin: 45, duracaoSelecionada: 45 };
-      })
-    );
-  }, [agenda.form.catalogoProcedimentoSaudeIds, agenda.procedimentoOptions]); // procedimentosSelecionados fora das deps — lido via setter funcional
+      );
+    });
+    aplicarProcedimentosSelecionados(proximos);
+  }, [
+    agenda.form.catalogoProcedimentoSaudeIds,
+    agenda.procedimentoOptions,
+    agenda.planoItemEscolhidoPorCatalogo,
+    agenda.grupoReagendarDuracoes,
+    aplicarProcedimentosSelecionados,
+  ]);
 
   // ── Derivados ───────────────────────────────────────────────────────────────
   const isReagendar = agenda.modalMode === 'reagendar';
@@ -270,16 +297,18 @@ export function AgendaFormModal({ agenda }) {
     !agenda.form.horaFimSlot ||
     !agenda.roleUserIdAgenda;
 
-  // Reset de procedimentos selecionados na troca de paciente quando não em modo travado
+  // Reset de procedimentos selecionados na troca de paciente quando não em modo travado e sem pré-carregamento
   const prevModalPacienteIdRef = useRef(agenda.form.pacienteId);
   useEffect(() => {
     if (prevModalPacienteIdRef.current !== agenda.form.pacienteId) {
       prevModalPacienteIdRef.current = agenda.form.pacienteId;
-      if (!lockPlanejamento) {
-        setProcedimentosSelecionados([]);
+      const idsAtuais = agenda.form.catalogoProcedimentoSaudeIds ?? [];
+      if (!lockPlanejamento && idsAtuais.length === 0) {
+        prevIdsRef.current = [];
+        aplicarProcedimentosSelecionados([]);
       }
     }
-  }, [agenda.form.pacienteId, lockPlanejamento]);
+  }, [agenda.form.pacienteId, agenda.form.catalogoProcedimentoSaudeIds, lockPlanejamento, aplicarProcedimentosSelecionados]);
 
   // Reset expanders when tipo changes
   useEffect(() => {
@@ -338,38 +367,41 @@ export function AgendaFormModal({ agenda }) {
     (proc) => {
       const procId = String(proc?.id || proc?.catalogoProcedimentoSaudeId || '').trim();
       const pItemId = proc?.planejamentoItemId ? String(proc.planejamentoItemId).trim() : null;
+      const current = procedimentosSelecionadosRef.current;
+      const existeIndex = current.findIndex((p) => p.id === procId);
+      const existe = existeIndex >= 0;
+      const itemRemovido = existe ? current[existeIndex] : null;
+      const proximos = existe
+        ? current.filter((p) => p.id !== procId)
+        : [
+          ...current,
+          {
+            id: procId,
+            nome: proc.nome,
+            tipoCodigo: proc.tipoCodigo,
+            duracaoMin: proc.duracaoMin,
+            duracaoSelecionada: proc.duracaoMin,
+            planejamentoItemId: pItemId,
+            isPlano: Boolean(pItemId),
+            planoTitulo: proc.planoTitulo,
+            sessaoNumero: proc.sessaoNumero,
+          },
+        ];
 
-      setProcedimentosSelecionados((current) => {
-        const existeIndex = current.findIndex((p) => p.id === procId);
-        const existe = existeIndex >= 0;
-        const proximos = existe
-          ? current.filter((p) => p.id !== procId)
-          : [
-            ...current,
-            {
-              id: procId,
-              nome: proc.nome,
-              tipoCodigo: proc.tipoCodigo,
-              duracaoMin: proc.duracaoMin,
-              duracaoSelecionada: proc.duracaoMin,
-              planejamentoItemId: pItemId,
-              isPlano: Boolean(pItemId),
-              planoTitulo: proc.planoTitulo,
-              sessaoNumero: proc.sessaoNumero,
-            },
-          ];
-        // Sincroniza IDs com o hook
-        agenda.updateForm('catalogoProcedimentoSaudeIds', proximos.map((p) => p.id));
-        if (existeIndex >= 0) {
-          agenda.removePlanejamentoItemLoteAtIndex?.(existeIndex);
-        }
-        return proximos;
-      });
+      aplicarProcedimentosSelecionados(proximos);
+      agenda.updateForm('catalogoProcedimentoSaudeIds', proximos.map((p) => p.id));
+      if (existe && itemRemovido?.isPlano !== false) {
+        agenda.removePlanejamentoItemLoteAtIndex?.({
+          planejamentoItemId:
+            itemRemovido?.planejamentoItemId || agenda.planoItemEscolhidoPorCatalogo?.[procId] || null,
+          catalogoProcedimentoSaudeId: procId,
+          index: existeIndex,
+        });
+      }
 
-      // Atualiza planoItemEscolhidoPorCatalogo FORA do updater funcional (regra 2.1/2.4)
       agenda.setPlanoItemEscolhidoPorCatalogo?.((prev) => {
         const next = { ...(prev || {}) };
-        if (pItemId) {
+        if (!existe && pItemId) {
           next[procId] = pItemId;
         } else {
           delete next[procId];
@@ -377,23 +409,31 @@ export function AgendaFormModal({ agenda }) {
         return next;
       });
     },
-    [agenda]
+    [agenda, aplicarProcedimentosSelecionados]
   );
 
   const handleRemoverProc = useCallback(
     (id, index) => {
       const procId = String(id).trim();
-      setProcedimentosSelecionados((current) => {
-        let proximos;
-        if (typeof index === 'number' && index >= 0 && index < current.length) {
-          proximos = current.filter((_, idx) => idx !== index);
-        } else {
-          proximos = current.filter((p) => p.id !== procId);
-        }
-        agenda.updateForm('catalogoProcedimentoSaudeIds', proximos.map((p) => p.id));
-        agenda.removePlanejamentoItemLoteAtIndex?.(index);
-        return proximos;
-      });
+      const current = procedimentosSelecionadosRef.current;
+      const temIndiceValido = typeof index === 'number' && index >= 0 && index < current.length;
+      const idxRemovido = temIndiceValido ? index : current.findIndex((p) => p.id === procId);
+      const itemRemovido = idxRemovido >= 0 ? current[idxRemovido] : current.find((p) => p.id === procId);
+      const proximos = temIndiceValido
+        ? current.filter((_, idx) => idx !== index)
+        : current.filter((p) => p.id !== procId);
+
+      aplicarProcedimentosSelecionados(proximos);
+      agenda.updateForm('catalogoProcedimentoSaudeIds', proximos.map((p) => p.id));
+      if (itemRemovido?.isPlano !== false) {
+        agenda.removePlanejamentoItemLoteAtIndex?.({
+          planejamentoItemId:
+            itemRemovido?.planejamentoItemId || agenda.planoItemEscolhidoPorCatalogo?.[procId] || null,
+          catalogoProcedimentoSaudeId: procId,
+          index: idxRemovido >= 0 ? idxRemovido : index,
+        });
+      }
+
       agenda.setPlanoItemEscolhidoPorCatalogo?.((prev) => {
         if (!prev || !prev[procId]) return prev;
         const next = { ...prev };
@@ -401,7 +441,7 @@ export function AgendaFormModal({ agenda }) {
         return next;
       });
     },
-    [agenda]
+    [agenda, aplicarProcedimentosSelecionados]
   );
 
   // ── Handlers de calendário/slots/profissional ───────────────────────────────

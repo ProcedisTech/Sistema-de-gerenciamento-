@@ -172,20 +172,31 @@ async function abrirRetorno({ encerrar = () => ENCERRADO, itemFora = false, foto
   return srv;
 }
 
-/** Liga o retoque, envia a foto da vista no "Mapa de retoque" e marca 1 ponto (confirma a quantidade padrão). */
+/** Liga o retoque, envia a foto da vista no "Mapa de retoque", abre em tela cheia e marca 1 ponto (confirma a quantidade padrão). */
 async function marcarPontoNoRetoque() {
   fireEvent.click(screen.getByRole('switch'));
   await assentarMuito();
   const painel = () => screen.getByText('Mapa de retoque').closest('.rounded-2xl');
   fireEvent.change(painel().querySelector('input[type="file"]'), { target: { files: [arquivoPng('mapa.png', PNG_B_BASE64)] } });
   await assentarMuito();
-  const area = painel().querySelector('.cursor-crosshair');
+  const preview = painel().querySelector('.cursor-pointer');
+  if (!preview) throw new Error('Miniatura clicável do mapa de retoque não encontrada.');
+  fireEvent.pointerDown(preview);
+  await assentarMuito();
+  const area = document.querySelector('.cursor-crosshair');
   if (!area) throw new Error('Área de marcação do mapa de retoque não encontrada.');
   fireEvent.pointerDown(area, { clientX: 400, clientY: 300, pointerId: 1 });
   await assentar();
-  const modal = screen.getByRole('dialog', { name: /Quantidade no ponto/ });
-  fireEvent.click(within(modal).getByRole('button', { name: /^Confirmar$/ }));
+  const modal = screen.queryByRole('dialog', { name: /Quantidade no ponto/ });
+  if (modal) {
+    fireEvent.click(within(modal).getByRole('button', { name: /^Confirmar$/ }));
+  }
   await assentarMuito();
+  const btnFechar = screen.queryByTitle('Fechar tela cheia (Esc)');
+  if (btnFechar) {
+    fireEvent.click(btnFechar);
+    await assentarMuito();
+  }
 }
 
 /** Escritas que o "Concluir Retorno" não pode repetir, contadas a cada momento. */

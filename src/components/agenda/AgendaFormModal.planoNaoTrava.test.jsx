@@ -129,4 +129,83 @@ describe('AgendaFormModal — Seleção de Procedimento do Plano Não Trava o Mo
     // Assert: setPlanoItemEscolhidoPorCatalogo foi chamado para registrar o vínculo
     expect(agenda.setPlanoItemEscolhidoPorCatalogo).toHaveBeenCalled();
   });
+
+  it('StrictMode + remoção mista: remover item da clínica não apaga plano e desmarcar item do plano chama removePlanejamentoItemLoteAtIndex 1x por ID e limpa vínculo', () => {
+    let planoMap = {};
+    const removePlanejamentoItemLoteAtIndex = vi.fn();
+    const setPlanoItemEscolhidoPorCatalogo = vi.fn((updater) => {
+      planoMap = typeof updater === 'function' ? updater(planoMap) : updater;
+    });
+    const agenda = makeMockAgenda({
+      isModoPlanejamento: false,
+      removePlanejamentoItemLoteAtIndex,
+      setPlanoItemEscolhidoPorCatalogo,
+    });
+
+    render(
+      <React.StrictMode>
+        <AgendaFormModal agenda={agenda} />
+      </React.StrictMode>,
+    );
+
+    const inputBusca = screen.getByPlaceholderText('Buscar procedimento...');
+    fireEvent.focus(inputBusca);
+
+    // 1) Seleciona procedimento da clínica primeiro (Preenchimento Labial — isPlano: false, índice 0)
+    fireEvent.click(screen.getByText('Preenchimento Labial').closest('button'));
+
+    // Após selecionar o 1º item, a busca recolhe automaticamente; clica em "Adicionar" para reabrir
+    fireEvent.click(screen.getByRole('button', { name: /Adicionar/i }));
+    fireEvent.focus(screen.getByPlaceholderText('Buscar procedimento...'));
+
+    // 2) Seleciona item do plano em seguida (Toxina Botulínica — isPlano: true, planejamentoItemId: 'item-toxina-1', índice 1)
+    fireEvent.click(screen.getAllByText('Toxina Botulínica')[0].closest('button'));
+    expect(planoMap).toEqual({ 'cat-toxina': 'item-toxina-1' });
+
+    // Remove o procedimento da clínica pelo botão X do chip -> NÃO pode remover do lote de planejamento
+    fireEvent.click(screen.getByRole('button', { name: 'Remover Preenchimento Labial' }));
+    expect(removePlanejamentoItemLoteAtIndex).not.toHaveBeenCalled();
+
+    // Desmarca o procedimento do plano clicando novamente no dropdown -> executa 1x (sem duplicação do StrictMode), por ID, e apaga vínculo
+    fireEvent.click(screen.getByRole('button', { name: /Adicionar/i }));
+    fireEvent.focus(screen.getByPlaceholderText('Buscar procedimento...'));
+    const botaoDropdownToxina = screen
+      .getAllByText('Toxina Botulínica')
+      .map((el) => el.closest('button'))
+      .find(Boolean);
+    fireEvent.click(botaoDropdownToxina);
+    expect(removePlanejamentoItemLoteAtIndex).toHaveBeenCalledTimes(1);
+    expect(removePlanejamentoItemLoteAtIndex).toHaveBeenCalledWith({
+      planejamentoItemId: 'item-toxina-1',
+      catalogoProcedimentoSaudeId: 'cat-toxina',
+      index: 0,
+    });
+    expect(planoMap).toEqual({});
+  });
+
+  it('troca de paciente já com catalogoProcedimentoSaudeIds pré-carregados preserva os chips hidratados', () => {
+    const agendaInicial = makeMockAgenda({
+      form: {
+        ...makeMockAgenda().form,
+        pacienteId: 'pac-1',
+        catalogoProcedimentoSaudeIds: [],
+      },
+    });
+
+    const { rerender } = render(<AgendaFormModal agenda={agendaInicial} />);
+
+    const agendaPacienteB = makeMockAgenda({
+      form: {
+        ...makeMockAgenda().form,
+        pacienteId: 'pac-2',
+        pacienteNome: 'João Paciente',
+        catalogoProcedimentoSaudeIds: ['cat-toxina'],
+      },
+      planoItemEscolhidoPorCatalogo: { 'cat-toxina': 'item-toxina-1' },
+    });
+
+    rerender(<AgendaFormModal agenda={agendaPacienteB} />);
+
+    expect(screen.getByRole('button', { name: 'Remover Toxina Botulínica' })).toBeInTheDocument();
+  });
 });
