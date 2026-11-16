@@ -2,9 +2,7 @@ import { useMemo } from 'react';
 import { matchRoutes, useLocation } from 'react-router';
 import { ABAS_PACIENTE, ROTAS, SECAO_DO_SLUG, SECAO_LEGADA, SLUG_DA_SECAO } from './tabela';
 import { caminhos, lerQueryPacientes } from './caminhos';
-
-// Mesmos prefixos de AppRefactored.jsx:4874-4879 (páginas públicas fora do shell).
-const PREFIXOS_PUBLICOS = ['/c/', '/anamnese', '/assinar'];
+import { PREFIXOS as PREFIXOS_PUBLICOS } from '../pwa/ehRotaPublica';
 
 const VIEW = {
   entrar: 'pacientes',

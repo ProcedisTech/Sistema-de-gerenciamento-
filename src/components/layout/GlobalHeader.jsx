@@ -3,6 +3,7 @@ import { CalendarPlus, Plus, Search } from 'lucide-react';
 import { usePapelExibicao, usePreviaAcesso } from '../../contexts/PreviaAcessoContext';
 import { PacienteSearchInput } from '../agenda/PacienteSearchInput.jsx';
 import NotificationBell from './NotificationBell.jsx';
+import SeloAtualizacao from '../../pwa/SeloAtualizacao.jsx';
 import { ClinicaIdentityBlock } from './ClinicaIdentityBlock.jsx';
 import { UsuarioIdentityCard } from './UsuarioIdentityCard.jsx';
 import { resolveIdentity } from './identityDisplay';
@@ -147,6 +148,8 @@ export function GlobalHeader({
               {atalhoConsulta}
             </div>
           ) : null}
+
+          <SeloAtualizacao />
 
           {!previaAtiva || canSeeNotificacoes ? (
             <div className="shrink-0">

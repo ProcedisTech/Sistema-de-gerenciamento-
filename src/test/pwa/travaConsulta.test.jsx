@@ -1,4 +1,4 @@
-/** A consulta aberta (consultaModule != null) trava a atualização do app, mesmo fora da tela da consulta. */
+/** A consulta só trava a atualização enquanto está NA TELA (emConsultaNaTela); em segundo plano não trava. */
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -28,7 +28,7 @@ describe('trava de atualização pela consulta', () => {
     localStorage.clear()
   })
 
-  it('abrir trava; sair da tela pelo menu lateral continua travado; encerrar libera', async () => {
+  it('abrir trava; sair da tela pelo menu lateral libera; voltar trava; encerrar libera', async () => {
     const estado = { dto: consultaDto(), criada: false }
     await montarApp({
       agendas: [agendaDto({ id: IDS.AGENDA_1 })],
@@ -48,12 +48,13 @@ describe('trava de atualização pela consulta', () => {
     fireEvent.click(within(document.querySelector('aside')).getByTitle('Agenda'))
     await assentarMuito(6)
     await waitFor(() => expect(emConsulta()).toBe(false)) // sinal positivo: a tela da consulta saiu
-    expect(estaTravado()).toBe(true)
+    await waitFor(() => expect(estaTravado()).toBe(false))
 
     // Volta pelo atalho e encerra.
     fireEvent.click(await screen.findByRole('button', { name: /^Voltar à consulta de/ }))
     await assentarMuito(6)
     await waitFor(() => expect(emConsulta()).toBe(true))
+    expect(estaTravado()).toBe(true)
     clicarBotao(/Encerrar consulta/)
     await assentarMuito()
     clicarBotao(/^Finalizar Atendimento$/)

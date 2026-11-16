@@ -9,6 +9,7 @@ import { criarRotas } from './rotas/roteador.jsx'
 import { consumirChavesAntigas } from './rotas/legado.js'
 import { estaTravado } from './pwa/travaAtualizacao.js'
 import { aoMostrarPagina } from './pwa/recarregarAoVoltar.js'
+import { ehRotaPublica } from './pwa/ehRotaPublica.js'
 import AvisoAtualizacao from './pwa/AvisoAtualizacao.jsx'
 import './styles/index.css'
 
@@ -90,7 +91,7 @@ window.addEventListener('unhandledrejection', (event) => {
 });
 
 // Previne inconsistências do bfcache no iOS restaurando páginas em estado quebrado
-window.addEventListener('pageshow', (event) => aoMostrarPagina(event, { estaTravado, recarregar: () => window.location.reload() }));
+window.addEventListener('pageshow', (event) => aoMostrarPagina(event, { estaTravado, recarregar: () => window.location.reload(), publica: ehRotaPublica(window.location.pathname) }));
 
 try {
   if (!rootEl) {

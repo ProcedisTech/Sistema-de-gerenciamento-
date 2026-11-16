@@ -1,3 +1,3 @@
-export function aoMostrarPagina(event, { estaTravado, recarregar }) {
-  if (event.persisted && !estaTravado()) recarregar()
+export function aoMostrarPagina(event, { estaTravado, recarregar, publica }) {
+  if (event.persisted && !publica && !estaTravado()) recarregar()
 }
