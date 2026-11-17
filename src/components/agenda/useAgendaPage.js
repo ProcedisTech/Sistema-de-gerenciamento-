@@ -368,6 +368,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
   const [bloqueioForm, setBloqueioForm] = useState(() => defaultBloqueioForm(todayIso));
   const [bloqueioFormErrors, setBloqueioFormErrors] = useState({});
   const [submittingBloqueio, setSubmittingBloqueio] = useState(false);
+  const bloqueioEmEnvioRef = useRef(false);
   const [bloqueioSubmitVerifying, setBloqueioSubmitVerifying] = useState(false);
   const [bloqueioConflitosCount, setBloqueioConflitosCount] = useState(null);
   const [bloqueioConflitosLoading, setBloqueioConflitosLoading] = useState(false);
@@ -2067,10 +2068,12 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
     if (!validateBloqueioForm()) return false;
     const prof = String(roleUserIdAgenda || '').trim();
     if (!prof) return false;
+    if (bloqueioEmEnvioRef.current) return false;
 
     const data = toDateKey(bloqueioForm.data);
     const { horaInicio: hi, horaFim } = deriveBloqueioIntervalFromForm(bloqueioForm);
 
+    bloqueioEmEnvioRef.current = true;
     setSubmittingBloqueio(true);
     setBloqueioSubmitVerifying(true);
     try {
@@ -2145,6 +2148,7 @@ export function useAgendaPage({ patients = [], authEnabled = false, onAgendaPati
       setError(msg);
       return false;
     } finally {
+      bloqueioEmEnvioRef.current = false;
       setSubmittingBloqueio(false);
       setBloqueioSubmitVerifying(false);
     }

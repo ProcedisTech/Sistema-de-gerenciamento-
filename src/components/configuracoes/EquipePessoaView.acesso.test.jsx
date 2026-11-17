@@ -174,6 +174,12 @@ describe("aba Acesso (Onda 5)", () => {
     expect(screen.queryByRole("button", { name: "Atribuir perfil" })).not.toBeInTheDocument();
   });
 
+  it("isSelf sem perfilAcessoId: não mostra o aviso de sem perfil", async () => {
+    render(<EquipePessoaView {...props} isSelf pessoa={{ ...pessoa, perfilAcessoId: null }} perfil={undefined} />);
+    await waitFor(() => expect(screen.getAllByText("Bruno Silva").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.queryByText(/está sem perfil de acesso/)).not.toBeInTheDocument());
+  });
+
   it("trocar o perfil mostra a barra com 1 e pede confirmação ao trocar de aba", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ["agenda:VER"] })));
     const onDirtyChange = vi.fn();

@@ -13,7 +13,14 @@ import { ViewportDialog } from './ViewportDialog.jsx';
  *   message?: string,
  * }} props
  */
-export function UnsavedChangesModal({ isOpen, onContinue, onDiscard, message }) {
+export function UnsavedChangesModal({
+  isOpen,
+  onContinue,
+  onDiscard,
+  message,
+  title = 'Alterações não salvas',
+  discardLabel = 'Sair sem salvar',
+}) {
   return (
     <ViewportDialog open={isOpen} onDismiss={onContinue} titleId="unsaved-modal-title">
       <div className="px-5 py-4">
@@ -22,7 +29,7 @@ export function UnsavedChangesModal({ isOpen, onContinue, onDiscard, message }) 
             <AlertTriangle className="h-5 w-5 text-amber-600" aria-hidden />
           </div>
           <h2 id="unsaved-modal-title" className="text-[16px] font-bold text-[#0f172a]">
-            Alterações não salvas
+            {title}
           </h2>
         </div>
         <p className="mb-6 text-[14px] leading-relaxed text-[#475569]">
@@ -35,7 +42,7 @@ export function UnsavedChangesModal({ isOpen, onContinue, onDiscard, message }) 
             onClick={onDiscard}
             className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-[13px] font-semibold text-red-700 transition-colors hover:bg-red-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-red-500/20"
           >
-            Sair sem salvar
+            {discardLabel}
           </button>
           <button
             type="button"

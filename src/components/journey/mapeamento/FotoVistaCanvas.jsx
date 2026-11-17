@@ -135,6 +135,9 @@ export function FotoVistaCanvasCore({
 
   // Refs e states para desenho livre (freehand)
   const isDrawing = useRef(false);
+  const dedosAtivosRef = useRef(new Set()); // pointerIds ativos no container
+  const capturaIdRef = useRef(null);
+  const pontoPendenteRef = useRef(null); // { coords, pointerId } do ponto aguardando soltar o dedo
   const liveVerticesRef = useRef([]); // Guarda os vértices sem depender do ciclo do React
   const [liveVertices, setLiveVertices] = useState([]); // Apenas para re-render visual
 
@@ -237,6 +240,13 @@ export function FotoVistaCanvasCore({
 
 
 
+  const descartarTraco = (el) => {
+    isDrawing.current = false;
+    liveVerticesRef.current = [];
+    setLiveVertices([]);
+    try { el.releasePointerCapture(capturaIdRef.current); } catch { /* sem captura */ }
+  };
+
   const handlePointerDown = (e) => {
     if (readOnly) {
       if (onRequestFullscreen) onRequestFullscreen();
@@ -250,6 +260,13 @@ export function FotoVistaCanvasCore({
 
     if (pontoSelecionado) {
       setPontoSelecionado(null);
+      return;
+    }
+
+    dedosAtivosRef.current.add(e.pointerId);
+    if (dedosAtivosRef.current.size >= 2) {
+      pontoPendenteRef.current = null;
+      if (isDrawing.current) descartarTraco(e.currentTarget);
       return;
     }
 
@@ -270,23 +287,8 @@ export function FotoVistaCanvasCore({
     if (modo === 'ponto') {
       const coords = clickToPercent(e.clientX, e.clientY, containerRef.current, imgRef.current);
       if (!coords) return;
-
-      if (configMarcacao?.confirmarDose === false) {
-        const catId = procedimentoArmado?.catalogoProcedimentoSaudeId || procedimentoArmado?.catalogoId || procedimentoArmado?.id;
-        onAddPonto?.(vistaAtual, {
-          ...coords,
-          quantidade: configMarcacao.dosePadrao || 1,
-          tamanho: tamanhoGlobalPonto,
-          profundidade: configMarcacao.profundidade ? Number(configMarcacao.profundidade) : undefined,
-          tipoGeometria: 'ponto',
-          catalogoId: catId,
-          catalogoProcedimentoSaudeId: catId,
-          nomeProcedimento: procedimentoArmado?.nome || procedimentoArmado?.procedimentoNome,
-          cor: procedimentoArmado?.corHex || (catId ? corParaProcedimento(catId) : '#00a88e'),
-        });
-      } else {
-        setPendingClick(coords);
-      }
+      // Na pinça o 1º dedo chega antes do 2º: só grava ao soltar.
+      pontoPendenteRef.current = { coords, pointerId: e.pointerId };
       return;
     }
 
@@ -295,6 +297,7 @@ export function FotoVistaCanvasCore({
       if (!coords) return;
 
       e.currentTarget.setPointerCapture(e.pointerId);
+      capturaIdRef.current = e.pointerId;
       isDrawing.current = true;
       const initialPoint = { x: coords.posX, y: coords.posY };
       liveVerticesRef.current = [initialPoint];
@@ -323,8 +326,39 @@ export function FotoVistaCanvasCore({
     }
   };
 
+  const handlePointerCancel = (e) => {
+    dedosAtivosRef.current.delete(e.pointerId);
+    pontoPendenteRef.current = null;
+    if (isDrawing.current) descartarTraco(e.currentTarget);
+  };
+
   const handlePointerUpOrCancel = (e) => {
+    dedosAtivosRef.current.delete(e.pointerId);
     if (readOnly) return;
+
+    const pendente = pontoPendenteRef.current;
+    if (pendente && pendente.pointerId === e.pointerId && modo === 'ponto') {
+      pontoPendenteRef.current = null;
+      const { coords } = pendente;
+      if (configMarcacao?.confirmarDose === false) {
+        const catId = procedimentoArmado?.catalogoProcedimentoSaudeId || procedimentoArmado?.catalogoId || procedimentoArmado?.id;
+        onAddPonto?.(vistaAtual, {
+          ...coords,
+          quantidade: configMarcacao.dosePadrao || 1,
+          tamanho: tamanhoGlobalPonto,
+          profundidade: configMarcacao.profundidade ? Number(configMarcacao.profundidade) : undefined,
+          tipoGeometria: 'ponto',
+          catalogoId: catId,
+          catalogoProcedimentoSaudeId: catId,
+          nomeProcedimento: procedimentoArmado?.nome || procedimentoArmado?.procedimentoNome,
+          cor: procedimentoArmado?.corHex || (catId ? corParaProcedimento(catId) : '#00a88e'),
+        });
+      } else {
+        setPendingClick(coords);
+      }
+      return;
+    }
+
     if (!isDrawing.current || modo !== 'traco') return;
 
     isDrawing.current = false;
@@ -598,7 +632,8 @@ export function FotoVistaCanvasCore({
           >
             <TransformWrapper
               ref={effectiveTransformRef}
-              panning={{ activationKeys: [' '] }}
+              // a lib 4.0.3 só confere activationKeys no mouse; no toque só vale 'excluded'
+              panning={{ activationKeys: [' '], excluded: canMark ? ['mapa-area-desenho'] : [] }}
               doubleClick={{ disabled: true }}
               wheel={{ disabled: Boolean(previewMode || !fillViewport), step: 0.05, smoothStep: 0.01 }}
               minScale={1}
@@ -609,7 +644,7 @@ export function FotoVistaCanvasCore({
                   <div
                     ref={containerRef}
 
-                    className={`relative z-[1] ${containerSize} ${containerMaxH} max-w-full overflow-hidden rounded-xl pointer-events-auto ${previewMode && onRequestFullscreen ? 'cursor-pointer' : canMark ? 'cursor-crosshair' : readOnly && onRequestFullscreen ? 'cursor-zoom-in' : ''} touch-none`}
+                    className={`relative z-[1] ${canMark ? 'mapa-area-desenho ' : ''}${containerSize} ${containerMaxH} max-w-full overflow-hidden rounded-xl pointer-events-auto ${previewMode && onRequestFullscreen ? 'cursor-pointer' : canMark ? 'cursor-crosshair' : readOnly && onRequestFullscreen ? 'cursor-zoom-in' : ''} touch-none`}
                     style={{
                       ...(effectiveAspect ? { aspectRatio: effectiveAspect } : {}),
                       ...(nativeMaxWidthPx ? { maxWidth: `${nativeMaxWidthPx}px` } : {}),
@@ -617,7 +652,7 @@ export function FotoVistaCanvasCore({
                     onPointerDown={handlePointerDown}
                     onPointerMove={handlePointerMove}
                     onPointerUp={handlePointerUpOrCancel}
-                    onPointerCancel={handlePointerUpOrCancel}
+                    onPointerCancel={handlePointerCancel}
                     role="presentation"
                   >
                     {readOnly && onRequestFullscreen ? (

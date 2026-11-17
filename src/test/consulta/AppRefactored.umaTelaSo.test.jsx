@@ -109,4 +109,41 @@ describe('Modelo unificado de clínica no App real', () => {
     await assentarMuito();
     expect(ultimoRoteador().state.location.pathname).toBe('/configuracoes/feriados');
   }, TIMEOUT);
+
+  describe('usuário sem nenhuma permissão de Configurações', () => {
+    const semConfig = (caminho) =>
+      montarApp({
+        caminho,
+        rotas: [
+          [
+            'GET',
+            /^\/api\/auth\/me$/,
+            () => ({
+              id: 'usr-1',
+              nomeCompleto: 'Beatriz Lima',
+              roleUserId: ROLE_USER_ID,
+              organizacaoId: ORG_ID,
+              perfilAcessoCodigo: 'CST_SEM_CONFIG',
+              permissoes: [PERMISSOES.PACIENTE_VER],
+              apareceNaAgenda: true,
+              fusoHorario: 'America/Sao_Paulo',
+            }),
+          ],
+          ...rotas(),
+        ],
+      });
+
+    it('Meu Perfil continua em /configuracoes/meu-perfil', async () => {
+      await semConfig('/configuracoes/meu-perfil');
+      await assentarMuito();
+      expect(screen.getByText('08:00 - 12:00')).toBeInTheDocument();
+      expect(ultimoRoteador().state.location.pathname).toBe('/configuracoes/meu-perfil');
+    }, TIMEOUT);
+
+    it('outra seção de Configurações (clinica) leva a /pacientes', async () => {
+      await semConfig('/configuracoes/clinica');
+      await assentarMuito();
+      expect(ultimoRoteador().state.location.pathname).toBe('/pacientes');
+    }, TIMEOUT);
+  });
 });

@@ -11,6 +11,7 @@ import { RetornoOrigemSelect } from './RetornoOrigemSelect.jsx';
 import { ProfissionalSearchInput } from './ProfissionalSearchInput.jsx';
 import { AgendaFormDataHoraSheet } from './AgendaFormDataHoraSheet.jsx';
 import { formatAgendaDateTimeCta } from './agendaFormModalUtils.js';
+import { UnsavedChangesModal } from '../shared/UnsavedChangesModal.jsx';
 import {
   deriveDuracaoFromRange,
   deriveHoraFimReal,
@@ -330,6 +331,15 @@ export function AgendaFormModal({ agenda }) {
     }
   }, [origemId]);
 
+  // Foto do formulário ao abrir: o que já veio preenchido (horário clicado, paciente do perfil) não conta.
+  const formAoAbrirRef = useRef(null);
+  const [confirmarDescarte, setConfirmarDescarte] = useState(false);
+  useEffect(() => {
+    formAoAbrirRef.current = agenda.modalMode ? agenda.form : null;
+    setConfirmarDescarte(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só ao abrir/fechar
+  }, [agenda.modalMode]);
+
   // Se a duração muda e o dia selecionado deixa de comportar, limpa data + range.
   useEffect(() => {
     const iso = agenda.form.data;
@@ -341,6 +351,8 @@ export function AgendaFormModal({ agenda }) {
     if (cell.clickable) return;
     agenda.updateForm('data', '');
     agenda.clearRangeSelection?.();
+    // Mantém a foto em sincronia: limpeza automática não é edição do usuário.
+    if (formAoAbrirRef.current?.data === iso) formAoAbrirRef.current = { ...formAoAbrirRef.current, data: '', horaInicio: '' };
   }, [agenda.form.data, agenda.dispCalendarioHeatmap, agenda]);
 
   const resumoTexto = buildResumo({
@@ -546,18 +558,35 @@ export function AgendaFormModal({ agenda }) {
     }
   }, [agenda, procedimentosSelecionados]);
 
-  // Fechar com Escape
+  const pedirFechar = useCallback(() => {
+    const base = formAoAbrirRef.current;
+    const f = agenda.form;
+    const chave = (x) =>
+      JSON.stringify([
+        x?.pacienteId ?? '',
+        x?.catalogoProcedimentoSaudeIds ?? [],
+        x?.data ?? '',
+        x?.horaInicio ?? '',
+        x?.observacao ?? '',
+        x?.tipoAtendimento ?? '',
+        x?.procedimentoFeitoOrigemId ?? '',
+      ]);
+    if (base && chave(base) !== chave(f)) setConfirmarDescarte(true);
+    else agenda.closeModal();
+  }, [agenda]);
+
+  // Fechar com Escape (ignorado com a confirmação aberta)
   useEffect(() => {
     if (!agenda.modalMode) return undefined;
     const onKeyDown = (e) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        agenda.closeModal();
+        if (!confirmarDescarte) pedirFechar();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [agenda]);
+  }, [agenda.modalMode, confirmarDescarte, pedirFechar]);
 
   if (!agenda.modalMode) return null;
 
@@ -883,7 +912,7 @@ export function AgendaFormModal({ agenda }) {
     >
       <div
         className="fixed inset-0 bg-ink-900/40 backdrop-blur-xs transition-opacity"
-        onClick={agenda.closeModal}
+        onClick={pedirFechar}
         aria-hidden
       />
 
@@ -1235,6 +1264,20 @@ export function AgendaFormModal({ agenda }) {
       )}
 
       {agenda.foraDispModal}
+
+      {confirmarDescarte ? (
+        <UnsavedChangesModal
+          isOpen={confirmarDescarte}
+          title="Descartar o agendamento?"
+          discardLabel="Descartar"
+          message="O que você preencheu será perdido."
+          onContinue={() => setConfirmarDescarte(false)}
+          onDiscard={() => {
+            setConfirmarDescarte(false);
+            agenda.closeModal();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

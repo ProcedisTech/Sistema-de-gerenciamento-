@@ -988,6 +988,8 @@ export function PatientProfileView({
   const [profilePhotoBusy, setProfilePhotoBusy] = useState(false);
   const [gerarPdfBusy, setGerarPdfBusy] = useState(false);
   const gerarPdfInFlightRef = useRef(false);
+  const [notaRapidaBusy, setNotaRapidaBusy] = useState(false);
+  const notaRapidaInFlightRef = useRef(false);
   const [prontuarioExpanded, setProntuarioExpanded] = useState(() => ({}));
   const [alertasModalOpen, setAlertasModalOpen] = useState(false);
   const [manualAlerts, setManualAlerts] = useState([]);
@@ -2114,6 +2116,9 @@ export function PatientProfileView({
         );
         return;
       }
+      if (notaRapidaInFlightRef.current) return;
+      notaRapidaInFlightRef.current = true;
+      setNotaRapidaBusy(true);
       try {
         await notasApi.create(selectedPatient.id, {
           roleUserId,
@@ -2125,6 +2130,9 @@ export function PatientProfileView({
         setQuickNoteText('');
       } catch (e) {
         toast.error(e.message || 'Erro ao salvar nota.');
+      } finally {
+        notaRapidaInFlightRef.current = false;
+        setNotaRapidaBusy(false);
       }
       return;
     }
@@ -3252,7 +3260,7 @@ export function PatientProfileView({
                   <button
                     type="button"
                     onClick={handleAddQuickNote}
-                    disabled={!quickNoteText.trim()}
+                    disabled={!quickNoteText.trim() || notaRapidaBusy}
                     className="flex h-8 w-full items-center justify-center rounded-lg bg-[#00a88e] text-[12px] font-semibold text-white transition-colors hover:bg-[#00967f] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Adicionar nota rápida

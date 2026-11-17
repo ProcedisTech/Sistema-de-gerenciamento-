@@ -4888,10 +4888,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
     toast,
   ]);
 
-  const handleUploadDocumentFiles = () => {
-    // Stub: evita ReferenceError no botão de documentos do widget; implementar envio quando houver API.
-  };
-
   const persistAnnotatedPhotoToGallery = React.useCallback(
     async (blob, opts = {}) => {
       if (!blob || !(blob instanceof Blob)) return { ok: false, skipped: true };
@@ -5089,7 +5085,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
   // Redirecionamentos de rota (declarativos; depois de todos os hooks e dos portões).
   if (rota.entrar && !saidaManual.existe()) return <Navigate to={caminhos.pacientes()} replace />;
   if (activeView === 'consulta' && consultaModule == null) return <Navigate to={caminhos.pacientes()} replace />;
-  if (activeView === 'configuracoes' && !canSeeConfig) return <Navigate to={caminhos.pacientes()} replace />;
+  if (activeView === 'configuracoes' && !canSeeConfig && configSection !== 'perfil') return <Navigate to={caminhos.pacientes()} replace />;
   if (activeView === 'gestao-equipe' && !canSeeConfigEquipe && !openingSelfProfile) {
     return <Navigate to={caminhos.pacientes()} replace />;
   }
@@ -6437,7 +6433,6 @@ function AppRefactoredInner({ onCanalAvisos }) {
         retakePhoto={cameraState.retakePhoto}
         confirmPhoto={handleConfirmProcedurePhoto}
         uploadPhotoFiles={cameraState.uploadPhotoFiles}
-        uploadDocumentFiles={handleUploadDocumentFiles}
         cameraFacing={cameraState.preferredFacing}
         onToggleCameraFacing={cameraState.toggleCameraFacing}
       />

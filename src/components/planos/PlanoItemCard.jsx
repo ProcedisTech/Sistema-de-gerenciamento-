@@ -20,6 +20,7 @@ import {
 import {
   diaDoInstante,
   ehInstante,
+  formatarInstante,
   hojeDaClinica,
   normalizarDataCalendario,
   somarDias,
@@ -304,6 +305,9 @@ export function PlanoItemCard({
                 </>
               )}
               {(() => {
+                // Instante UTC (OffsetDateTime) vira dia/hora no fuso da clínica; texto "HH:mm" só é cortado.
+                const horaCurta = (h) => (ehInstante(h) ? formatarInstante(h, fuso, 'hora') : String(h).slice(0, 5));
+                const diaCurto = (d) => formatDataPt(ehInstante(d) ? diaDoInstante(d, fuso) : d);
                 const dataRealizada =
                   item.dataRealizacao ||
                   item.realizadoEm ||
@@ -324,8 +328,8 @@ export function PlanoItemCard({
                     <>
                       <span>·</span>
                       <span className="text-slate-500 font-medium">
-                        Realizado em {formatDataPt(dataRealizada)}
-                        {horaRealizada ? ` às ${String(horaRealizada).slice(0, 5)}` : ''}
+                        Realizado em {diaCurto(dataRealizada)}
+                        {horaRealizada ? ` às ${horaCurta(horaRealizada)}` : ''}
                       </span>
                     </>
                   );

@@ -1103,7 +1103,7 @@ export default function EquipePessoaView({
     setShowAtribuirPerfil(false);
     return executarSalvarAcessoDireto(perfilId, pessoa.roleId || draftRole);
   };
-  const avisoSemPerfil = !pessoa.perfilAcessoId ? (
+  const avisoSemPerfil = !isSelf && !pessoa.perfilAcessoId ? (
     <div
       role="status"
       className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
