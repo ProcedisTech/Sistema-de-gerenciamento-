@@ -186,6 +186,7 @@ async function marcarPontoNoRetoque() {
   const area = document.querySelector('.cursor-crosshair');
   if (!area) throw new Error('Área de marcação do mapa de retoque não encontrada.');
   fireEvent.pointerDown(area, { clientX: 400, clientY: 300, pointerId: 1 });
+  fireEvent.pointerUp(area, { clientX: 400, clientY: 300, pointerId: 1 });
   await assentar();
   const modal = screen.queryByRole('dialog', { name: /Quantidade no ponto/ });
   if (modal) {

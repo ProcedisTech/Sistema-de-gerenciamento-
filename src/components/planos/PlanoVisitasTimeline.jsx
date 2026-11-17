@@ -16,7 +16,7 @@ import { GaleriaMapaThumb } from '../patients/galeria/GaleriaMapaThumb.jsx';
 import { GALERIA_CATEGORIA_LABELS } from '../../utils/pacienteGaleria.js';
 import { GALERIA_CATEGORIA_BADGE_CLASS } from '../patients/galeria/galeriaUiConstants.js';
 import { formatValorBrl } from '../../utils/planejamentoDraftUtils.js';
-import { formatarDataCalendario, normalizarDataCalendario, somarDias, diaDoInstante } from '../../utils/datasClinica.js';
+import { formatarDataCalendario, normalizarDataCalendario, somarDias, diaDoInstante, ehInstante, formatarInstante } from '../../utils/datasClinica.js';
 import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
 import { PlanoFotoLightbox } from './PlanoFotoLightbox.jsx';
 import { PlanoItemCard } from './PlanoItemCard.jsx';
@@ -404,7 +404,8 @@ export function PlanoVisitasTimeline({
       const dataReal = pfEncontrado.criadoEm ? diaDoInstante(pfEncontrado.criadoEm, fuso) : null;
       let horaReal = null;
       if (pfEncontrado.horaInicio) {
-        horaReal = String(pfEncontrado.horaInicio).slice(0, 5);
+        const h = pfEncontrado.horaInicio;
+        horaReal = ehInstante(h) ? formatarInstante(h, fuso, 'hora') : String(h).slice(0, 5);
       } else if (pfEncontrado.criadoEm) {
         try {
           const dt = new Date(pfEncontrado.criadoEm);
@@ -499,7 +500,7 @@ export function PlanoVisitasTimeline({
           if (retornoDataIso) {
             sessoesRetorno = [{
               dataAgendamento: retornoDataIso,
-              horaInicio: fotosRetorno[0].registradoEm ? String(fotosRetorno[0].registradoEm).slice(11, 16) : null,
+              horaInicio: fotosRetorno[0].registradoEm ? formatarInstante(fotosRetorno[0].registradoEm, fuso, 'hora') : null,
               statusCodigo: 'realizado',
               isSynthetic: true,
             }];
@@ -626,13 +627,13 @@ export function PlanoVisitasTimeline({
         const rawData = String(f.dataISO || f.dataReferencia || '').slice(0, 10);
         if (rawData && rawData !== 'sem-data') {
           dataAvaliacao = rawData;
-          horaAvaliacao = f.registradoEm ? String(f.registradoEm).slice(11, 16) : null;
+          horaAvaliacao = f.registradoEm ? formatarInstante(f.registradoEm, fuso, 'hora') : null;
           break;
         }
       }
       if (!dataAvaliacao && plano?.criadoEm) {
         dataAvaliacao = diaDoInstante(plano.criadoEm, fuso);
-        horaAvaliacao = String(plano.criadoEm).slice(11, 16);
+        horaAvaliacao = formatarInstante(plano.criadoEm, fuso, 'hora');
       }
       if (!dataAvaliacao) {
         dataAvaliacao = hojeIso;

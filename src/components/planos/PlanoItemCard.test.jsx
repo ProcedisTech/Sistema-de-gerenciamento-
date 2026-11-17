@@ -32,6 +32,22 @@ describe('PlanoItemCard - Exibição de Procedimentos Realizados', () => {
   });
 });
 
+describe('PlanoItemCard - instante UTC no fuso da clínica', () => {
+  it('realizadoEm 02:40Z mostra 15/11/2026 às 23:40 (Brasília)', () => {
+    const item = {
+      id: 'item-utc',
+      catalogoNome: 'Bioestimulador',
+      statusItem: 'finalizado',
+      realizadoEm: '2026-11-16T02:40:00Z',
+      horaRealizacao: '2026-11-16T02:40:00Z',
+    };
+
+    render(<PlanoItemCard item={item} plano={{ id: 'plano-1', titulo: 'Plano' }} visitaLabel="Visita 1" />);
+
+    expect(screen.getByText(/Realizado em 15\/11\/2026 às 23:40/)).not.toBeNull();
+  });
+});
+
 describe('PlanoItemCard - Ação de Edição do Procedimento', () => {
   it('renderiza o botão de editar e aciona onEdit com o item ao ser clicado', () => {
     const item = {

@@ -3,7 +3,6 @@ import { ArrowLeft, Save, Loader2, UserPlus, X } from 'lucide-react';
 import {
   normalizeCpf,
   isCpfIncomplete,
-  isCpfValidCheckDigits,
   calculateAgeFromISODate,
   sanitizeBirthDateDigits,
   formatBirthDigitsBR,
@@ -14,7 +13,7 @@ import { formatPhoneForApi } from '../../utils/phoneUtils';
 import { getPacienteCreateErrorFeedback, pacientesApi } from '../../services/api';
 import { useToast } from '../../contexts/useToast.js';
 import { convertToWebP } from '../../utils/imageUtils';
-import { validatePacienteFormBasics } from '../../utils/patientFormValidation';
+import { validateCpfField, validatePacienteFormBasics } from '../../utils/patientFormValidation';
 import { normalizeCepForApi } from '../../utils/cepUtils.js';
 import { mapBackendPatient } from '../../utils/patientMapping';
 import { PatientForm } from './PatientForm.jsx';
@@ -192,6 +191,15 @@ export function PatientCreateView({
       setErrors(validationErrors);
       const dnDigits = dataNascimentoDisplay.replace(/\D/g, '');
       const cy = parseDataCalendario(hojeIso)?.ano;
+      // CPF com dígitos mas inválido: o motivo aparece no campo; se for o único erro, também no banner e no toast.
+      const cpfMsg = validationErrors.cpf && normalizeCpf(cpf).length > 0 ? validateCpfField(cpf).message : '';
+      if (cpfMsg) setCpfErrorText(cpfMsg);
+      if (cpfMsg && Object.keys(validationErrors).every((k) => k === 'cpf')) {
+        setErro(cpfMsg);
+        toast.error(cpfMsg);
+        scrollFormTop();
+        return;
+      }
       if (validationErrors.dataNascimento) {
         if (dnDigits.length > 0 && dnDigits.length < 8) {
           setErro(birthDateValidationUserMessage('incomplete', cy));
@@ -210,24 +218,6 @@ export function PatientCreateView({
     }
 
     const cpfDigits = normalizeCpf(cpf);
-    if (cpfDigits.length !== 11) {
-      setErrors((prev) => ({ ...prev, cpf: true }));
-      setCpfErrorText('O CPF deve conter 11 dígitos.');
-      setErro('Por favor, preencha todos os campos obrigatórios (*).');
-      toast.error('O CPF deve conter 11 dígitos.');
-      scrollFormTop();
-      return;
-    }
-
-    if (!isCpfValidCheckDigits(cpfDigits)) {
-      const msg = 'CPF inválido. Verifique os dígitos verificadores.';
-      setErrors((prev) => ({ ...prev, cpf: true }));
-      setCpfErrorText(msg);
-      setErro(msg);
-      toast.error(msg);
-      scrollFormTop();
-      return;
-    }
 
     setErro('');
     setCpfErrorText('');

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Camera, Upload, X, SwitchCamera } from 'lucide-react';
+import { Camera, X, SwitchCamera } from 'lucide-react';
 
 export function ProcedureCameraWidget({
   visible,
@@ -16,7 +16,6 @@ export function ProcedureCameraWidget({
   capturePhoto,
   retakePhoto,
   confirmPhoto,
-  uploadDocumentFiles,
   cameraFacing = 'environment',
   onToggleCameraFacing,
 }) {
@@ -49,24 +48,6 @@ export function ProcedureCameraWidget({
         >
           <Camera className="w-7 h-7 text-white" strokeWidth={2.5} />
         </button>
-
-        {/* Upload de arquivos / documentos */}
-        <label
-          title="Enviar arquivos (upload)"
-          className="group w-14 h-14 rounded-2xl bg-white hover:bg-[#eff6ff] transition-all shadow-md flex flex-col items-center justify-center border border-[#3b82f6]/40 cursor-pointer gap-1"
-        >
-          <Upload className="w-5 h-5 text-[#3b82f6]" strokeWidth={2.5} />
-          <span className="text-[9px] font-bold text-[#3b82f6] leading-none">Upload</span>
-          <input
-            type="file"
-            className="hidden"
-            multiple
-            onChange={(event) => {
-              uploadDocumentFiles?.(event.target.files);
-              event.target.value = '';
-            }}
-          />
-        </label>
       </div>
 
       {photoModalOpen && (
