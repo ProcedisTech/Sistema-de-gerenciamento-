@@ -18,7 +18,7 @@ vi.mock('../../contexts/AvisosProvider.jsx', async () => (await import('./canalA
 const GALERIA = /^\/api\/v1\/pacientes\/[^/]+\/galeria$/;
 const FAIXA = {
   antes: 'Antes',
-  depois: 'Depois',
+  depois: 'Pós imediato',
   mapa: 'Mapa de Aplicação (Legado)',
   outras: 'Outras Fotos (Durante / Produtos)',
 };
