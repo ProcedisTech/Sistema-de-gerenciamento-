@@ -118,6 +118,7 @@ export function MapaAplicacaoPanel({
   pendingCapture,
   onCaptureConsumed,
   onPrepareCapture,
+  onOpenCamera,
   onEnsureProcedimento,
   onMudarCorProcedimento,
   onAdicionarProcedimento,
@@ -711,7 +712,11 @@ export function MapaAplicacaoPanel({
               try {
                 if (!(await ensureReady())) return;
                 onPrepareCapture?.(vistaAtual);
-                toast.info('Use o botão da câmera flutuante para capturar a foto desta vista.');
+                if (typeof onOpenCamera === 'function') {
+                  onOpenCamera();
+                } else {
+                  toast.info('Use o botão da câmera flutuante para capturar a foto desta vista.');
+                }
               } finally {
                 setPhotoActionBusy(false);
               }

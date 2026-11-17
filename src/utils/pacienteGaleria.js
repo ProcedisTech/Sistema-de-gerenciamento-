@@ -17,7 +17,7 @@ export const GALERIA_CATEGORIA = {
 export const GALERIA_CATEGORIA_LABELS = {
   antes: 'Antes',
   planejamento: 'Planejamento',
-  depois: 'Depois',
+  depois: 'Pós imediato',
   pos_imediato: 'Pós-Imediato',
   mapa: 'Mapa de Aplicação',
   avaliacao: 'Avaliação',

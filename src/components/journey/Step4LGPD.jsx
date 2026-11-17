@@ -3195,6 +3195,7 @@ export function Step4Procedimento({
             pendingCapture={pendingMapaCapture}
             onCaptureConsumed={onMapaCaptureConsumed}
             onPrepareCapture={onPrepareMapaCapture}
+            onOpenCamera={(execucaoBloqueadaPorTermos || termosValidando) ? undefined : onProcedureOpenCamera}
             onEnsureProcedimento={onEnsureProcedimento}
             execucaoBloqueadaPorTermos={execucaoBloqueadaPorTermos}
             termosValidando={termosValidando}

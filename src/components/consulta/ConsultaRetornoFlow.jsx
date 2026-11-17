@@ -1098,9 +1098,13 @@ export function ConsultaRetornoFlow({
                         }
                         onRequestCapture={() => {
                           onPrepareMapaCapture?.(retornoVistaAtual);
-                          toast.info(
-                            'Use o botão da câmera flutuante para capturar a foto desta vista.',
-                          );
+                          if (typeof onProcedureOpenCamera === 'function') {
+                            onProcedureOpenCamera();
+                          } else {
+                            toast.info(
+                              'Use o botão da câmera flutuante para capturar a foto desta vista.',
+                            );
+                          }
                         }}
                         onRequestUpload={(file) => {
                           if (!file) return;
