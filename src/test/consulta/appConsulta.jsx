@@ -88,7 +88,7 @@ export function clicarBotao(nome, indice = 0) {
 }
 
 /**
- * @param {{ agendas?: object[], rotas?: Array, agora?: string, view?: string, sessao?: Record<string,string>, permissoes?: string[] }} opcoes
+ * @param {{ agendas?: object[], rotas?: Array, agora?: string, view?: string, sessao?: Record<string,string>, permissoes?: string[], caminho?: string, strictMode?: boolean }} opcoes
  */
 export async function montarApp({
   agendas = [],
@@ -98,6 +98,7 @@ export async function montarApp({
   sessao = {},
   permissoes = Object.values(PERMISSOES),
   caminho,
+  strictMode = false,
 } = {}) {
   prepararAmbienteSnapshot();
   vi.setSystemTime(new Date(agora));
@@ -107,7 +108,14 @@ export async function montarApp({
   for (const [k, v] of Object.entries(sessao)) sessionStorage.setItem(k, v);
   const srv = criarServidorEncerrarFalso({ permissoes, rotas: [...rotas, ...rotasBase({ agendas })] });
   vi.stubGlobal('fetch', srv.fetchFalso);
-  montarComRoteador(<AppRoot />, { caminho: caminho ?? caminhoDoLegado({ view, sessao, idPorCpf: { [pacienteDto.cpf]: IDS.PACIENTE } }) });
+  const app = strictMode ? (
+    <React.StrictMode>
+      <AppRoot />
+    </React.StrictMode>
+  ) : (
+    <AppRoot />
+  );
+  montarComRoteador(app, { caminho: caminho ?? caminhoDoLegado({ view, sessao, idPorCpf: { [pacienteDto.cpf]: IDS.PACIENTE } }) });
   await assentarMuito(6);
   return srv;
 }

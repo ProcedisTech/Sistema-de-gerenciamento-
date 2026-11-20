@@ -39,7 +39,7 @@ export function PlanoProtocoloResumo({ itens = [], plano }) {
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
       <div className="flex items-center gap-2.5 flex-wrap">
         <h1 className="text-lg font-extrabold tracking-tight text-slate-900">
-          Plano de tratamento
+          Plano de Tratamento
         </h1>
         <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">
           {plano?.statusCodigo === 'concluido'

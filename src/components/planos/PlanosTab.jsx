@@ -69,7 +69,11 @@ import {
   formatarDataCalendario,
   formatarInstante,
   hojeDaClinica,
+  instanteDoHorarioDaClinica,
+  instanteMs,
   normalizarDataCalendario,
+  parseDataCalendario,
+  parseDataHoraCalendario,
   somarDias,
 } from '../../utils/datasClinica.js';
 import { useAgoraDaClinica } from '../hooks/useAgoraDaClinica.js';
@@ -88,6 +92,94 @@ function formatDataPt(valor, fuso) {
   if (!valor) return '—';
   if (ehInstante(valor)) return formatarInstante(valor, fuso, 'data') || String(valor);
   return formatarDataCalendario(valor, 'curta') || String(valor);
+}
+
+const CHAVES_DATA_HISTORICO = ['horaFim', 'finalizadoEm', 'horaInicio', 'dataRealizacao', 'criadoEm'];
+
+function normalizarTextoStatus(valor) {
+  return String(valor)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .trim();
+}
+
+function ehProcedimentoHistoricoValido(proc) {
+  if (!proc || typeof proc !== 'object') return false;
+  const statusList = [
+    proc.statusNome,
+    proc.statusCodigo,
+    typeof proc.status === 'string' ? proc.status : null,
+  ]
+    .filter((s) => typeof s === 'string' && s.trim() !== '')
+    .map(normalizarTextoStatus);
+
+  if (statusList.length === 0) return true; // compatibilidade com dados legados/fixtures sem status
+  if (
+    statusList.some(
+      (st) =>
+        st.includes('cancel') ||
+        st.includes('excluid') ||
+        st.includes('andamento') ||
+        st.includes('agend'),
+    )
+  ) {
+    return false;
+  }
+  return statusList.some(
+    (st) =>
+      st.includes('finaliz') ||
+      st.includes('realiz') ||
+      st.includes('concluid') ||
+      st.includes('retorno'),
+  );
+}
+
+function resolverNomeProcedimentoHistorico(proc) {
+  const candidatos = [
+    proc?.procedimentoNome,
+    proc?.nomeManual,
+    proc?.nomeProcedimento,
+    proc?.catalogoNome,
+    proc?.nome,
+  ];
+  for (const c of candidatos) {
+    if (typeof c === 'string' && c.trim() !== '') return c.trim();
+  }
+  return 'Procedimento';
+}
+
+function resolverDataProcedimentoHistorico(proc, fuso) {
+  for (const chave of CHAVES_DATA_HISTORICO) {
+    const bruto = proc?.[chave];
+    if (bruto == null || bruto === '') continue;
+    const s = String(bruto).trim();
+    if (!s) continue;
+    if (ehInstante(s)) {
+      const ms = instanteMs(s);
+      if (Number.isFinite(ms)) return { dataValor: s, sortMs: ms };
+      continue;
+    }
+    const dh = parseDataHoraCalendario(s);
+    if (dh) {
+      const ms = instanteDoHorarioDaClinica(dh.dataIso, dh.hhmm, fuso);
+      return {
+        dataValor: dh.dataIso,
+        sortMs: Number.isFinite(ms) ? ms : Date.UTC(dh.ano, dh.mes - 1, dh.dia, dh.hora, dh.minuto),
+      };
+    }
+    const d = parseDataCalendario(s);
+    if (d) {
+      const dataCal = normalizarDataCalendario(s);
+      const ms = instanteDoHorarioDaClinica(dataCal, '00:00', fuso);
+      return {
+        dataValor: dataCal,
+        sortMs: Number.isFinite(ms) ? ms : Date.UTC(d.ano, d.mes - 1, d.dia),
+      };
+    }
+  }
+  return { dataValor: null, sortMs: 0 };
 }
 
 function formatarTempoCadeira(minutos) {
@@ -623,7 +715,7 @@ function PlanoCard({
           </div>
 
           <h3 className="text-sm font-bold text-slate-900">
-            {plano.observacao || 'Protocolo de Tratamento Facial / Corporal'}
+            {plano.observacao || 'Plano de Tratamento'}
           </h3>
 
           <div className="flex items-center gap-2 text-[11px] text-slate-500">
@@ -1011,7 +1103,7 @@ function PlanoHistoricoProfileCard({
   const itens = Array.isArray(plano.itens) ? plano.itens : [];
   const { total } = calcSessoesPlano(itens);
   const titulo =
-    truncateObservacao(plano.observacao) || 'Plano de tratamento';
+    truncateObservacao(plano.observacao) || 'Plano de Tratamento';
   const motivo = motivoEncerramentoPlano(plano);
   const isEncerrado = plano.statusCodigo === 'encerrado';
   const StatusIcon = plano.statusCodigo === 'concluido' ? CheckCircle2 : XCircle;
@@ -1101,7 +1193,7 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
   paciente,
   roleUserId,
   pacienteNome,
-  procedimentosFeitos = EMPTY_ARRAY,
+  procedimentosFeitos,
   galeriaFotosInicial = EMPTY_ARRAY,
   onAgendarItem,
   onAgendarRetornoItem,
@@ -1288,47 +1380,77 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
     carregarGaleria();
   }, [carregarGaleria]);
 
-  const [internalProcedimentosFeitos, setInternalProcedimentosFeitos] = useState(
-    Array.isArray(procedimentosFeitos) && procedimentosFeitos.length > 0 ? procedimentosFeitos : EMPTY_ARRAY
-  );
-
+  const controlaFeitosExternamente = Array.isArray(procedimentosFeitos);
+  const [internalProcedimentosFeitos, setInternalProcedimentosFeitos] = useState(EMPTY_ARRAY);
   const pacienteFeitosPedidoRef = useRef('');
+  const feitosRequestSeqRef = useRef(0);
 
   const carregarProcedimentosFeitos = useCallback(async () => {
+    if (controlaFeitosExternamente) return;
     const pid = String(pacienteId ?? '').trim();
+    const mudouPaciente = pacienteFeitosPedidoRef.current !== pid;
     pacienteFeitosPedidoRef.current = pid;
+    const reqSeq = ++feitosRequestSeqRef.current;
+    if (mudouPaciente) {
+      setInternalProcedimentosFeitos(EMPTY_ARRAY);
+    }
     if (!pid) return;
     try {
       const res = await procedimentosApi.byPaciente(pid);
-      if (pacienteFeitosPedidoRef.current !== pid) return;
+      if (pacienteFeitosPedidoRef.current !== pid || feitosRequestSeqRef.current !== reqSeq) return;
       if (Array.isArray(res)) {
-        setInternalProcedimentosFeitos(res);
+        const sanitizados = res.filter((item) => item && typeof item === 'object');
+        setInternalProcedimentosFeitos(sanitizados.length > 0 ? sanitizados : EMPTY_ARRAY);
       }
     } catch {
       // no-op silencioso
     }
-  }, [pacienteId]);
+  }, [pacienteId, controlaFeitosExternamente]);
 
-  // Se o componente pai fornecer procedimentosFeitos com itens (ex: Perfil do Paciente), sincroniza diretamente
+  // Se não houver lista controlada externamente, busca do backend uma única vez por pacienteId
   useEffect(() => {
-    if (Array.isArray(procedimentosFeitos) && procedimentosFeitos.length > 0) {
-      setInternalProcedimentosFeitos(procedimentosFeitos);
-    }
-  }, [procedimentosFeitos]);
-
-  // Se não houver lista externa de procedimentos, busca do backend uma única vez por pacienteId
-  useEffect(() => {
-    if (!Array.isArray(procedimentosFeitos) || procedimentosFeitos.length === 0) {
-      carregarProcedimentosFeitos();
-    }
-  }, [pacienteId, carregarProcedimentosFeitos, procedimentosFeitos]);
+    if (controlaFeitosExternamente) return undefined;
+    carregarProcedimentosFeitos();
+    return () => {
+      feitosRequestSeqRef.current += 1;
+    };
+  }, [carregarProcedimentosFeitos, controlaFeitosExternamente]);
 
   const listaProcedimentosFeitos = useMemo(() => {
-    if (Array.isArray(procedimentosFeitos) && procedimentosFeitos.length > 0) {
-      return procedimentosFeitos;
+    if (controlaFeitosExternamente) {
+      const pidAtual = String(pacienteId ?? '').trim();
+      const filtrados = procedimentosFeitos.filter((item) => {
+        if (!item || typeof item !== 'object') return false;
+        if (pidAtual && item.pacienteId != null && String(item.pacienteId).trim() !== pidAtual) {
+          return false;
+        }
+        return true;
+      });
+      return filtrados.length > 0 ? filtrados : EMPTY_ARRAY;
     }
     return internalProcedimentosFeitos;
-  }, [procedimentosFeitos, internalProcedimentosFeitos]);
+  }, [controlaFeitosExternamente, procedimentosFeitos, pacienteId, internalProcedimentosFeitos]);
+
+  const historicoClinicoRecente = useMemo(() => {
+    const lista = Array.isArray(listaProcedimentosFeitos) ? listaProcedimentosFeitos : EMPTY_ARRAY;
+    return lista
+      .filter(ehProcedimentoHistoricoValido)
+      .map((proc, idx) => {
+        const { dataValor, sortMs } = resolverDataProcedimentoHistorico(proc, fuso);
+        const isRetoque = Boolean(proc?.isRetoque);
+        const isRetorno = Boolean(proc?.procedimentoFeitoOrigemId || isRetoque);
+        return {
+          key: proc?.id || `hist-${idx}`,
+          nome: resolverNomeProcedimentoHistorico(proc),
+          dataValor,
+          sortMs,
+          isRetorno,
+          isRetoque,
+        };
+      })
+      .sort((a, b) => b.sortMs - a.sortMs)
+      .slice(0, 4);
+  }, [listaProcedimentosFeitos, fuso]);
 
   const _procedimentoSearchOptions = useMemo(
     () =>
@@ -2949,17 +3071,22 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
               Histórico Clínico Recente
             </span>
 
-            {listaProcedimentosFeitos.length > 0 ? (
+            {historicoClinicoRecente.length > 0 ? (
               <div className="space-y-2">
-                {listaProcedimentosFeitos.slice(0, 4).map((proc, idx) => (
-                  <div key={idx} className="flex items-start justify-between gap-2 text-xs">
-                    <span className="font-medium text-slate-700 truncate">
-                      {proc.nomeProcedimento || proc.nome || 'Procedimento'}
-                    </span>
+                {historicoClinicoRecente.map((item) => (
+                  <div key={item.key} className="flex items-start justify-between gap-2 text-xs">
+                    <div className="min-w-0 flex items-center gap-1.5">
+                      <span className="font-medium text-slate-700 truncate" title={item.nome}>
+                        {item.nome}
+                      </span>
+                      {item.isRetorno ? (
+                        <span className="shrink-0 rounded-full border border-sky-200 bg-sky-50 px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-wide text-sky-700">
+                          {item.isRetoque ? 'Retoque' : 'Retorno'}
+                        </span>
+                      ) : null}
+                    </div>
                     <span className="text-[11px] text-slate-400 font-mono shrink-0">
-                      {proc.dataRealizacao
-                        ? formatDataPt(proc.dataRealizacao, fuso)
-                        : 'Realizado'}
+                      {item.dataValor ? formatDataPt(item.dataValor, fuso) : 'Realizado'}
                     </span>
                   </div>
                 ))}
@@ -3056,7 +3183,7 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
                       </div>
 
                       <h3 className="text-sm font-bold text-slate-900">
-                        {plano.observacao || 'Protocolo de Tratamento Facial / Corporal'}
+                        {plano.observacao || 'Plano de Tratamento'}
                       </h3>
 
                       <div className="flex items-center gap-2 text-[11px] text-slate-500">

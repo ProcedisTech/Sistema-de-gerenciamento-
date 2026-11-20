@@ -537,6 +537,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
   const [isSalvandoProcedimento] = React.useState(false);
   /** Rastreia ultimo pacienteId para resetar anamnese ao trocar paciente. undefined = primeiro mount. */
   const prevJourneyPacienteIdRef = useRef(undefined);
+  /** B-60: paciente recém-entrado por `entrarNaConsulta` cujo bloco de sessão não deve ser zerado na troca A → B. */
+  const iniciandoConsultaPacienteRef = useRef(null);
   /** JPEGs anotados (avaliação) enfileirados até existir procedimentoFeitoId no finalizar. */
   const pendingAnnotatedGalleryBlobsRef = useRef([]);
   /** Último mapa relacional de avaliação salvo na sessão (contingência determinística para upload). */
@@ -1286,23 +1288,42 @@ function AppRefactoredInner({ onCanalAvisos }) {
 
   // Reseta estado de anamnese ao trocar de paciente para evitar vazamento de draft entre pacientes
   React.useEffect(() => {
-    const newId = pacienteAtual?.id ?? null;
-    const prevId = prevJourneyPacienteIdRef.current;
-    prevJourneyPacienteIdRef.current = newId;
+    const rawNewId = pacienteAtual?.id ?? null;
+    const rawPrevId = prevJourneyPacienteIdRef.current;
+    const newId = rawNewId != null ? String(rawNewId) : null;
+    const prevId = rawPrevId === undefined ? undefined : (rawPrevId != null ? String(rawPrevId) : null);
+    prevJourneyPacienteIdRef.current = rawNewId;
     if (prevId === undefined) return; // primeiro mount — nao resetar
-    if (prevId === newId) return; // mesmo paciente (ex: lista atualizou)
+    if (prevId === newId) {
+      iniciandoConsultaPacienteRef.current = null;
+      return; // mesmo paciente (ex: lista atualizou)
+    }
     // Primeiro resolve do paciente depois de Iniciar (Agenda → consulta): não apagar agenda/catálogo/anamnese.
     if (
       prevId == null &&
       newId != null &&
       (activeView === 'consulta' || consultaModule != null)
     ) {
+      iniciandoConsultaPacienteRef.current = null;
       return;
     }
+    if (
+      iniciandoConsultaPacienteRef.current != null &&
+      newId == null &&
+      (activeView === 'consulta' || consultaModule != null)
+    ) {
+      return;
+    }
+    const entrandoNaConsulta =
+      iniciandoConsultaPacienteRef.current != null &&
+      newId != null &&
+      newId === iniciandoConsultaPacienteRef.current;
+    iniciandoConsultaPacienteRef.current = null;
     journeyState.setQueixa('');
     journeyState.setExpectativas('');
+    journeyState.setObservacoesAvaliacao('');
     journeyState.setStep2AnamneseDraft({
-      pacienteId: newId,
+      pacienteId: rawNewId,
       fichaSelecionadaId: '',
       fichaDropdownNovo: '',
       respostas: {},
@@ -1312,13 +1333,15 @@ function AppRefactoredInner({ onCanalAvisos }) {
     journeyState.setRespostasAnamnese({});
     journeyState.setStep2Errors({});
     journeyState.setStep2PerfilClinicoDraft(null);
-    journeyState.setObservacoesExecucao('');
-    journeyState.setNomeProcedimento('');
-    journeyState.setProcedimentosSessao([]);
-    setProcedimentosLote([]);
-    setLoteProcedimentosFeitosIds([]);
-    journeyState.setAgendaId(null);
-    journeyState.setAttendanceStartTime(null);
+    if (!entrandoNaConsulta) {
+      journeyState.setObservacoesExecucao('');
+      journeyState.setNomeProcedimento('');
+      journeyState.setProcedimentosSessao([]);
+      setProcedimentosLote([]);
+      setLoteProcedimentosFeitosIds([]);
+      journeyState.setAgendaId(null);
+      journeyState.setAttendanceStartTime(null);
+    }
     journeyState.setEvaluationAnnotatedPhotoUrl(null);
     cameraState.resetEvaluationPhotos();
     cameraState.resetProcedureCapturedPhotos();
@@ -1334,7 +1357,9 @@ function AppRefactoredInner({ onCanalAvisos }) {
     ultimoMapaAvaliacaoRef.current = null;
     journeyState.setTermoSelecionadoId(null);
     setAssinaturasRealizadasIds([]);
-    journeyState.setJourneyPlanejamentoCtx(null);
+    if (!entrandoNaConsulta) {
+      journeyState.setJourneyPlanejamentoCtx(null);
+    }
     journeyState.setProcedimentosAvaliados([]);
     journeyState.setDestinoAvaliacao(null);
     if (typeof mapaAplicacaoState?.resetMapa === 'function') {
@@ -1591,6 +1616,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
       : null;
   /** Etapa 3: o encerrar vai pela rota única, com a consulta da tela no servidor; sem ela, nada é gravado. */
   const consultaEncerraNoServidor = Boolean(consultaDasFotos?.id);
+  const agendaPrincipalRetorno =
+    String(consultaDasFotos?.tipoProcedimentoCodigo || '').toLowerCase() === 'retorno'
+      ? (consultaDasFotos?.agendaPrincipalId ?? null)
+      : null;
   const { onCampoAvaliacaoBlur, preenchimentoAnamneseId: preenchimentoAnamneseDaConsulta } = consultaServidor;
   /** Com consulta na tela, o preenchimento da anamnese é o do servidor (criado no blur dos textos). */
   React.useEffect(() => {
@@ -2489,6 +2518,12 @@ function AppRefactoredInner({ onCanalAvisos }) {
       }));
     };
 
+    if (
+      patient?.id != null &&
+      String(prevJourneyPacienteIdRef.current ?? '') !== String(patient.id)
+    ) {
+      iniciandoConsultaPacienteRef.current = String(patient.id);
+    }
     setSelectedPatientCpf(cpf);
     if (!isSameDayResume) {
       setJourneyProcedureDateIso(todayIso);
@@ -2746,6 +2781,11 @@ function AppRefactoredInner({ onCanalAvisos }) {
   ]);
 
   const emConsultaNaTela = activeView === 'consulta' && consultaModule != null;
+  React.useEffect(() => {
+    if (activeView !== 'consulta' && consultaModule == null) {
+      iniciandoConsultaPacienteRef.current = null;
+    }
+  }, [activeView, consultaModule]);
   React.useEffect(() => {
     onCanalAvisos?.({ orgId: orgId || null, ativo: canalAvisosAtivo, emConsulta: emConsultaNaTela });
   }, [onCanalAvisos, orgId, canalAvisosAtivo, emConsultaNaTela]);
@@ -4055,7 +4095,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
         ? String(rawPlanejamentoItemId).replace(/_retorno$/, '').trim()
         : null;
 
-      let currentAgendaId = sharedAgendaId || journeyState.agendaId;
+      let currentAgendaId = sharedAgendaId || journeyState.agendaId || agendaPrincipalRetorno;
 
       if (!currentAgendaId) {
         const startTimeIso = journeyState.getAttendanceStartTime(consultaAtualServidor?.iniciadoEm);
@@ -4093,6 +4133,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
       });
     },
     [
+      agendaPrincipalRetorno,
       getOrCreateProcedimentoFeitoId,
       journeyState,
       loteProcedimentosFeitosIds,
@@ -4223,7 +4264,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
           : [null];
 
         const listaPids = [];
-        let sharedAgendaId = journeyState.agendaId || null;
+        let sharedAgendaId = journeyState.agendaId || agendaPrincipalRetorno || null;
         for (let i = 0; i < procs.length; i++) {
           const pItem = procs[i];
           const pid = await iniciarProcedimentoRetorno(paciente, {
@@ -4315,7 +4356,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
         const ridUpload = roleUserId;
         const ridOk = Boolean(ridUpload && /^[0-9a-f-]{36}$/i.test(String(ridUpload)));
         if (retornoResultadoPhotos.length > 0 && paciente?.id && ridOk) {
-          const targetAgendaId = journeyState.agendaId || null;
+          const targetAgendaId = sharedAgendaId || journeyState.agendaId || agendaPrincipalRetorno || null;
           const targetAgendaIdOk = targetAgendaId && /^[0-9a-f-]{36}$/i.test(String(targetAgendaId));
           const uploads = retornoResultadoPhotos.map(async (foto) => {
             try {
@@ -4368,6 +4409,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
           paciente,
           listaPids,
           hojeDaClinica(fusoClinica),
+          null,
+          sharedAgendaId,
         );
 
         const dtosFinalizar = [];
@@ -4426,6 +4469,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
       setIsSalvandoRetorno(false);
     }
   }, [
+    agendaPrincipalRetorno,
     registrarResolucaoTermos,
     finalizarAtendimentoNavegacao,
     iniciarProcedimentoRetorno,
