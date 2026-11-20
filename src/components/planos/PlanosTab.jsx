@@ -623,7 +623,7 @@ function PlanoCard({
           </div>
 
           <h3 className="text-sm font-bold text-slate-900">
-            {plano.observacao || 'Protocolo de Tratamento Facial / Corporal'}
+            {plano.observacao || 'Plano de Tratamento'}
           </h3>
 
           <div className="flex items-center gap-2 text-[11px] text-slate-500">
@@ -3056,7 +3056,7 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
                       </div>
 
                       <h3 className="text-sm font-bold text-slate-900">
-                        {plano.observacao || 'Protocolo de Tratamento Facial / Corporal'}
+                        {plano.observacao || 'Plano de Tratamento'}
                       </h3>
 
                       <div className="flex items-center gap-2 text-[11px] text-slate-500">
