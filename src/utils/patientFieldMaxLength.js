@@ -25,8 +25,8 @@ export const PACIENTE_FIELD_MAX = Object.freeze({
   indicacao: 200,
   /** Dígitos+formatação do CPF (000.000.000-00) */
   cpfFormatado: 14,
-  /** RG com máscara (varia por UF; teto seguro) */
-  rgFormatado: 20,
+  /** RG com máscara adaptativa multi-UF (teto para permitir colar espaços extras antes da limpeza) */
+  rgFormatado: 24,
   /** Número nacional após DDI (formatPhoneAsYouType) */
   telefoneNumero: 25,
 });

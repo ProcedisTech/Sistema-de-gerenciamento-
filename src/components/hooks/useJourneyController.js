@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useToast } from '../../contexts/useToast.js';
 import { authHeadersForFetch } from '../../services/api.js';
 import { normalizeSexoForApi } from '../../utils/patientMapping.js';
+import { formatRgForDisplay } from '../utils/formatters.js';
 import { hojeDaClinica, idadeEm } from '../../utils/datasClinica.js';
 import { useFusoClinica } from './useFusoClinica.js';
 
@@ -83,7 +84,7 @@ export function useJourneyController({
     setProfissaoId(patient.profissaoId ?? null);
     setEndereco(patient.endereco || '');
     setCpf(patient.cpf || '');
-    setRg(patient.rg || '');
+    setRg(formatRgForDisplay(patient.rg || ''));
     setTelefone(patient.telefone || '');
     setEmail(patient.email || '');
     setStep1Errors({});
