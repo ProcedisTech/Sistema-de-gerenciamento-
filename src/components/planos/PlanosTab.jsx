@@ -52,6 +52,7 @@ import { usePlanoDraft } from './usePlanoDraft.js';
 import { PlanoItemCard } from './PlanoItemCard.jsx';
 import { PlanoRetornoBadge } from './PlanoRetornoBadge.jsx';
 import { PlanoProtocoloResumo } from './PlanoProtocoloResumo.jsx';
+import { isPlanoProntoParaConcluir } from './planoConcluidoClinica.js';
 import { PlanoItemEditModal } from './PlanoItemEditModal.jsx';
 import { PlanoConcluirRetornoConfirmModal } from './PlanoConcluirRetornoConfirmModal.jsx';
 import { PlanoEncerrarConfirmModal } from './PlanoEncerrarConfirmModal.jsx';
@@ -2032,6 +2033,22 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
     if (id) handleEncerrar(id);
   }, [encerrarModalPlanoId, handleEncerrar]);
 
+  const handleConcluirPlano = useCallback(
+    async (planoId) => {
+      if (!planoId) return;
+      setActionError('');
+      try {
+        await alterarStatusPlano(planoId, 'concluido');
+        toast.success('Plano de tratamento concluído com sucesso!');
+        onPlanoModificado?.();
+        onPlanoConcluido?.();
+      } catch (e) {
+        setActionError(getApiErrorDetail(e) || e?.message || 'Não foi possível concluir o plano.');
+      }
+    },
+    [alterarStatusPlano, onPlanoConcluido, onPlanoModificado, toast],
+  );
+
   const handleDarBaixa = useCallback(
     async (planoId, targetItemOrId) => {
       setActionError('');
@@ -2096,12 +2113,11 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
         await refresh();
         carregarGaleria();
         carregarProcedimentosFeitos();
-        onPlanoConcluido?.();
       } catch (e) {
         setActionError(getApiErrorDetail(e) || e?.message || 'Não foi possível dar baixa no item.');
       }
     },
-    [darBaixaItem, displayPlanos, handleSalvarPlano, onPlanoConcluido, pacienteId, refresh, carregarGaleria, carregarProcedimentosFeitos, toast],
+    [darBaixaItem, displayPlanos, handleSalvarPlano, pacienteId, refresh, carregarGaleria, carregarProcedimentosFeitos, toast],
   );
 
   const resolveOrigemIdParaRetorno = useCallback((targetItem, explicitOrigemId) => {
@@ -2835,10 +2851,39 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
           : null;
     const idadeDisplay = idadeFinal != null ? `${idadeFinal} anos` : 'Idade ñ informada';
 
+    const consultaProntoParaConcluir = isPlanoProntoParaConcluir(planoComDraft);
+
     return (
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* ── COLUNA PRINCIPAL (8 COLUNAS) ── */}
         <div className="lg:col-span-8 space-y-4">
+          {consultaProntoParaConcluir ? (
+            <div className="rounded-2xl border border-emerald-300 bg-emerald-50/80 p-3.5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5 min-w-0">
+                <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 mt-0.5" />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="inline-flex items-center rounded-full border border-emerald-300 bg-white px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
+                      Pronto para concluir · 100%
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs font-medium text-emerald-900">
+                    Todos os procedimentos previstos foram realizados. Revise o plano ou conclua quando estiver pronto.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={mutating || Boolean(savingPlanoId)}
+                onClick={() => handleConcluirPlano(planoAtivo.id)}
+                className="shrink-0 inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#00a88e] px-3.5 py-2 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-[#00967f] disabled:opacity-60"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2.3} />
+                Concluir plano
+              </button>
+            </div>
+          ) : null}
+
           {/* BARRA DE PROTOCOLO RESUMO MULTI-SEGMENTO */}
           <PlanoProtocoloResumo
             itens={itensPlano}
@@ -3153,6 +3198,7 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
           ) : (
             planosFiltradosPorPill.map((plano) => {
               const isAtivo = plano.statusCodigo === 'ativo';
+              const prontoParaConcluir = isPlanoProntoParaConcluir(plano);
               const isAlvo = planejamentoIdAlvo != null && String(plano.id) === String(planejamentoIdAlvo);
               const isExpandido = expandidos[plano.id] !== undefined ? expandidos[plano.id] : (isAtivo || isAlvo);
               const statusUi = getPlanoStatusPresentation(plano.statusCodigo, plano.statusNome);
@@ -3200,9 +3246,18 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
                     </div>
 
                     <div className="flex items-center gap-2 self-end sm:self-auto">
-                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${isAtivo ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-700 border border-slate-300'
-                        }`}>
-                        {statusUi.label || (isAtivo ? 'EM ANDAMENTO' : 'FINALIZADO')}
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                          prontoParaConcluir
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            : isAtivo
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-slate-100 text-slate-700 border border-slate-300'
+                        }`}
+                      >
+                        {prontoParaConcluir
+                          ? 'Pronto para concluir · 100%'
+                          : statusUi.label || (isAtivo ? 'EM ANDAMENTO' : 'FINALIZADO')}
                       </span>
 
                       {isAtivo && (
@@ -3246,6 +3301,26 @@ export const PlanosTab = React.forwardRef(function PlanosTab({
                       </div>
                     </div>
                   </div>
+
+                  {prontoParaConcluir ? (
+                    <div className="border-t border-emerald-200/80 bg-emerald-50/75 px-3.5 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                        <p className="text-xs font-medium text-emerald-900">
+                          Todos os procedimentos foram realizados. Revise as fotos ou conclua quando finalizar.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={mutating}
+                        onClick={() => handleConcluirPlano(plano.id)}
+                        className="shrink-0 inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#00a88e] px-3 py-1.5 text-xs font-bold text-white shadow-2xs transition-colors hover:bg-[#00967f] disabled:opacity-60"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" strokeWidth={2.3} />
+                        Concluir plano
+                      </button>
+                    </div>
+                  ) : null}
 
                   {/* CORPO EXPANSÍVEL: VISITAS & FOTOS */}
                   {isExpandido && (

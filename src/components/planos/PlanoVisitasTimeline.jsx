@@ -23,6 +23,13 @@ import { PlanoItemCard } from './PlanoItemCard.jsx';
 import { isItemFinalizado } from '../../utils/planejamentoStatusUi.js';
 import { isSessaoRetorno } from '../../utils/planejamentoSessoes.js';
 
+const STATUS_SESSAO_IGNORADO_TIMELINE = new Set(['cancelado', 'reagendado', 'nao_compareceu', 'faltou']);
+
+function isSessaoIgnoradaNaTimeline(sessao) {
+  const st = String(sessao?.statusCodigo ?? sessao?.status ?? '').trim().toLowerCase();
+  return STATUS_SESSAO_IGNORADO_TIMELINE.has(st);
+}
+
 function formatarTempoCadeira(minutos) {
   const m = Number(minutos) || 0;
   if (m <= 0) return '0 min';
@@ -424,7 +431,7 @@ export function PlanoVisitasTimeline({
 
     itens.forEach((item) => {
       const sessaoRealizadaItem = item.sessaoRealizada || (Array.isArray(item.sessoes) ? item.sessoes.find((s) => String(s.statusCodigo).toLowerCase() === 'realizado' && !isSessaoRetorno(s)) : null);
-      const sessaoAtivaItem = item.sessaoAtiva || (Array.isArray(item.sessoes) ? item.sessoes.find((s) => !isSessaoRetorno(s) && String(s.statusCodigo).toLowerCase() !== 'realizado') : null);
+      const sessaoAtivaItem = item.sessaoAtiva || (Array.isArray(item.sessoes) ? item.sessoes.find((s) => !isSessaoRetorno(s) && String(s.statusCodigo).toLowerCase() !== 'realizado' && !isSessaoIgnoradaNaTimeline(s)) : null);
 
       const isRealizado = isItemFinalizado(item.statusItem ?? item.statusItemNome);
       const basePlanejamentoItemId = String(item.planejamentoItemId || item.id || '').replace(/_retorno$/, '').trim();
@@ -482,11 +489,12 @@ export function PlanoVisitasTimeline({
 
       // VÍNCULO DE RETORNO DO PLANO (PADRÃO A: VISITA DEDICADA)
       let sessoesRetorno = (Array.isArray(item.sessoes) && item.sessoes.length > 0)
-        ? item.sessoes.filter(isSessaoRetorno)
+        ? item.sessoes.filter((s) => isSessaoRetorno(s) && !isSessaoIgnoradaNaTimeline(s))
         : [];
 
       if (sessoesRetorno.length === 0) {
-        const fallback = [item.sessaoRetornoAtiva, item.sessaoRetornoRealizada].filter(Boolean);
+        const fallback = [item.sessaoRetornoAtiva, item.sessaoRetornoRealizada]
+          .filter((s) => s && !isSessaoIgnoradaNaTimeline(s));
         if (fallback.length > 0) {
           sessoesRetorno = fallback;
         }

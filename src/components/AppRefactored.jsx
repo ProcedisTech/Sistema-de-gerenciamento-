@@ -133,6 +133,7 @@ import { PlanosTab } from './planos';
 import { PlanoConcluidoClinicaModal } from './planos/PlanoConcluidoClinicaModal.jsx';
 import {
   aplicarCenaAntesDoPlanoConcluido,
+  extrairPlanejamentoIdDoLote,
   loteConcluiuPlano,
 } from './planos/planoConcluidoClinica.js';
 import { MapeamentoFullscreenOverlay } from './journey/mapeamento/MapeamentoFullscreenOverlay.jsx';
@@ -409,6 +410,8 @@ function AppRefactoredInner({ onCanalAvisos }) {
     open: false,
     pacienteNome: '',
     paciente: null,
+    planejamentoId: null,
+    initialStep: 'decisao',
   });
   /** Largura atual da sidebar (64 ou 220) para alinhar barras fixas e fullscreen da avaliação. */
   const [sidebarRailWidthPx, setSidebarRailWidthPx] = useState(220);
@@ -633,25 +636,51 @@ function AppRefactoredInner({ onCanalAvisos }) {
     };
   }, []);
 
-  const askPlanoConcluidoClinica = React.useCallback((paciente) => {
-    return new Promise((resolve) => {
-      aplicarCenaAntesDoPlanoConcluido({
-        setEncerrarConsultaOpen,
-        setFinishingMode,
-      });
-      planoConcluidoResolverRef.current = resolve;
-      setPlanoConcluidoModal({
-        open: true,
-        pacienteNome: paciente?.nome || '',
-        paciente,
-      });
-    });
+  const resolverPlanejamentoIdParaConclusao = React.useCallback(async (paciente, respostas, ctx) => {
+    const direto = extrairPlanejamentoIdDoLote(respostas, ctx);
+    if (direto) return direto;
+    if (!paciente?.id) return null;
+    try {
+      const raw = await planejamentosApi.listarPorPaciente(paciente.id);
+      const lista = normalizeListaPlanos(raw);
+      const ativo = lista.find((p) => p?.statusCodigo === 'ativo');
+      return ativo?.id ?? null;
+    } catch (err) {
+      console.warn('Falha ao localizar plano ativo após finalizar:', err?.message || err);
+      return null;
+    }
   }, []);
+
+  const askPlanoConcluidoClinica = React.useCallback(
+    (paciente, { planejamentoId = null, initialStep = 'decisao' } = {}) => {
+      return new Promise((resolve) => {
+        aplicarCenaAntesDoPlanoConcluido({
+          setEncerrarConsultaOpen,
+          setFinishingMode,
+        });
+        planoConcluidoResolverRef.current = resolve;
+        setPlanoConcluidoModal({
+          open: true,
+          pacienteNome: paciente?.nome || '',
+          paciente,
+          planejamentoId,
+          initialStep,
+        });
+      });
+    },
+    [],
+  );
 
   const closePlanoConcluidoModal = React.useCallback((escolha) => {
     const resolver = planoConcluidoResolverRef.current;
     planoConcluidoResolverRef.current = null;
-    setPlanoConcluidoModal({ open: false, pacienteNome: '', paciente: null });
+    setPlanoConcluidoModal({
+      open: false,
+      pacienteNome: '',
+      paciente: null,
+      planejamentoId: null,
+      initialStep: 'decisao',
+    });
     resolver?.(escolha);
   }, []);
 
@@ -671,7 +700,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
 
   const handlePlanoConcluidoAposBaixa = React.useCallback(
     async (paciente) => {
-      const escolha = await askPlanoConcluidoClinica(paciente);
+      const escolha = await askPlanoConcluidoClinica(paciente, { initialStep: 'retorno' });
       if (escolha === 'aceitar') abrirAgendaRetornoClinica(paciente);
     },
     [askPlanoConcluidoClinica, abrirAgendaRetornoClinica],
@@ -3861,7 +3890,12 @@ function AppRefactoredInner({ onCanalAvisos }) {
   const finalizarAtendimentoNavegacao = React.useCallback(
     async (
       sCpf,
-      { successMessage = 'Jornada finalizada com sucesso.', refreshFalhaNaoBloqueia = false, toastTipo = 'success' } = {},
+      {
+        successMessage = 'Jornada finalizada com sucesso.',
+        refreshFalhaNaoBloqueia = false,
+        toastTipo = 'success',
+        abaDestino = 'avulsos',
+      } = {},
     ) => {
       try {
         await agendaSchedule.refreshDashboard();
@@ -3874,7 +3908,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
       refreshPatientsAndPagedList();
       if (toastTipo === 'info') toast.info(successMessage);
       else toast.success(successMessage);
-      navigate(caminhoPerfilPorCpf(sCpf, 'avulsos'), { flushSync: true, replace: true });
+      navigate(caminhoPerfilPorCpf(sCpf, abaDestino), { flushSync: true, replace: true });
       setConsultaModule(null);
       resetJourney();
       if (sCpf) {
@@ -3890,6 +3924,30 @@ function AppRefactoredInner({ onCanalAvisos }) {
       setSelectedPatientCpf,
       toast,
     ]
+  );
+
+  const concluirPlanoPeloModal = React.useCallback(
+    async (planoIdArg) => {
+      const pid = String(planoIdArg || planoConcluidoModal.planejamentoId || '').trim();
+      if (!pid) {
+        throw new Error(
+          'Não foi possível identificar o plano ativo. Use "Analisar plano uma última vez" para concluir pela aba Planos.',
+        );
+      }
+      try {
+        await planejamentosApi.alterarStatus(pid, { codigo: 'concluido' });
+        refreshPatientsAndPagedList();
+      } catch (err) {
+        const detalhe = String(getApiErrorDetail(err) || err?.message || '');
+        if (err?.status === 422 && /TRANSICAO_INVALIDA|conclu[ií]do/i.test(detalhe)) {
+          toast.info('Este plano já havia sido concluído.');
+          refreshPatientsAndPagedList();
+          return;
+        }
+        throw new Error(detalhe || 'Não foi possível concluir o plano.');
+      }
+    },
+    [planoConcluidoModal.planejamentoId, refreshPatientsAndPagedList, toast],
   );
 
   /**
@@ -4439,11 +4497,28 @@ function AppRefactoredInner({ onCanalAvisos }) {
         ? retornoFinalizadoRef.current.dtosFinalizar
         : [dtoFinalizar];
       if (loteConcluiuPlano(dtosParaChecar)) {
-        const escolha = await askPlanoConcluidoClinica(paciente);
+        const planejamentoId = await resolverPlanejamentoIdParaConclusao(
+          paciente,
+          dtosParaChecar,
+          journeyState.journeyPlanejamentoCtx,
+        );
+        const escolha = await askPlanoConcluidoClinica(paciente, {
+          planejamentoId,
+          initialStep: 'decisao',
+        });
         if (escolha === 'aceitar') {
           setConsultaModule(null);
           abrirAgendaRetornoClinica(paciente);
           resetJourney();
+          return;
+        }
+        if (escolha === 'analisar') {
+          await finalizarAtendimentoNavegacao(sCpf, {
+            successMessage: 'Retorno registrado. Revise o plano e clique em "Concluir plano" ao finalizar.',
+            toastTipo: 'info',
+            abaDestino: 'planos',
+            refreshFalhaNaoBloqueia: true,
+          });
           return;
         }
       }
@@ -4484,6 +4559,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
     journeyState,
     toast,
     askPlanoConcluidoClinica,
+    resolverPlanejamentoIdParaConclusao,
     abrirAgendaRetornoClinica,
     resetJourney,
     fusoClinica,
@@ -4757,11 +4833,28 @@ function AppRefactoredInner({ onCanalAvisos }) {
       setAttendanceStartTime(null);
 
       if (loteConcluiuPlano(procedimentos)) {
-        const escolha = await askPlanoConcluidoClinica(paciente);
+        const planejamentoId = await resolverPlanejamentoIdParaConclusao(
+          paciente,
+          procedimentos,
+          journeyState.journeyPlanejamentoCtx,
+        );
+        const escolha = await askPlanoConcluidoClinica(paciente, {
+          planejamentoId,
+          initialStep: 'decisao',
+        });
         if (escolha === 'aceitar') {
           setConsultaModule(null);
           abrirAgendaRetornoClinica(paciente);
           resetJourney();
+          return;
+        }
+        if (escolha === 'analisar') {
+          await finalizarAtendimentoNavegacao(sCpf, {
+            successMessage: 'Consulta finalizada. Revise o plano e clique em "Concluir plano" ao finalizar.',
+            toastTipo: 'info',
+            abaDestino: 'planos',
+            refreshFalhaNaoBloqueia: true,
+          });
           return;
         }
       }
@@ -4772,6 +4865,7 @@ function AppRefactoredInner({ onCanalAvisos }) {
       registrarResolucaoTermos,
       abrirAgendaRetornoClinica,
       askPlanoConcluidoClinica,
+      resolverPlanejamentoIdParaConclusao,
       encerrarConsultaNoServidor,
       finalizarAtendimentoNavegacao,
       fusoClinica,
@@ -6407,6 +6501,10 @@ function AppRefactoredInner({ onCanalAvisos }) {
       <PlanoConcluidoClinicaModal
         open={planoConcluidoModal.open}
         pacienteNome={planoConcluidoModal.pacienteNome}
+        initialStep={planoConcluidoModal.initialStep}
+        planejamentoId={planoConcluidoModal.planejamentoId}
+        onConcluirPlano={concluirPlanoPeloModal}
+        onAnalisarPlano={() => closePlanoConcluidoModal('analisar')}
         onRecusar={() => closePlanoConcluidoModal('recusar')}
         onAceitar={() => closePlanoConcluidoModal('aceitar')}
       />
