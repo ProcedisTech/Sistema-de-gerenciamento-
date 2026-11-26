@@ -327,4 +327,119 @@ describe('Correção de Fotos e Mapas em Retornos de Planos', () => {
     expect(screen.queryByText(/15 de nov/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Realizado em 02\/11\/2026 às 11:30/i)).toBeInTheDocument();
   });
+
+  it('não exibe sessões de retorno canceladas ou reagendadas no Cronograma de Visitas', () => {
+    const plano = {
+      id: 'plano-1',
+      criadoEm: '2026-10-20T10:00:00Z',
+      itens: [
+        {
+          id: 'item-1',
+          catalogoNome: 'Biópsia de Pele',
+          statusItem: 'finalizado',
+          dataRealizacao: '2026-10-25',
+          sessoes: [
+            {
+              id: 'sessao-pai',
+              tipoProcedimentoCodigo: 'procedimento',
+              dataAgendamento: '2026-10-25',
+              horaInicio: '10:00',
+              statusCodigo: 'realizado',
+              procedimentoFeitoId: 'pf-pai',
+            },
+            {
+              id: 'sessao-ret-cancelado',
+              tipoProcedimentoCodigo: 'retorno',
+              dataAgendamento: '2026-11-10',
+              horaInicio: '08:00',
+              statusCodigo: 'cancelado',
+              agendaId: 'agenda-ret-cancelado',
+            },
+            {
+              id: 'sessao-ret-reagendado',
+              tipoProcedimentoCodigo: 'retorno',
+              dataAgendamento: '2026-11-11',
+              horaInicio: '09:00',
+              statusCodigo: 'reagendado',
+              agendaId: 'agenda-ret-reagendado',
+            },
+          ],
+        },
+      ],
+    };
+
+    render(<PlanoVisitasTimeline plano={plano} fotosDoPlano={[]} />);
+
+    expect(screen.queryByText(/Retorno Clínico/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Agendado/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/10 de nov/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/11 de nov/i)).not.toBeInTheDocument();
+  });
+
+  it('preserva sessões de retorno pendente e realizado no Cronograma de Visitas', () => {
+    const plano = {
+      id: 'plano-1',
+      criadoEm: '2026-10-20T10:00:00Z',
+      itens: [
+        {
+          id: 'item-1',
+          catalogoNome: 'Biópsia de Pele',
+          statusItem: 'finalizado',
+          dataRealizacao: '2026-10-25',
+          sessoes: [
+            {
+              id: 'sessao-pai-1',
+              tipoProcedimentoCodigo: 'procedimento',
+              dataAgendamento: '2026-10-25',
+              horaInicio: '10:00',
+              statusCodigo: 'realizado',
+              procedimentoFeitoId: 'pf-pai-1',
+            },
+            {
+              id: 'sessao-ret-pendente',
+              tipoProcedimentoCodigo: 'retorno',
+              dataAgendamento: '2026-11-12',
+              horaInicio: '14:00',
+              statusCodigo: 'pendente',
+              agendaId: 'agenda-ret-pendente',
+            },
+          ],
+        },
+        {
+          id: 'item-2',
+          catalogoNome: 'Drenagem de Abscesso',
+          statusItem: 'finalizado',
+          dataRealizacao: '2026-10-26',
+          sessoes: [
+            {
+              id: 'sessao-pai-2',
+              tipoProcedimentoCodigo: 'procedimento',
+              dataAgendamento: '2026-10-26',
+              horaInicio: '11:00',
+              statusCodigo: 'realizado',
+              procedimentoFeitoId: 'pf-pai-2',
+            },
+            {
+              id: 'sessao-ret-realizado',
+              tipoProcedimentoCodigo: 'retorno',
+              dataAgendamento: '2026-11-01',
+              horaInicio: '15:00',
+              statusCodigo: 'realizado',
+              agendaId: 'agenda-ret-realizado',
+              procedimentoFeitoId: 'pf-ret-realizado',
+            },
+          ],
+        },
+      ],
+    };
+
+    render(<PlanoVisitasTimeline plano={plano} fotosDoPlano={[]} />);
+
+    expect(screen.getByText(/12 de nov/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 de nov|01 de nov|Ontem/i)).toBeInTheDocument();
+    expect(screen.getByText(/Retorno Clínico · Biópsia de Pele/i)).toBeInTheDocument();
+    expect(screen.getByText(/Retorno Clínico · Drenagem de Abscesso/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Agendado$/i)).toBeInTheDocument();
+    expect(screen.getByText(/Agendado em 12\/11\/2026 às 14:00/i)).toBeInTheDocument();
+  });
 });

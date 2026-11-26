@@ -41,7 +41,7 @@ const AGENDA_RETORNO = '99999999-9999-4999-8999-999999999993';
 const SUCESSO = 'Retorno registrado com sucesso.';
 const AVISO_CONEXAO =
   'O retorno foi registrado, mas a consulta ainda não foi encerrada. Verifique a conexão e clique em Concluir Retorno de novo.';
-const PLANO_CONCLUIDO = /Plano concluído com êxito/;
+const PLANO_CONCLUIDO = /Todos os procedimentos foram realizados/;
 
 const plano = {
   id: IDS.PLANO_1,
