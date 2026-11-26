@@ -19,14 +19,146 @@ export const maskCPF = (value) => {
     .replace(/(-\d{2})\d+?$/, '$1');
 };
 
+export const RG_MAX_CORE_LENGTH = 14;
+export const RG_MIN_CORE_LENGTH = 5;
+export const RG_CANONICAL_PATTERN = /^(?=.{5,14}$)([A-Z]{2})?(\d{5,14}|\d{4,13}X)$/;
+
+/**
+ * Remove apenas separadores válidos de pontuação/espaço do RG e normaliza para maiúsculas.
+ * Não descarta caracteres inválidos (ex.: '@', '#') para permitir rejeição explícita na validação.
+ */
+export function stripRgSeparators(value) {
+  if (value == null) return '';
+  return String(value).toUpperCase().replace(/[.\-/\s]+/g, '');
+}
+
+/**
+ * Extrai prefixo opcional de até 2 letras (UF) + corpo numérico (com 'X' opcional apenas na última posição
+ * quando já houver >= 4 dígitos), respeitando o limite total de 14 caracteres limpos.
+ */
+function extractRgParts(value) {
+  if (value == null) return { prefix: '', body: '' };
+  const raw = String(value).toUpperCase();
+  let prefix = '';
+  let digits = '';
+  let trailingX = false;
+
+  for (let i = 0; i < raw.length; i += 1) {
+    const ch = raw[i];
+    if (ch >= 'A' && ch <= 'Z') {
+      if (digits.length === 0 && prefix.length < 2) {
+        prefix += ch;
+      } else if (ch === 'X' && digits.length >= 4 && !trailingX) {
+        trailingX = true;
+      }
+      continue;
+    }
+    if (ch >= '0' && ch <= '9') {
+      if (trailingX) {
+        trailingX = false;
+      }
+      digits += ch;
+    }
+  }
+
+  const maxBody = Math.max(0, RG_MAX_CORE_LENGTH - prefix.length);
+  if (trailingX) {
+    const maxDigitsWithX = Math.max(0, maxBody - 1);
+    const trimmedDigits = digits.slice(0, maxDigitsWithX);
+    if (trimmedDigits.length >= 4) {
+      return { prefix, body: `${trimmedDigits}X` };
+    }
+    return { prefix, body: trimmedDigits };
+  }
+
+  return { prefix, body: digits.slice(0, maxBody) };
+}
+
+function groupDigitsBy3FromRight(digits) {
+  if (!digits) return '';
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+function formatRgBody(body) {
+  if (!body) return '';
+  if (body.endsWith('X')) {
+    const numPart = body.slice(0, -1);
+    return `${groupDigitsBy3FromRight(numPart)}-X`;
+  }
+  const len = body.length;
+  if (len <= 3) return body;
+  if (len <= 8) return groupDigitsBy3FromRight(body);
+  if (len === 9) return `${body.slice(0, 2)}.${body.slice(2, 5)}.${body.slice(5, 8)}-${body.slice(8)}`;
+  if (len === 10) return `${body.slice(0, 2)}.${body.slice(2, 5)}.${body.slice(5, 8)}-${body.slice(8)}`;
+  if (len === 11) return `${body.slice(0, 3)}.${body.slice(3, 6)}.${body.slice(6, 9)}-${body.slice(9)}`;
+  return `${groupDigitsBy3FromRight(body.slice(0, -1))}-${body.slice(-1)}`;
+}
+
+/**
+ * Máscara adaptativa multi-UF para digitação de RG:
+ * - DF (7): 3.456.789
+ * - 8 dígitos: 12.345.678
+ * - SP/RJ (9 ou com X): 12.345.678-9 / 12.345.678-X
+ * - RS/BA (10): 12.345.678-90
+ * - CIN (11): 123.456.789-01
+ * - MG (UF + dígitos): MG-12.345.678
+ */
 export const maskRG = (value) => {
-  return value
-    .replace(/\D/g, '')
-    .replace(/(\d{2})(\d)/, '$1.$2')
-    .replace(/(\d{3})(\d)/, '$1.$2')
-    .replace(/(\d{3})(\d{1,2})/, '$1-$2')
-    .replace(/(-\d{1})\d+?$/, '$1');
+  const { prefix, body } = extractRgParts(value);
+  const formattedBody = formatRgBody(body);
+  if (prefix) {
+    return formattedBody ? `${prefix}-${formattedBody}` : prefix;
+  }
+  return formattedBody;
 };
+
+/** Alias para compatibilidade com chamadas existentes. */
+export const sanitizeRG = maskRG;
+
+/**
+ * Formata RG para exibição/documentos preservando valores legados fora do padrão (ex.: "/SSP" ou < 5 dígitos)
+ * sem mutilar dados antigos salvos no banco.
+ */
+export function formatRgForDisplay(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  const clean = stripRgSeparators(raw);
+  if (RG_CANONICAL_PATTERN.test(clean)) {
+    return maskRG(clean);
+  }
+  return raw;
+}
+
+/** Normaliza RG multi-UF para armazenamento limpo na API (ex.: "3456789", "12345678X", "MG12345678"), ou null se vazio. */
+export const normalizeRgForApi = (value) => {
+  const { prefix, body } = extractRgParts(value);
+  const clean = `${prefix}${body}`;
+  return clean || null;
+};
+
+/** Valida campo RG opcional: vazio é válido; preenchido exige padrão multi-UF (0 ou 2 letras + 5..14 chars). */
+export function validateRgField(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) {
+    return { ok: true, rgNormalized: null, message: '' };
+  }
+  const clean = stripRgSeparators(raw);
+  if (/^[A-Z]\d/.test(clean)) {
+    return {
+      ok: false,
+      rgNormalized: null,
+      message: 'Informe a sigla da UF com 2 letras (ex.: MG-12.345.678) ou apenas números.',
+    };
+  }
+  if (!RG_CANONICAL_PATTERN.test(clean)) {
+    return {
+      ok: false,
+      rgNormalized: null,
+      message: 'RG inválido. Informe entre 5 e 14 caracteres (ex.: 3.456.789, 12.345.678-X ou MG-12.345.678).',
+    };
+  }
+  return { ok: true, rgNormalized: clean, message: '' };
+}
 
 
 export const normalizeCpf = (cpf) => {

@@ -7,6 +7,7 @@ import { useFusoClinica } from '../hooks/useFusoClinica.js';
 import {
   maskCPF,
   maskRG,
+  validateRgField,
   isCpfIncomplete,
   calculateAgeFromISODate,
   getPatientInitials,
@@ -138,6 +139,14 @@ export function Step1CheckIn({
     if (isCpfIncomplete(cpf)) {
       setStep1Errors((prev) => ({ ...prev, cpf: true }));
       toast.error('O CPF deve conter 11 dígitos.');
+    }
+  };
+
+  const handleRgBlur = () => {
+    const check = validateRgField(rg);
+    if (!check.ok) {
+      setStep1Errors((prev) => ({ ...prev, rg: true }));
+      toast.error(check.message);
     }
   };
 
@@ -423,9 +432,13 @@ export function Step1CheckIn({
                   type="text"
                   value={rg}
                   maxLength={PACIENTE_FIELD_MAX.rgFormatado}
-                  onChange={(e) => setRg(maskRG(e.target.value))}
-                  placeholder="00.000.000-0"
-                  className="w-full px-4 py-3 bg-[#eff6ff] border border-blue-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#3b82f6]/20 focus:border-[#3b82f6] transition-all"
+                  onChange={(e) => {
+                    setRg(maskRG(e.target.value));
+                    if (step1Errors.rg) setStep1Errors({ ...step1Errors, rg: false });
+                  }}
+                  onBlur={handleRgBlur}
+                  placeholder="Ex.: 3.456.789 ou 12.345.678-X"
+                  className={`w-full px-4 py-3 bg-[#eff6ff] border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#3b82f6]/20 transition-all ${step1Errors.rg ? 'border-red-400 bg-red-50' : 'border-blue-200 focus:border-[#3b82f6]'}`}
                 />
               </div>
             </div>

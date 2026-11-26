@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ArrowLeft, Save, Loader2, UserPlus, X } from 'lucide-react';
 import {
   normalizeCpf,
+  normalizeRgForApi,
+  validateRgField,
   isCpfIncomplete,
   calculateAgeFromISODate,
   sanitizeBirthDateDigits,
@@ -176,6 +178,7 @@ export function PatientCreateView({
       estadoCivilId,
       profissaoId,
       cpf,
+      rg,
       telefoneCountryCode,
       telefoneNumero,
       email,
@@ -197,6 +200,13 @@ export function PatientCreateView({
       if (cpfMsg && Object.keys(validationErrors).every((k) => k === 'cpf')) {
         setErro(cpfMsg);
         toast.error(cpfMsg);
+        scrollFormTop();
+        return;
+      }
+      if (validationErrors.rg && Object.keys(validationErrors).every((k) => k === 'rg')) {
+        const rgMsg = validateRgField(rg).message || 'RG inválido.';
+        setErro(rgMsg);
+        toast.error(rgMsg);
         scrollFormTop();
         return;
       }
@@ -229,7 +239,7 @@ export function PatientCreateView({
         nomeCompleto: nome.trim(),
         dataNascimento: dataNascimento || null,
         cpf: cpfDigits || null,
-        rg: rg.replace(/\D/g, '') || null,
+        rg: normalizeRgForApi(rg),
         telefone: formatPhoneForApi(telefoneCountryCode, telefoneNumero) || null,
         email: (email ?? '').trim() || null,
         instagram: instagram || null,

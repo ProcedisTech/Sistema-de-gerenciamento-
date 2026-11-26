@@ -1,3 +1,5 @@
+import { formatRgForDisplay } from '../components/utils/formatters.js';
+
 /**
  * Monta o objeto `pacienteCtx` usado por replaceTermVariables/generateTermoPdf a partir de um
  * paciente do app (shape de patientMapping.js). Fonte única — evita que um campo novo (ex:
@@ -7,7 +9,7 @@ export function buildPacienteCtx(paciente) {
   return {
     nome: paciente?.nomeCompleto || paciente?.nome,
     cpf: paciente?.cpf,
-    rg: paciente?.rg,
+    rg: paciente?.rg ? formatRgForDisplay(paciente.rg) : paciente?.rg,
     dataNascimento: paciente?.dataNascimento,
     telefone:
       paciente?.telefone ||

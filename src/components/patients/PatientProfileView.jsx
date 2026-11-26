@@ -62,7 +62,9 @@ import { validatePacienteFormBasics } from '../../utils/patientFormValidation';
 import { PACIENTE_FIELD_MAX } from '../../utils/patientFieldMaxLength';
 import {
   maskCPF,
-  maskRG,
+  formatRgForDisplay,
+  normalizeRgForApi,
+  validateRgField,
   validateBirthDateDigits8,
   birthDateValidationUserMessage,
   formatBirthDigitsBR,
@@ -243,7 +245,7 @@ function buildPacienteCtxForFicha(p, hojeIso) {
     responsavelLegalDisplay: resolveResponsavelLegalDisplay(p, hojeIso) || undefined,
     origemIndicacaoDisplay: p.indicacao,
     cpfDisplay: cpfDigits ? maskCPF(cpfDigits) : '',
-    rgDisplay: rgStr ? maskRG(rgStr) : '',
+    rgDisplay: rgStr ? formatRgForDisplay(rgStr) : '',
     nascimentoDisplay: p.dataNascimento ? isoDateToBrazilianDisplay(p.dataNascimento) : '',
     idadeDisplay: p.idade != null ? `${p.idade} anos` : (idadeCalculada !== '' ? `${idadeCalculada} anos` : ''),
     sexoDisplay: sexoCodigo ? SEXO_DISPLAY_LABELS[sexoCodigo] : '',
@@ -1477,7 +1479,8 @@ export function PatientProfileView({
       instagram: patient.instagram || '',
       tiktok: patient.tiktok || '',
       indicacao: patient.indicacao || '',
-      rg: rgStr ? maskRG(rgStr) : '',
+      rg: rgStr ? formatRgForDisplay(rgStr) : '',
+      rgTouched: false,
       cpfDisplay: cpfRaw ? maskCPF(cpfRaw) : '',
       sexo: sexoForPatientFormSelect(patient.sexo),
       estadoCivilId: patient.estadoCivilId || '',
@@ -2016,16 +2019,23 @@ export function PatientProfileView({
       estadoCivilId: editing.estadoCivilId,
       profissaoId: editing.profissaoId,
       cpf: editing.cpfDisplay,
+      rg: editing.rg,
       telefoneCountryCode: editing.telefoneCountryCode,
       telefoneNumero: editing.telefoneNumero,
       email: editing.email,
     };
-    const validationErrors = validatePacienteFormBasics(v, { skipCpf: true });
+    const validationErrors = validatePacienteFormBasics(v, { skipCpf: true, skipRg: !editing.rgTouched });
     const cy = parseDataCalendario(hojeIso)?.ano;
     const dnDigits = String(editing.dataNascimentoDisplay ?? '').replace(/\D/g, '');
 
     if (Object.keys(validationErrors).length > 0) {
       setEditFormErrors(validationErrors);
+      if (validationErrors.rg && Object.keys(validationErrors).every((k) => k === 'rg')) {
+        const rgMsg = validateRgField(editing.rg).message || 'RG inválido.';
+        setProfileSaveError(rgMsg);
+        toast.error(rgMsg);
+        return;
+      }
       let banner = 'Preencha os campos obrigatórios.';
       if (validationErrors.dataNascimento) {
         if (dnDigits.length > 0 && dnDigits.length < 8) {
@@ -2044,7 +2054,9 @@ export function PatientProfileView({
     setProfileSaveError('');
 
     if (!selectedPatient.id) {
-      const rgDigits = String(editing.rg ?? '').replace(/\D/g, '');
+      const rgNormalizado = editing.rgTouched
+        ? (normalizeRgForApi(editing.rg) ?? '')
+        : String(editing.rg ?? '').trim();
       onUpdatePatient?.(selectedPatient.cpf, {
         nome: editing.nome || '',
         email: editing.email || '',
@@ -2066,7 +2078,7 @@ export function PatientProfileView({
         sexo: editing.sexo,
         estadoCivilId: editing.estadoCivilId || '',
         dataNascimento: editing.dataNascimentoIso || '',
-        rg: rgDigits || undefined,
+        rg: rgNormalizado,
       });
       setEditing(null);
       return;
@@ -2413,7 +2425,15 @@ export function PatientProfileView({
                       }
                       return next;
                     })}
-                    onRgChange={(value) => setEditing((p) => p ? { ...p, rg: value } : p)}
+                    onRgChange={(value) => {
+                      setEditing((p) => (p ? { ...p, rg: value, rgTouched: true } : p));
+                      setEditFormErrors((prev) => {
+                        if (!prev?.rg) return prev;
+                        const n = { ...prev };
+                        delete n.rg;
+                        return n;
+                      });
+                    }}
                     onTelefoneCountryChange={(code) =>
                       setEditing((p) =>
                         p

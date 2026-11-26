@@ -2,7 +2,7 @@
  * Validadores compartilhados cadastro / edição de paciente (UI).
  * Regras alinhadas a `PatientCreateView` (cadastro como canônico).
  */
-import { normalizeCpf, isCpfValidCheckDigits } from '../components/utils/formatters';
+import { normalizeCpf, isCpfValidCheckDigits, validateRgField } from '../components/utils/formatters';
 import { isPhoneValid } from './phoneUtils';
 
 const PACIENTE_EMAIL_FORMAT = /^\S+@\S+\.\S+$/;
@@ -29,6 +29,11 @@ export function validatePacienteFormBasics(v, opts = {}) {
   if (!opts.skipCpf) {
     const cpfDigits = normalizeCpf(String(v.cpf ?? ''));
     if (cpfDigits.length !== 11 || !isCpfValidCheckDigits(cpfDigits)) e.cpf = true;
+  }
+
+  if (!opts.skipRg) {
+    const rgTrimmed = String(v.rg ?? '').trim();
+    if (rgTrimmed && !validateRgField(rgTrimmed).ok) e.rg = true;
   }
 
   if (!String(v.telefoneNumero ?? '').trim() || !isPhoneValid(v.telefoneCountryCode ?? 'BR', v.telefoneNumero ?? '')) {

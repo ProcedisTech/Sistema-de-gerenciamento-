@@ -1,4 +1,4 @@
-import { calculateAgeFromISODate } from '../components/utils/formatters';
+import { calculateAgeFromISODate, normalizeRgForApi } from '../components/utils/formatters';
 import { resolveApiUrl } from '../config/apiEnv.js';
 import { maskCep, normalizeCepForApi } from './cepUtils.js';
 import {
@@ -218,7 +218,7 @@ export function journeyToPacienteCreateDTO(j) {
     nomeCompleto: (j.nome || '').trim(),
     dataNascimento: j.dataNascimento || null,
     cpf: String(j.cpf || '').replace(/\D/g, '') || null,
-    rg: String(j.rg || '').replace(/\D/g, '') || null,
+    rg: normalizeRgForApi(j.rg),
     telefone: (j.telefone || '').trim() || null,
     email: (j.email || '').trim() || null,
     profissaoId: String(j.profissaoId ?? '').trim() || null,
@@ -241,7 +241,7 @@ export function patientToPacienteUpdateDTO(patient, editing) {
     nomeCompleto: (editing?.nome ?? patient.nome ?? '').trim(),
     dataNascimento: patient.dataNascimento || null,
     cpf: String(patient.cpf || '').replace(/\D/g, '') || null,
-    rg: String(patient.rg || '').replace(/\D/g, '') || null,
+    rg: normalizeRgForApi(editing?.rg ?? patient.rg),
     telefone: (editing?.telefone ?? patient.telefone ?? '').trim() || null,
     email: (editing?.email ?? patient.email ?? '').trim() || null,
     profissaoId:
@@ -272,12 +272,15 @@ export function patientToPacienteUpdateDTO(patient, editing) {
 export function mergePacienteDtoWithEditing(dto, editing) {
   if (!dto) return null;
   const sexoMerged = normalizeSexoForApi(editing?.sexo ?? dto.sexo);
-  const rgDigits = String(editing?.rg ?? dto.rg ?? '').replace(/\D/g, '') || '';
+  const rgNormalizado =
+    editing?.rgTouched === false
+      ? (dto.rg ?? null)
+      : normalizeRgForApi(editing?.rg !== undefined ? editing.rg : dto.rg);
   return {
     nomeCompleto: (editing?.nome ?? dto.nomeCompleto ?? '').trim(),
     dataNascimento: (editing?.dataNascimentoIso ?? dto.dataNascimento) || null,
     cpf: dto.cpf || null,
-    rg: rgDigits || null,
+    rg: rgNormalizado,
     telefone: (editing?.telefone ?? dto.telefone ?? '').trim() || null,
     email: (editing?.email ?? dto.email ?? '').trim() || null,
     instagram: (editing?.instagram ?? dto.instagram ?? '').trim() || null,

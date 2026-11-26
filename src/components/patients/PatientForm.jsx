@@ -3,6 +3,7 @@ import { Save, Loader2, UserRound, Plus, Camera, AlertTriangle, Calendar, Chevro
 import {
   maskCPF,
   maskRG,
+  validateRgField,
   validateBirthDateDigits8,
   birthDateValidationUserMessage,
 } from '../utils/formatters';
@@ -54,6 +55,7 @@ export function PatientForm({
   fotoPerfilPreview,
   errors = {},
   cpfErrorText = '',
+  rgErrorText = '',
   erroBanner = '',
   onNomeChange,
   onDataNascimentoDisplayChange,
@@ -96,6 +98,7 @@ export function PatientForm({
   const showBirthCalendarIcon = variant === 'modal';
 
   const cpfDisabled = mode === 'edit';
+  const rgInlineError = rgErrorText || (errors.rg ? validateRgField(rg).message : '');
 
   const labelCls = (pageColorClass) =>
     isModalVariant ? 'text-[13px] font-medium text-slate-800' : `text-[13px] font-bold ${pageColorClass}`;
@@ -147,10 +150,15 @@ export function PatientForm({
   };
 
   const rgInputClass = () => {
+    const hasErr = Boolean(errors.rg || rgInlineError);
     if (isModalVariant) {
-      return 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-[14px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#00a88e] focus:ring-1 focus:ring-[#00a88e]/20';
+      return `w-full rounded-lg border px-3 py-2.5 text-[14px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#00a88e] focus:ring-1 focus:ring-[#00a88e]/20 ${
+        hasErr ? 'border-red-300 bg-red-50/60' : 'border-slate-200 bg-white'
+      }`;
     }
-    return 'w-full px-4 py-3 bg-[#eff6ff] border border-blue-200 rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#3b82f6]/20 focus:border-[#3b82f6] transition-all';
+    return `w-full px-4 py-3 bg-[#eff6ff] border rounded-xl text-[14px] font-medium focus:ring-4 outline-none focus:ring-[#3b82f6]/20 transition-all ${
+      hasErr ? 'border-red-400 bg-red-50' : 'border-blue-200 focus:border-[#3b82f6]'
+    }`;
   };
 
   const emailInputClass = () => {
@@ -593,10 +601,19 @@ export function PatientForm({
                       value={rg}
                       disabled={readOnly}
                       maxLength={PACIENTE_FIELD_MAX.rgFormatado}
-                      onChange={(e) => onRgChange(maskRG(e.target.value))}
-                      placeholder="00.000.000-0"
+                      onChange={(e) => {
+                        onRgChange(maskRG(e.target.value));
+                        clearError?.('rg');
+                      }}
+                      placeholder="Ex.: 3.456.789 ou 12.345.678-X"
+                      aria-invalid={Boolean(errors.rg || rgInlineError)}
                       className={rgInputClass()}
                     />
+                    {rgInlineError ? (
+                      <p className="text-[12px] font-bold text-red-600" role="alert">
+                        {rgInlineError}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -1003,10 +1020,19 @@ export function PatientForm({
               value={rg}
               disabled={readOnly}
               maxLength={PACIENTE_FIELD_MAX.rgFormatado}
-              onChange={(e) => onRgChange(maskRG(e.target.value))}
-              placeholder="00.000.000-0"
+              onChange={(e) => {
+                onRgChange(maskRG(e.target.value));
+                clearError?.('rg');
+              }}
+              placeholder="Ex.: 3.456.789 ou 12.345.678-X"
+              aria-invalid={Boolean(errors.rg || rgInlineError)}
               className={rgInputClass()}
             />
+            {rgInlineError ? (
+              <p className="text-[12px] font-bold text-red-600" role="alert">
+                {rgInlineError}
+              </p>
+            ) : null}
           </div>
         </div>
       </div>
